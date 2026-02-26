@@ -66,6 +66,7 @@ function NeonGalaxy({ onExit }) {
           y: GAME_HEIGHT - PLAYER_SIZE - 20
         });
         lastFire.current = now;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
 
       const spawnRate = Math.max(300, 1200 - score * 15);
@@ -99,6 +100,7 @@ function NeonGalaxy({ onExit }) {
         ) {
           newLives -= 1;
           enemyDestroyed = true;
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         }
 
         if (!enemyDestroyed) {
@@ -113,6 +115,7 @@ function NeonGalaxy({ onExit }) {
               lasers.current.splice(j, 1);
               newScore += 10;
               enemyDestroyed = true;
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               break;
             }
           }
@@ -217,6 +220,7 @@ function CyberRun({ onExit }) {
     if (!running) return;
     if (playerY.current >= GAME_HEIGHT - CR_GROUND_HEIGHT - CR_PLAYER_SIZE) {
       velocityY.current = CR_JUMP_FORCE;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
   };
 
@@ -281,6 +285,7 @@ function CyberRun({ onExit }) {
           obs.passed = true;
           scoreRef.current += 10;
           setScore(scoreRef.current);
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         }
 
         if (obs.x + obs.width < 0) {
@@ -291,6 +296,7 @@ function CyberRun({ onExit }) {
       if (hit) {
         setRunning(false);
         setGameOver(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
 
       setTick(t => t + 1);
@@ -340,6 +346,7 @@ const PQ_PLAYER_SIZE = 30;
 function PixelQuest({ onExit }) {
   const [running, setRunning] = useState(false);
   const [level, setLevel] = useState(1);
+  const [lives, setLives] = useState(3);
   const [gameOver, setGameOver] = useState(false);
   const [gameWon, setGameWon] = useState(false);
   const [invincible, setInvincible] = useState(false);
@@ -350,6 +357,7 @@ function PixelQuest({ onExit }) {
   const world = useRef({ platforms: [], enemies: [], powerups: [], goal: null, length: 2000 });
   const cameraX = useRef(0);
   const invincibilityTimer = useRef(0);
+  const tickRef = useRef(0);
 
   const generateLevel = (lvl) => {
     const GROUND_Y = GAME_HEIGHT - 60;
@@ -467,8 +475,26 @@ function PixelQuest({ onExit }) {
   const startGame = () => {
     setGameOver(false);
     setGameWon(false);
+    setLives(3);
     initLevel(1);
     setRunning(true);
+  };
+
+  const handleDeath = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    if (lives > 1) {
+      setLives(l => l - 1);
+      // Respawn slightly back and high up
+      pRef.current.y = 0;
+      pRef.current.vy = 0;
+      pRef.current.x = Math.max(0, pRef.current.x - 150);
+      setInvincible(true);
+      invincibilityTimer.current = 3000; // 3 seconds of invincibility
+    } else {
+      setLives(0);
+      setRunning(false);
+      setGameOver(true);
+    }
   };
 
   const jump = () => {
@@ -494,9 +520,16 @@ function PixelQuest({ onExit }) {
       const w = world.current;
 
       // Horizontal movement
-      if (keys.current.left) p.vx = -PQ_SPEED;
-      else if (keys.current.right) p.vx = PQ_SPEED;
-      else p.vx = 0;
+      tickRef.current++;
+      if (keys.current.left) {
+        p.vx = -PQ_SPEED;
+        if (tickRef.current % 8 === 0) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      } else if (keys.current.right) {
+        p.vx = PQ_SPEED;
+        if (tickRef.current % 8 === 0) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      } else {
+        p.vx = 0;
+      }
 
       p.x += p.vx;
       if (p.x < 0) p.x = 0;
@@ -523,8 +556,7 @@ function PixelQuest({ onExit }) {
 
       // Death by falling
       if (p.y > GAME_HEIGHT) {
-        setRunning(false); setGameOver(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        handleDeath();
       }
 
       // Camera follow
@@ -547,8 +579,7 @@ function PixelQuest({ onExit }) {
             e.active = false; // Kill enemy
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           } else {
-            setRunning(false); setGameOver(true); // Player dies
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+            handleDeath();
           }
         }
       }
@@ -579,8 +610,8 @@ function PixelQuest({ onExit }) {
     return () => clearInterval(loop);
   }, [running, level]);
 
-  // World colors based on level
-  const worldColors = ['#87CEEB', '#2E8B57', '#8B4513', '#483D8B', '#2F4F4F', '#8B0000', '#000080', '#4B0082', '#800000', '#000000'];
+  // World colors based on level (Lighter colors for better visibility)
+  const worldColors = ['#87CEEB', '#98FB98', '#DDA0DD', '#F0E68C', '#FFB6C1', '#87CEFA', '#E0FFFF', '#FFDAB9', '#B0E0E6', '#FFE4E1'];
   const bgColor = worldColors[(level - 1) % 10];
 
   return (
@@ -588,6 +619,9 @@ function PixelQuest({ onExit }) {
       <View style={styles.header}>
         <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
         <Text style={styles.title}>WORLD {level}</Text>
+        <View style={styles.stats}>
+          <Text style={styles.statText}>LIVES: {lives}</Text>
+        </View>
       </View>
 
       <View style={[styles.gameArea, { backgroundColor: bgColor, borderColor: '#fff' }]}>
