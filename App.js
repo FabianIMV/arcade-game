@@ -8,6 +8,7 @@ import {
   Text,
   View
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 
 const { width, height } = Dimensions.get('window');
 const GAME_HEIGHT = Math.min(height * 0.75, 700);
@@ -351,56 +352,107 @@ function PixelQuest({ onExit }) {
   const invincibilityTimer = useRef(0);
 
   const generateLevel = (lvl) => {
-    const platforms = [];
-    const enemies = [];
-    const powerups = [];
-    let length = 2000;
+    const GROUND_Y = GAME_HEIGHT - 60;
+    const PLATFORM_H = 20;
+
+    const chunks = {
+      flat: (startX, currentLvl) => {
+        const width = 400;
+        const platforms = [{ x: startX, y: GROUND_Y, w: width, h: PLATFORM_H }];
+        const enemies = [];
+        if (currentLvl >= 3) {
+          enemies.push({ x: startX + 200, y: GROUND_Y - 40, w: 40, h: 40, vx: 2 + (currentLvl * 0.1), startX: startX + 200, range: 100, active: true });
+        }
+        return { platforms, enemies, powerups: [], width };
+      },
+      pit: (startX, currentLvl) => {
+        const width = 500;
+        const platforms = [
+          { x: startX, y: GROUND_Y, w: 150, h: PLATFORM_H },
+          { x: startX + 200, y: GROUND_Y - 80, w: 100, h: PLATFORM_H },
+          { x: startX + 350, y: GROUND_Y, w: 150, h: PLATFORM_H }
+        ];
+        return { platforms, enemies: [], powerups: [], width };
+      },
+      staircase: (startX, currentLvl) => {
+        const width = 600;
+        const platforms = [
+          { x: startX, y: GROUND_Y, w: 100, h: PLATFORM_H },
+          { x: startX + 150, y: GROUND_Y - 50, w: 100, h: PLATFORM_H },
+          { x: startX + 300, y: GROUND_Y - 100, w: 100, h: PLATFORM_H },
+          { x: startX + 450, y: GROUND_Y - 50, w: 100, h: PLATFORM_H },
+          { x: startX + 550, y: GROUND_Y, w: 50, h: PLATFORM_H }
+        ];
+        const powerups = currentLvl >= 4 ? [{ x: startX + 335, y: GROUND_Y - 140, w: 30, h: 30, active: true }] : [];
+        return { platforms, enemies: [], powerups, width };
+      },
+      enemyPatrol: (startX, currentLvl) => {
+        const width = 600;
+        const platforms = [{ x: startX, y: GROUND_Y, w: width, h: PLATFORM_H }];
+        const enemies = [{ x: startX + 300, y: GROUND_Y - 40, w: 40, h: 40, vx: 2 + (currentLvl * 0.2), startX: startX + 300, range: 150, active: true }];
+        if (currentLvl >= 6) {
+          enemies.push({ x: startX + 100, y: GROUND_Y - 40, w: 40, h: 40, vx: -3, startX: startX + 100, range: 80, active: true });
+        }
+        return { platforms, enemies, powerups: [], width };
+      },
+      highPlatform: (startX, currentLvl) => {
+        const width = 500;
+        const platforms = [
+          { x: startX, y: GROUND_Y, w: width, h: PLATFORM_H },
+          { x: startX + 150, y: GROUND_Y - 120, w: 200, h: PLATFORM_H }
+        ];
+        const powerups = [{ x: startX + 235, y: GROUND_Y - 160, w: 30, h: 30, active: true }];
+        const enemies = currentLvl >= 5 ? [{ x: startX + 250, y: GROUND_Y - 40, w: 40, h: 40, vx: 3, startX: startX + 250, range: 100, active: true }] : [];
+        return { platforms, enemies, powerups, width };
+      }
+    };
+
+    const levelData = { platforms: [], enemies: [], powerups: [], goal: null, length: 0 };
+    let currentX = 0;
+
+    const appendChunk = (chunk) => {
+      levelData.platforms.push(...chunk.platforms);
+      levelData.enemies.push(...chunk.enemies);
+      levelData.powerups.push(...chunk.powerups);
+      currentX += chunk.width;
+    };
 
     if (lvl === 1) {
       // Nivel 1: Coherente y diseñado a mano (estilo Mario 1-1)
-      length = 2500;
-      
-      // Suelo principal (con un par de huecos)
-      platforms.push({ x: 0, y: GAME_HEIGHT - 60, w: 800, h: 60 }); // Inicio seguro
-      platforms.push({ x: 950, y: GAME_HEIGHT - 60, w: 400, h: 60 }); // Después del primer hueco
-      platforms.push({ x: 1500, y: GAME_HEIGHT - 60, w: 1000, h: 60 }); // Tramo final
-      
-      // Plataformas flotantes
-      platforms.push({ x: 400, y: GAME_HEIGHT - 160, w: 120, h: 20 });
-      platforms.push({ x: 600, y: GAME_HEIGHT - 240, w: 120, h: 20 });
-      platforms.push({ x: 1100, y: GAME_HEIGHT - 180, w: 150, h: 20 });
-      
-      // Enemigos (patrullando)
-      enemies.push({ x: 600, y: GAME_HEIGHT - 90, w: 30, h: 30, vx: 2, startX: 500, range: 200, active: true });
-      enemies.push({ x: 1150, y: GAME_HEIGHT - 210, w: 30, h: 30, vx: 1.5, startX: 1100, range: 100, active: true });
-      enemies.push({ x: 1700, y: GAME_HEIGHT - 90, w: 30, h: 30, vx: 2.5, startX: 1600, range: 200, active: true });
-      
-      // Comodín (Estrella de invencibilidad)
-      powerups.push({ x: 650, y: GAME_HEIGHT - 280, w: 20, h: 20, active: true });
-      
-    } else {
-      // Niveles 2-10: Generación procedural más desafiante
-      length = 1500 + (lvl * 400);
-      for (let x = 0; x < length; x += 300) {
-        if (x === 0 || Math.random() > 0.2) {
-          platforms.push({ x, y: GAME_HEIGHT - 60, w: 250, h: 60 });
-        }
-      }
-      for (let x = 300; x < length - 300; x += 350) {
-        const py = GAME_HEIGHT - 150 - Math.random() * 100;
-        platforms.push({ x, y: py, w: 120, h: 20 });
-        
-        if (Math.random() > 0.3) {
-          enemies.push({ x: x + 20, y: py - 30, w: 30, h: 30, vx: 2 + (lvl * 0.3), startX: x, range: 80, active: true });
-        }
-        if (Math.random() > 0.7) {
-          powerups.push({ x: x + 50, y: py - 60, w: 20, h: 20, active: true });
-        }
-      }
+      levelData.length = 2500;
+      levelData.platforms.push({ x: 0, y: GAME_HEIGHT - 60, w: 800, h: 60 });
+      levelData.platforms.push({ x: 950, y: GAME_HEIGHT - 60, w: 400, h: 60 });
+      levelData.platforms.push({ x: 1500, y: GAME_HEIGHT - 60, w: 1000, h: 60 });
+      levelData.platforms.push({ x: 400, y: GAME_HEIGHT - 160, w: 120, h: 20 });
+      levelData.platforms.push({ x: 600, y: GAME_HEIGHT - 240, w: 120, h: 20 });
+      levelData.platforms.push({ x: 1100, y: GAME_HEIGHT - 180, w: 150, h: 20 });
+      levelData.enemies.push({ x: 600, y: GAME_HEIGHT - 90, w: 30, h: 30, vx: 2, startX: 500, range: 200, active: true });
+      levelData.enemies.push({ x: 1150, y: GAME_HEIGHT - 210, w: 30, h: 30, vx: 1.5, startX: 1100, range: 100, active: true });
+      levelData.enemies.push({ x: 1700, y: GAME_HEIGHT - 90, w: 30, h: 30, vx: 2.5, startX: 1600, range: 200, active: true });
+      levelData.powerups.push({ x: 650, y: GAME_HEIGHT - 280, w: 20, h: 20, active: true });
+      levelData.goal = { x: 2400, y: GAME_HEIGHT - 200, w: 60, h: 140 };
+      world.current = levelData;
+      return;
     }
+
+    // Niveles 2-10: Generación por chunks
+    appendChunk(chunks.flat(currentX, lvl));
+    const numChunks = 3 + Math.floor(lvl * 1.5);
+    const availableChunks = ['flat', 'pit'];
+    if (lvl >= 3) availableChunks.push('staircase', 'enemyPatrol');
+    if (lvl >= 4) availableChunks.push('highPlatform');
+
+    for (let i = 0; i < numChunks; i++) {
+      const chunkIndex = (lvl + i * 7 + i * i) % availableChunks.length;
+      appendChunk(chunks[availableChunks[chunkIndex]](currentX, lvl));
+    }
+
+    const endStartX = currentX;
+    appendChunk(chunks.flat(currentX, lvl));
+    levelData.goal = { x: endStartX + 200, y: GROUND_Y - 80, w: 60, h: 140 };
+    levelData.length = currentX;
     
-    const goal = { x: length - 100, y: GAME_HEIGHT - 200, w: 60, h: 140 };
-    world.current = { platforms, enemies, powerups, goal, length };
+    world.current = levelData;
   };
 
   const initLevel = (lvl) => {
@@ -429,7 +481,10 @@ function PixelQuest({ onExit }) {
         onGround = true; break;
       }
     }
-    if (onGround) p.vy = PQ_JUMP;
+    if (onGround) {
+      p.vy = PQ_JUMP;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
   };
 
   useEffect(() => {
@@ -469,6 +524,7 @@ function PixelQuest({ onExit }) {
       // Death by falling
       if (p.y > GAME_HEIGHT) {
         setRunning(false); setGameOver(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
 
       // Camera follow
@@ -489,8 +545,10 @@ function PixelQuest({ onExit }) {
         if (p.x < e.x + e.w && p.x + p.w > e.x && p.y < e.y + e.h && p.y + p.h > e.y) {
           if (invincibilityTimer.current > 0) {
             e.active = false; // Kill enemy
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           } else {
             setRunning(false); setGameOver(true); // Player dies
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
           }
         }
       }
@@ -502,11 +560,13 @@ function PixelQuest({ onExit }) {
           pu.active = false;
           setInvincible(true);
           invincibilityTimer.current = 5000; // 5 seconds
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }
       }
 
       // Goal collision
       if (w.goal && p.x < w.goal.x + w.goal.w && p.x + p.w > w.goal.x && p.y < w.goal.y + w.goal.h && p.y + p.h > w.goal.y) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         if (level >= 10) {
           setRunning(false); setGameWon(true);
         } else {
