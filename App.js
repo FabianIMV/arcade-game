@@ -526,8 +526,8 @@ function PixelQuest({ onExit }) {
 
         {/* On-Screen Controls */}
         {running && (
-          <View style={styles.dpadContainer}>
-            <View style={styles.dpadLeftRight}>
+          <View style={styles.dpadContainer} pointerEvents="box-none">
+            <View style={styles.dpadLeftRight} pointerEvents="box-none">
               <Pressable 
                 onPressIn={() => keys.current.left = true} 
                 onPressOut={() => keys.current.left = false}
@@ -537,7 +537,7 @@ function PixelQuest({ onExit }) {
                 onPressOut={() => keys.current.right = false}
                 style={styles.dpadBtn}><Text style={styles.dpadText}>▶</Text></Pressable>
             </View>
-            <Pressable onPress={jump} style={styles.dpadBtnJump}><Text style={styles.dpadText}>JUMP</Text></Pressable>
+            <Pressable onPressIn={jump} style={styles.dpadBtnJump}><Text style={styles.dpadText}>JUMP</Text></Pressable>
           </View>
         )}
 
