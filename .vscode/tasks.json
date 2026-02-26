@@ -1,0 +1,11 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "EAS Update",
+      "type": "shell",
+      "command": "EXPO_TOKEN= npx eas-cli login -u fabianimv -p 'F1i9m9v6.-' && CI=1 npx eas-cli update --branch main --message 'Update'",
+      "problemMatcher": []
+    }
+  ]
+}
