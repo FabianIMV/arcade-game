@@ -331,9 +331,9 @@ function CyberRun({ onExit }) {
 // ==========================================
 // 3. PIXEL QUEST (Platformer Mario-style)
 // ==========================================
-const PQ_GRAVITY = 0.8;
-const PQ_JUMP = -14;
-const PQ_SPEED = 5;
+const PQ_GRAVITY = 1.2;
+const PQ_JUMP = -18;
+const PQ_SPEED = 7;
 const PQ_PLAYER_SIZE = 30;
 
 function PixelQuest({ onExit }) {
@@ -354,26 +354,51 @@ function PixelQuest({ onExit }) {
     const platforms = [];
     const enemies = [];
     const powerups = [];
-    const length = 1500 + (lvl * 400);
+    let length = 2000;
 
-    // Ground with pits
-    for (let x = 0; x < length; x += 300) {
-      if (x === 0 || Math.random() > 0.2) {
-        platforms.push({ x, y: GAME_HEIGHT - 60, w: 250, h: 60 });
-      }
-    }
-    // Floating platforms & entities
-    for (let x = 300; x < length - 300; x += 350) {
-      const py = GAME_HEIGHT - 150 - Math.random() * 100;
-      platforms.push({ x, y: py, w: 120, h: 20 });
+    if (lvl === 1) {
+      // Nivel 1: Coherente y diseñado a mano (estilo Mario 1-1)
+      length = 2500;
       
-      if (Math.random() > 0.3) {
-        enemies.push({ x: x + 20, y: py - 30, w: 30, h: 30, vx: 2 + (lvl * 0.3), startX: x, range: 80, active: true });
+      // Suelo principal (con un par de huecos)
+      platforms.push({ x: 0, y: GAME_HEIGHT - 60, w: 800, h: 60 }); // Inicio seguro
+      platforms.push({ x: 950, y: GAME_HEIGHT - 60, w: 400, h: 60 }); // Después del primer hueco
+      platforms.push({ x: 1500, y: GAME_HEIGHT - 60, w: 1000, h: 60 }); // Tramo final
+      
+      // Plataformas flotantes
+      platforms.push({ x: 400, y: GAME_HEIGHT - 160, w: 120, h: 20 });
+      platforms.push({ x: 600, y: GAME_HEIGHT - 240, w: 120, h: 20 });
+      platforms.push({ x: 1100, y: GAME_HEIGHT - 180, w: 150, h: 20 });
+      
+      // Enemigos (patrullando)
+      enemies.push({ x: 600, y: GAME_HEIGHT - 90, w: 30, h: 30, vx: 2, startX: 500, range: 200, active: true });
+      enemies.push({ x: 1150, y: GAME_HEIGHT - 210, w: 30, h: 30, vx: 1.5, startX: 1100, range: 100, active: true });
+      enemies.push({ x: 1700, y: GAME_HEIGHT - 90, w: 30, h: 30, vx: 2.5, startX: 1600, range: 200, active: true });
+      
+      // Comodín (Estrella de invencibilidad)
+      powerups.push({ x: 650, y: GAME_HEIGHT - 280, w: 20, h: 20, active: true });
+      
+    } else {
+      // Niveles 2-10: Generación procedural más desafiante
+      length = 1500 + (lvl * 400);
+      for (let x = 0; x < length; x += 300) {
+        if (x === 0 || Math.random() > 0.2) {
+          platforms.push({ x, y: GAME_HEIGHT - 60, w: 250, h: 60 });
+        }
       }
-      if (Math.random() > 0.7) {
-        powerups.push({ x: x + 50, y: py - 60, w: 20, h: 20, active: true });
+      for (let x = 300; x < length - 300; x += 350) {
+        const py = GAME_HEIGHT - 150 - Math.random() * 100;
+        platforms.push({ x, y: py, w: 120, h: 20 });
+        
+        if (Math.random() > 0.3) {
+          enemies.push({ x: x + 20, y: py - 30, w: 30, h: 30, vx: 2 + (lvl * 0.3), startX: x, range: 80, active: true });
+        }
+        if (Math.random() > 0.7) {
+          powerups.push({ x: x + 50, y: py - 60, w: 20, h: 20, active: true });
+        }
       }
     }
+    
     const goal = { x: length - 100, y: GAME_HEIGHT - 200, w: 60, h: 140 };
     world.current = { platforms, enemies, powerups, goal, length };
   };
@@ -528,16 +553,16 @@ function PixelQuest({ onExit }) {
         {running && (
           <View style={styles.dpadContainer} pointerEvents="box-none">
             <View style={styles.dpadLeftRight} pointerEvents="box-none">
-              <Pressable 
-                onPressIn={() => keys.current.left = true} 
-                onPressOut={() => keys.current.left = false}
-                style={styles.dpadBtn}><Text style={styles.dpadText}>◀</Text></Pressable>
-              <Pressable 
-                onPressIn={() => keys.current.right = true} 
-                onPressOut={() => keys.current.right = false}
-                style={styles.dpadBtn}><Text style={styles.dpadText}>▶</Text></Pressable>
+              <View 
+                onTouchStart={() => keys.current.left = true} 
+                onTouchEnd={() => keys.current.left = false}
+                style={styles.dpadBtn}><Text style={styles.dpadText}>◀</Text></View>
+              <View 
+                onTouchStart={() => keys.current.right = true} 
+                onTouchEnd={() => keys.current.right = false}
+                style={styles.dpadBtn}><Text style={styles.dpadText}>▶</Text></View>
             </View>
-            <Pressable onPressIn={jump} style={styles.dpadBtnJump}><Text style={styles.dpadText}>JUMP</Text></Pressable>
+            <View onTouchStart={jump} style={styles.dpadBtnJump}><Text style={styles.dpadText}>JUMP</Text></View>
           </View>
         )}
 
