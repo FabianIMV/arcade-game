@@ -9,6 +9,7 @@ import {
   View
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
 const GAME_HEIGHT = Math.min(height * 0.75, 700);
@@ -350,14 +351,16 @@ function PixelQuest({ onExit }) {
   const [gameOver, setGameOver] = useState(false);
   const [gameWon, setGameWon] = useState(false);
   const [invincible, setInvincible] = useState(false);
+  const [hasGun, setHasGun] = useState(false);
   const [, setTick] = useState(0);
 
-  const pRef = useRef({ x: 50, y: 100, vx: 0, vy: 0, w: PQ_PLAYER_SIZE, h: PQ_PLAYER_SIZE });
+  const pRef = useRef({ x: 50, y: 100, vx: 0, vy: 0, w: PQ_PLAYER_SIZE, h: PQ_PLAYER_SIZE, facingRight: true });
   const keys = useRef({ left: false, right: false });
   const world = useRef({ platforms: [], enemies: [], powerups: [], goal: null, length: 2000 });
   const cameraX = useRef(0);
   const invincibilityTimer = useRef(0);
   const tickRef = useRef(0);
+  const projectiles = useRef([]);
 
   const generateLevel = (lvl) => {
     const GROUND_Y = GAME_HEIGHT - 60;
@@ -412,6 +415,33 @@ function PixelQuest({ onExit }) {
         const powerups = [{ x: startX + 235, y: GROUND_Y - 160, w: 30, h: 30, active: true }];
         const enemies = currentLvl >= 5 ? [{ x: startX + 250, y: GROUND_Y - 40, w: 40, h: 40, vx: 3, startX: startX + 250, range: 100, active: true }] : [];
         return { platforms, enemies, powerups, width };
+      },
+      movingPlatforms: (startX, currentLvl) => {
+        const width = 700;
+        const platforms = [
+          { x: startX, y: GROUND_Y, w: 100, h: PLATFORM_H },
+          { x: startX + 200, y: GROUND_Y - 60, w: 80, h: PLATFORM_H },
+          { x: startX + 400, y: GROUND_Y - 120, w: 80, h: PLATFORM_H },
+          { x: startX + 600, y: GROUND_Y, w: 100, h: PLATFORM_H }
+        ];
+        const enemies = [{ x: startX + 200, y: GROUND_Y - 100, w: 30, h: 30, vx: 1.5, startX: startX + 200, range: 80, active: true }];
+        return { platforms, enemies, powerups: [], width };
+      },
+      dangerZone: (startX, currentLvl) => {
+        const width = 800;
+        const platforms = [
+          { x: startX, y: GROUND_Y, w: 150, h: PLATFORM_H },
+          { x: startX + 250, y: GROUND_Y - 50, w: 50, h: PLATFORM_H },
+          { x: startX + 400, y: GROUND_Y - 100, w: 50, h: PLATFORM_H },
+          { x: startX + 550, y: GROUND_Y - 50, w: 50, h: PLATFORM_H },
+          { x: startX + 700, y: GROUND_Y, w: 100, h: PLATFORM_H }
+        ];
+        const enemies = [
+          { x: startX + 100, y: GROUND_Y - 40, w: 30, h: 30, vx: 2, startX: startX + 50, range: 100, active: true },
+          { x: startX + 700, y: GROUND_Y - 40, w: 30, h: 30, vx: -2, startX: startX + 650, range: 50, active: true }
+        ];
+        const powerups = currentLvl >= 6 ? [{ x: startX + 410, y: GROUND_Y - 140, w: 30, h: 30, active: true }] : [];
+        return { platforms, enemies, powerups, width };
       }
     };
 
@@ -449,6 +479,8 @@ function PixelQuest({ onExit }) {
     const availableChunks = ['flat', 'pit'];
     if (lvl >= 3) availableChunks.push('staircase', 'enemyPatrol');
     if (lvl >= 4) availableChunks.push('highPlatform');
+    if (lvl >= 5) availableChunks.push('movingPlatforms');
+    if (lvl >= 7) availableChunks.push('dangerZone');
 
     for (let i = 0; i < numChunks; i++) {
       const chunkIndex = (lvl + i * 7 + i * i) % availableChunks.length;
@@ -465,9 +497,11 @@ function PixelQuest({ onExit }) {
 
   const initLevel = (lvl) => {
     setLevel(lvl);
-    pRef.current = { x: 50, y: 100, vx: 0, vy: 0, w: PQ_PLAYER_SIZE, h: PQ_PLAYER_SIZE };
+    pRef.current = { x: 50, y: 100, vx: 0, vy: 0, w: PQ_PLAYER_SIZE, h: PQ_PLAYER_SIZE, facingRight: true };
     cameraX.current = 0;
     setInvincible(false);
+    setHasGun(false);
+    projectiles.current = [];
     invincibilityTimer.current = 0;
     generateLevel(lvl);
   };
@@ -478,6 +512,35 @@ function PixelQuest({ onExit }) {
     setLives(3);
     initLevel(1);
     setRunning(true);
+  };
+
+  const saveGame = async () => {
+    try {
+      await AsyncStorage.setItem('pixelQuestSave', JSON.stringify({ level, lives }));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      alert('Game Saved!');
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const loadGame = async () => {
+    try {
+      const save = await AsyncStorage.getItem('pixelQuestSave');
+      if (save) {
+        const data = JSON.parse(save);
+        setGameOver(false);
+        setGameWon(false);
+        setLives(data.lives);
+        initLevel(data.level);
+        setRunning(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        alert('No save found');
+      }
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const handleDeath = () => {
@@ -513,6 +576,20 @@ function PixelQuest({ onExit }) {
     }
   };
 
+  const shoot = () => {
+    if (!running || !hasGun) return;
+    const p = pRef.current;
+    projectiles.current.push({
+      x: p.facingRight ? p.x + p.w : p.x - 10,
+      y: p.y + p.h / 2 - 5,
+      vx: p.facingRight ? 10 : -10,
+      w: 10,
+      h: 10,
+      active: true
+    });
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+
   useEffect(() => {
     if (!running) return;
     const loop = setInterval(() => {
@@ -523,9 +600,11 @@ function PixelQuest({ onExit }) {
       tickRef.current++;
       if (keys.current.left) {
         p.vx = -PQ_SPEED;
+        p.facingRight = false;
         if (tickRef.current % 8 === 0) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       } else if (keys.current.right) {
         p.vx = PQ_SPEED;
+        p.facingRight = true;
         if (tickRef.current % 8 === 0) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       } else {
         p.vx = 0;
@@ -590,8 +669,33 @@ function PixelQuest({ onExit }) {
         if (p.x < pu.x + pu.w && p.x + p.w > pu.x && p.y < pu.y + pu.h && p.y + p.h > pu.y) {
           pu.active = false;
           setInvincible(true);
+          setHasGun(true);
           invincibilityTimer.current = 5000; // 5 seconds
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); // Different vibration
+        }
+      }
+
+      // Projectiles update & collision
+      for (let i = projectiles.current.length - 1; i >= 0; i--) {
+        let proj = projectiles.current[i];
+        if (!proj.active) continue;
+        proj.x += proj.vx;
+        
+        // Remove if out of bounds
+        if (proj.x > p.x + width || proj.x < p.x - width) {
+          proj.active = false;
+          continue;
+        }
+
+        // Check enemy collision
+        for (let e of w.enemies) {
+          if (!e.active) continue;
+          if (proj.x < e.x + e.w && proj.x + proj.w > e.x && proj.y < e.y + e.h && proj.y + proj.h > e.y) {
+            e.active = false;
+            proj.active = false;
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+            break;
+          }
         }
       }
 
@@ -621,6 +725,9 @@ function PixelQuest({ onExit }) {
         <Text style={styles.title}>WORLD {level}</Text>
         <View style={styles.stats}>
           <Text style={styles.statText}>LIVES: {lives}</Text>
+          <Pressable onPress={saveGame} style={{marginLeft: 15, backgroundColor: '#0ff', paddingHorizontal: 10, borderRadius: 5}}>
+            <Text style={{color: '#000', fontWeight: 'bold'}}>SAVE</Text>
+          </Pressable>
         </View>
       </View>
 
@@ -631,16 +738,22 @@ function PixelQuest({ onExit }) {
             <View key={`p${i}`} style={{ position: 'absolute', left: plat.x, top: plat.y, width: plat.w, height: plat.h, backgroundColor: '#654321', borderWidth: 2, borderColor: '#3e2723' }} />
           ))}
           {world.current.enemies.map((e, i) => e.active && (
-            <View key={`e${i}`} style={{ position: 'absolute', left: e.x, top: e.y, width: e.w, height: e.h, backgroundColor: '#ff0000', borderRadius: 5 }} />
+            <Text key={`e${i}`} style={{ position: 'absolute', left: e.x, top: e.y - 5, fontSize: 30 }}>👾</Text>
           ))}
           {world.current.powerups.map((pu, i) => pu.active && (
-            <View key={`pu${i}`} style={{ position: 'absolute', left: pu.x, top: pu.y, width: pu.w, height: pu.h, backgroundColor: '#ffd700', borderRadius: 10, shadowColor: '#ffd700', shadowOpacity: 1, shadowRadius: 10 }} />
+            <Text key={`pu${i}`} style={{ position: 'absolute', left: pu.x, top: pu.y - 5, fontSize: 25 }}>⭐</Text>
           ))}
           {world.current.goal && (
             <View style={{ position: 'absolute', left: world.current.goal.x, top: world.current.goal.y, width: world.current.goal.w, height: world.current.goal.h, backgroundColor: '#32cd32', borderRadius: 10, borderWidth: 3, borderColor: '#fff' }} />
           )}
+          {/* Projectiles */}
+          {projectiles.current.map((proj, i) => proj.active && (
+            <View key={`proj${i}`} style={{ position: 'absolute', left: proj.x, top: proj.y, width: proj.w, height: proj.h, backgroundColor: '#ff4500', borderRadius: 5 }} />
+          ))}
           {/* Player */}
-          <View style={{ position: 'absolute', left: pRef.current.x, top: pRef.current.y, width: pRef.current.w, height: pRef.current.h, backgroundColor: invincible ? '#ffd700' : '#1e90ff', borderRadius: 5, borderWidth: 2, borderColor: '#fff' }} />
+          <Text style={{ position: 'absolute', left: pRef.current.x, top: pRef.current.y - 5, fontSize: 30, opacity: invincible ? 0.5 : 1, transform: [{scaleX: pRef.current.facingRight ? 1 : -1}] }}>
+            {hasGun ? '🤠' : '😎'}
+          </Text>
         </View>
 
         {/* On-Screen Controls */}
@@ -656,7 +769,10 @@ function PixelQuest({ onExit }) {
                 onTouchEnd={() => keys.current.right = false}
                 style={styles.dpadBtn}><Text style={styles.dpadText}>▶</Text></View>
             </View>
-            <View onTouchStart={jump} style={styles.dpadBtnJump}><Text style={styles.dpadText}>JUMP</Text></View>
+            <View style={{flexDirection: 'row', gap: 10}} pointerEvents="box-none">
+              {hasGun && <View onTouchStart={shoot} style={[styles.dpadBtnJump, {backgroundColor: 'rgba(255,69,0,0.5)'}]}><Text style={styles.dpadText}>🔥</Text></View>}
+              <View onTouchStart={jump} style={styles.dpadBtnJump}><Text style={styles.dpadText}>JUMP</Text></View>
+            </View>
           </View>
         )}
 
@@ -664,7 +780,10 @@ function PixelQuest({ onExit }) {
           <View style={styles.overlay}>
             <Text style={styles.overlayTitle}>{gameWon ? 'YOU WIN!' : gameOver ? 'GAME OVER' : 'PIXEL QUEST'}</Text>
             <Text style={styles.overlaySub}>{gameWon ? 'All 10 worlds cleared!' : 'Reach the green pillar. Grab stars for power.'}</Text>
-            <Pressable style={styles.btn} onPress={startGame}><Text style={styles.btnText}>{gameOver || gameWon ? 'RESTART' : 'START'}</Text></Pressable>
+            <View style={{flexDirection: 'row', gap: 20}}>
+              <Pressable style={styles.btn} onPress={startGame}><Text style={styles.btnText}>{gameOver || gameWon ? 'RESTART' : 'START'}</Text></Pressable>
+              {(!gameOver && !gameWon) && <Pressable style={[styles.btn, {backgroundColor: '#ffd700'}]} onPress={loadGame}><Text style={styles.btnText}>LOAD</Text></Pressable>}
+            </View>
           </View>
         )}
       </View>
