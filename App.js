@@ -731,7 +731,7 @@ function PixelQuest({ onExit }) {
         </View>
       </View>
 
-      <View style={[styles.gameArea, { backgroundColor: bgColor, borderColor: '#fff' }]}>
+      <View style={[styles.gameArea, { backgroundColor: bgColor, borderColor: '#fff', marginBottom: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }]}>
         {/* Render World */}
         <View style={{ transform: [{ translateX: -cameraX.current }] }}>
           {world.current.platforms.map((plat, i) => (
@@ -746,44 +746,318 @@ function PixelQuest({ onExit }) {
           {world.current.goal && (
             <View style={{ position: 'absolute', left: world.current.goal.x, top: world.current.goal.y, width: world.current.goal.w, height: world.current.goal.h, backgroundColor: '#32cd32', borderRadius: 10, borderWidth: 3, borderColor: '#fff' }} />
           )}
-          {/* Projectiles */}
           {projectiles.current.map((proj, i) => proj.active && (
             <View key={`proj${i}`} style={{ position: 'absolute', left: proj.x, top: proj.y, width: proj.w, height: proj.h, backgroundColor: '#ff4500', borderRadius: 5 }} />
           ))}
-          {/* Player */}
           <Text style={{ position: 'absolute', left: pRef.current.x, top: pRef.current.y - 5, fontSize: 30, opacity: invincible ? 0.5 : 1, transform: [{scaleX: pRef.current.facingRight ? 1 : -1}] }}>
             {hasGun ? '🤠' : '😎'}
           </Text>
         </View>
-
-        {/* On-Screen Controls */}
-        {running && (
-          <View style={styles.dpadContainer} pointerEvents="box-none">
-            <View style={styles.dpadLeftRight} pointerEvents="box-none">
-              <View 
-                onTouchStart={() => keys.current.left = true} 
-                onTouchEnd={() => keys.current.left = false}
-                style={styles.dpadBtn}><Text style={styles.dpadText}>◀</Text></View>
-              <View 
-                onTouchStart={() => keys.current.right = true} 
-                onTouchEnd={() => keys.current.right = false}
-                style={styles.dpadBtn}><Text style={styles.dpadText}>▶</Text></View>
-            </View>
-            <View style={{flexDirection: 'row', gap: 10}} pointerEvents="box-none">
-              {hasGun && <View onTouchStart={shoot} style={[styles.dpadBtnJump, {backgroundColor: 'rgba(255,69,0,0.5)'}]}><Text style={styles.dpadText}>🔥</Text></View>}
-              <View onTouchStart={jump} style={styles.dpadBtnJump}><Text style={styles.dpadText}>JUMP</Text></View>
-            </View>
-          </View>
-        )}
-
         {!running && (
           <View style={styles.overlay}>
             <Text style={styles.overlayTitle}>{gameWon ? 'YOU WIN!' : gameOver ? 'GAME OVER' : 'PIXEL QUEST'}</Text>
-            <Text style={styles.overlaySub}>{gameWon ? 'All 10 worlds cleared!' : 'Reach the green pillar. Grab stars for power.'}</Text>
+            <Text style={styles.overlaySub}>{gameWon ? 'All 10 worlds cleared!' : 'Reach the green pillar. Grab ⭐ for invincibility + gun.'}</Text>
             <View style={{flexDirection: 'row', gap: 20}}>
               <Pressable style={styles.btn} onPress={startGame}><Text style={styles.btnText}>{gameOver || gameWon ? 'RESTART' : 'START'}</Text></Pressable>
               {(!gameOver && !gameWon) && <Pressable style={[styles.btn, {backgroundColor: '#ffd700'}]} onPress={loadGame}><Text style={styles.btnText}>LOAD</Text></Pressable>}
             </View>
+          </View>
+        )}
+      </View>
+
+      {/* D-Pad OUTSIDE game view so it never covers the player */}
+      {running && (
+        <View style={styles.controlBar}>
+          <View style={styles.dpadLeftRight}>
+            <View onTouchStart={() => keys.current.left = true} onTouchEnd={() => keys.current.left = false} style={styles.dpadBtn}>
+              <Text style={styles.dpadText}>◀</Text>
+            </View>
+            <View onTouchStart={() => keys.current.right = true} onTouchEnd={() => keys.current.right = false} style={styles.dpadBtn}>
+              <Text style={styles.dpadText}>▶</Text>
+            </View>
+          </View>
+          <View style={{flexDirection: 'row', gap: 10}}>
+            {hasGun && <View onTouchStart={shoot} style={[styles.dpadBtnJump, {backgroundColor: 'rgba(255,69,0,0.6)'}]}><Text style={styles.dpadText}>🔥</Text></View>}
+            <View onTouchStart={jump} style={styles.dpadBtnJump}><Text style={styles.dpadText}>JUMP</Text></View>
+          </View>
+        </View>
+      )}
+    </SafeAreaView>
+  );
+}
+
+function GalacticHunt({ onExit }) {
+  const [gameState, setGameState] = useState('idle'); // 'idle' | 'playing' | 'roundEnd' | 'gameOver'
+  const [score, setScore] = useState(0);
+  const [round, setRound] = useState(1);
+  const [ammo, setAmmo] = useState(10);
+  const [timeLeft, setTimeLeft] = useState(30);
+  const [targets, setTargets] = useState([]);
+
+  const targetsRef = useRef([]);
+  const ammoRef = useRef(10);
+  const scoreRef = useRef(0);
+  const timeRef = useRef(30);
+  const roundRef = useRef(1);
+  const gameStateRef = useRef('idle');
+  const nextIdRef = useRef(0);
+  const gameLoopRef = useRef(null);
+  const timerRef = useRef(null);
+  const spawnTimeoutRef = useRef(null);
+
+  const stars = useRef(
+    Array.from({ length: 60 }, (_, i) => ({
+      id: i,
+      x: Math.random() * width,
+      y: Math.random() * GAME_HEIGHT,
+      size: Math.random() * 2.5 + 1,
+      opacity: 0.4 + Math.random() * 0.6,
+    }))
+  ).current;
+
+  const TARGET_TYPES = [
+    { emoji: '🦆', points: 10, baseSpeed: 2.5, size: 44 },
+    { emoji: '🛸', points: 20, baseSpeed: 3.5, size: 44 },
+    { emoji: '💎', points: 50, baseSpeed: 5.0, size: 36 },
+    { emoji: '🦆', points: 10, baseSpeed: 2.5, size: 44 },
+    { emoji: '🛸', points: 20, baseSpeed: 3.5, size: 44 },
+  ];
+
+  const cleanup = () => {
+    clearInterval(gameLoopRef.current);
+    clearInterval(timerRef.current);
+    clearTimeout(spawnTimeoutRef.current);
+  };
+
+  const spawnTarget = () => {
+    const type = TARGET_TYPES[Math.floor(Math.random() * TARGET_TYPES.length)];
+    const speed = type.baseSpeed * (0.8 + Math.random() * 0.5);
+    const side = Math.floor(Math.random() * 3); // 0=left, 1=right, 2=top
+    let x, y, vx, vy;
+    if (side === 0) {
+      x = -type.size;
+      y = 60 + Math.random() * (GAME_HEIGHT - 120);
+      vx = speed;
+      vy = (Math.random() - 0.5) * speed * 0.7;
+    } else if (side === 1) {
+      x = width + type.size;
+      y = 60 + Math.random() * (GAME_HEIGHT - 120);
+      vx = -speed;
+      vy = (Math.random() - 0.5) * speed * 0.7;
+    } else {
+      x = type.size + Math.random() * (width - type.size * 2);
+      y = -type.size;
+      vx = (Math.random() - 0.5) * speed * 0.7;
+      vy = speed;
+    }
+    targetsRef.current = [...targetsRef.current, {
+      id: nextIdRef.current++,
+      x, y, vx, vy,
+      emoji: type.emoji,
+      points: type.points,
+      size: type.size,
+      active: true,
+    }];
+  };
+
+  const scheduleSpawn = () => {
+    if (gameStateRef.current !== 'playing') return;
+    spawnTimeoutRef.current = setTimeout(() => {
+      if (gameStateRef.current === 'playing') {
+        spawnTarget();
+        scheduleSpawn();
+      }
+    }, 800 + Math.random() * 1200);
+  };
+
+  const endRound = () => {
+    if (gameStateRef.current !== 'playing') return;
+    gameStateRef.current = 'roundEnd';
+    cleanup();
+    setGameState('roundEnd');
+  };
+
+  const startRound = () => {
+    targetsRef.current = [];
+    ammoRef.current = 10;
+    timeRef.current = 30;
+    gameStateRef.current = 'playing';
+    setTargets([]);
+    setAmmo(10);
+    setTimeLeft(30);
+    setGameState('playing');
+
+    gameLoopRef.current = setInterval(() => {
+      targetsRef.current = targetsRef.current.map(t => {
+        if (!t.active) return t;
+        let nx = t.x + t.vx;
+        let ny = t.y + t.vy;
+        let nvx = t.vx;
+        let nvy = t.vy;
+        if (nx <= 0 || nx >= width - t.size) { nvx = -nvx; nx = Math.max(0, Math.min(width - t.size, nx)); }
+        if (ny <= 0 || ny >= GAME_HEIGHT - t.size) { nvy = -nvy; ny = Math.max(0, Math.min(GAME_HEIGHT - t.size, ny)); }
+        return { ...t, x: nx, y: ny, vx: nvx, vy: nvy };
+      }).filter(t => t.active);
+      setTargets([...targetsRef.current]);
+    }, 16);
+
+    timerRef.current = setInterval(() => {
+      timeRef.current -= 1;
+      setTimeLeft(timeRef.current);
+      if (timeRef.current <= 0) endRound();
+    }, 1000);
+
+    scheduleSpawn();
+  };
+
+  const handleTargetHit = (targetId, points) => {
+    if (ammoRef.current <= 0 || gameStateRef.current !== 'playing') return;
+    ammoRef.current -= 1;
+    scoreRef.current += points;
+    targetsRef.current = targetsRef.current.filter(t => t.id !== targetId);
+    setAmmo(ammoRef.current);
+    setScore(scoreRef.current);
+    setTargets([...targetsRef.current]);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    if (ammoRef.current <= 0) endRound();
+  };
+
+  const nextRound = () => {
+    roundRef.current += 1;
+    setRound(roundRef.current);
+    startRound();
+  };
+
+  const resetGame = () => {
+    cleanup();
+    scoreRef.current = 0;
+    roundRef.current = 1;
+    targetsRef.current = [];
+    gameStateRef.current = 'idle';
+    setScore(0);
+    setRound(1);
+    setTargets([]);
+    setGameState('idle');
+  };
+
+  useEffect(() => () => cleanup(), []);
+
+  const ammoBar = Array.from({ length: 10 }, (_, i) => (i < ammo ? '🔫' : '▫️')).join('');
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: '#070720' }]}>
+      <View style={[styles.header, { backgroundColor: 'rgba(0,0,20,0.85)', paddingTop: 6, paddingBottom: 6 }]}>
+        <Pressable onPress={() => { cleanup(); onExit(); }} style={styles.backBtn}>
+          <Text style={styles.backText}>← BACK</Text>
+        </Pressable>
+        <Text style={[styles.title, { color: '#a78bfa' }]}>GALACTIC HUNT</Text>
+        <View style={styles.stats}>
+          <Text style={styles.statText}>⭐ {score}</Text>
+          <Text style={[styles.statText, { marginLeft: 12 }]}>R{round}/3</Text>
+        </View>
+      </View>
+
+      <View style={[styles.gameArea, { backgroundColor: '#070720', borderColor: '#2e1065' }]}>
+        {/* Starfield */}
+        {stars.map(star => (
+          <View
+            key={star.id}
+            style={{
+              position: 'absolute', left: star.x, top: star.y,
+              width: star.size, height: star.size,
+              borderRadius: star.size / 2,
+              backgroundColor: '#ffffff',
+              opacity: star.opacity,
+            }}
+          />
+        ))}
+
+        {/* HUD: ammo + timer */}
+        {gameState === 'playing' && (
+          <View style={{ position: 'absolute', top: 8, left: 12, right: 12, zIndex: 10 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ color: '#c4b5fd', fontSize: 13, letterSpacing: 1 }}>{ammoBar}</Text>
+              <Text style={{ color: timeLeft <= 10 ? '#f87171' : '#e2e8f0', fontSize: 16, fontWeight: 'bold' }}>
+                ⏱ {timeLeft}s
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/* Targets */}
+        {gameState === 'playing' && targets.map(target => (
+          <Pressable
+            key={target.id}
+            onPress={() => handleTargetHit(target.id, target.points)}
+            style={{
+              position: 'absolute',
+              left: target.x,
+              top: target.y,
+              width: target.size,
+              height: target.size,
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}
+          >
+            <Text style={{ fontSize: target.size * 0.76, lineHeight: target.size }}>{target.emoji}</Text>
+          </Pressable>
+        ))}
+
+        {/* Idle overlay */}
+        {gameState === 'idle' && (
+          <View style={[styles.overlay, { backgroundColor: 'rgba(7,7,32,0.93)' }]}>
+            <Text style={[styles.overlayTitle, { color: '#a78bfa', fontSize: 30, marginBottom: 6 }]}>🛸 GALACTIC HUNT 🛸</Text>
+            <Text style={styles.overlaySub}>Tap targets before they escape!</Text>
+            <Text style={[styles.overlaySub, { fontSize: 14, color: '#c4b5fd', marginBottom: 2 }]}>🦆 Duck = 10 pts  •  🛸 UFO = 20 pts</Text>
+            <Text style={[styles.overlaySub, { fontSize: 14, color: '#c4b5fd', marginBottom: 2 }]}>💎 Gem = 50 pts</Text>
+            <Text style={[styles.overlaySub, { fontSize: 13, color: '#94a3b8', marginBottom: 28 }]}>10 shots  •  30 seconds  •  3 rounds</Text>
+            <Pressable style={[styles.btn, { backgroundColor: '#7c3aed' }]} onPress={startRound}>
+              <Text style={[styles.btnText, { color: '#fff' }]}>START GAME</Text>
+            </Pressable>
+            <Pressable style={[styles.btn, { backgroundColor: '#374151', marginTop: 14 }]} onPress={() => { cleanup(); onExit(); }}>
+              <Text style={[styles.btnText, { color: '#fff' }]}>BACK TO MENU</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* Round-end overlay */}
+        {gameState === 'roundEnd' && (
+          <View style={[styles.overlay, { backgroundColor: 'rgba(7,7,32,0.93)' }]}>
+            <Text style={[styles.overlayTitle, { color: '#fbbf24' }]}>ROUND {round} CLEAR!</Text>
+            <Text style={[styles.overlaySub, { fontSize: 22, color: '#fff', marginBottom: 6 }]}>Score: {score}</Text>
+            <Text style={[styles.overlaySub, { marginBottom: 28 }]}>
+              {round < 3 ? `Round ${round + 1} of 3 up next!` : 'All rounds complete!'}
+            </Text>
+            {round < 3 ? (
+              <Pressable style={[styles.btn, { backgroundColor: '#7c3aed' }]} onPress={nextRound}>
+                <Text style={[styles.btnText, { color: '#fff' }]}>NEXT ROUND ▶</Text>
+              </Pressable>
+            ) : (
+              <Pressable style={[styles.btn, { backgroundColor: '#7c3aed' }]} onPress={() => {
+                gameStateRef.current = 'gameOver';
+                setGameState('gameOver');
+              }}>
+                <Text style={[styles.btnText, { color: '#fff' }]}>SEE RESULTS</Text>
+              </Pressable>
+            )}
+            <Pressable style={[styles.btn, { backgroundColor: '#374151', marginTop: 14 }]} onPress={() => { cleanup(); onExit(); }}>
+              <Text style={[styles.btnText, { color: '#fff' }]}>QUIT</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* Game-over overlay */}
+        {gameState === 'gameOver' && (
+          <View style={[styles.overlay, { backgroundColor: 'rgba(7,7,32,0.93)' }]}>
+            <Text style={[styles.overlayTitle, { color: '#f472b6', fontSize: 34 }]}>GAME OVER</Text>
+            <Text style={[styles.overlaySub, { fontSize: 24, color: '#fbbf24', marginBottom: 4 }]}>Final Score</Text>
+            <Text style={{ fontSize: 56, fontWeight: '900', color: '#fff', marginBottom: 28 }}>{score}</Text>
+            <Pressable style={[styles.btn, { backgroundColor: '#7c3aed' }]} onPress={resetGame}>
+              <Text style={[styles.btnText, { color: '#fff' }]}>PLAY AGAIN</Text>
+            </Pressable>
+            <Pressable style={[styles.btn, { backgroundColor: '#374151', marginTop: 14 }]} onPress={() => { cleanup(); onExit(); }}>
+              <Text style={[styles.btnText, { color: '#fff' }]}>BACK TO MENU</Text>
+            </Pressable>
           </View>
         )}
       </View>
@@ -806,6 +1080,10 @@ export default function App() {
     return <PixelQuest onExit={() => setCurrentScreen('menu')} />;
   }
 
+  if (currentScreen === 'galactic') {
+    return <GalacticHunt onExit={() => setCurrentScreen('menu')} />;
+  }
+
   return (
     <SafeAreaView style={styles.menuContainer}>
       <Text style={styles.menuTitle}>ARCADE HUB</Text>
@@ -824,6 +1102,11 @@ export default function App() {
       <Pressable style={[styles.menuBtn, { backgroundColor: '#32cd32' }]} onPress={() => setCurrentScreen('pixel')}>
         <Text style={styles.menuBtnTitle}>PIXEL QUEST</Text>
         <Text style={styles.menuBtnSub}>10-World Platformer</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#7c3aed' }]} onPress={() => setCurrentScreen('galactic')}>
+        <Text style={styles.menuBtnTitle}>GALACTIC HUNT</Text>
+        <Text style={styles.menuBtnSub}>UFO / Duck Shooter</Text>
       </Pressable>
     </SafeAreaView>
   );
@@ -859,5 +1142,6 @@ const styles = StyleSheet.create({
   dpadLeftRight: { flexDirection: 'row', gap: 10 },
   dpadBtn: { width: 60, height: 60, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 30, justifyContent: 'center', alignItems: 'center' },
   dpadBtnJump: { width: 80, height: 80, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 40, justifyContent: 'center', alignItems: 'center' },
-  dpadText: { color: '#fff', fontSize: 24, fontWeight: 'bold' }
+  dpadText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
+  controlBar: { height: 100, backgroundColor: 'rgba(0,0,0,0.4)', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 10 }
 });
