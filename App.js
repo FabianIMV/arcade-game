@@ -196,6 +196,149 @@ function NeonGalaxy({ onExit }) {
                 const slot = (width - 60) / 3;
                 for (let w = 0; w < 3; w++) {
                   const wt = NG_ENEMY_TYPES[Math.floor(Math.random() * NG_ENEMY_TYPES.length)];
+                  enemies.current.push({
+                    id: now + Math.random() + w,
+                    x: 10 + slot * w + Math.random() * (slot - ENEMY_SIZE),
+                    y: -ENEMY_SIZE * (w + 1),
+                    speed: waveSpeed + Math.random(),
+                    type: wt,
+                  });
+                }
+              }
+
+              // Occasional power-up drop
+              if (Math.random() < 0.1) {
+                powerUps.current.push({ id: now + Math.random(), x: e.x, y: e.y, type: 'shield' });
+              }
+
+              enemyDestroyed = true;
+              break;
+            }
+          }
+        }
+
+        if (enemyDestroyed) {
+          enemies.current.splice(i, 1);
+        } else if (e.y > GAME_HEIGHT) {
+          enemies.current.splice(i, 1);
+          newLives -= 1;
+        }
+      }
+
+      scoreRef.current = newScore;
+      livesRef.current = newLives;
+      setScore(newScore);
+      setLives(newLives);
+
+      if (newLives <= 0) {
+        if (newScore > highScore.current) {
+          highScore.current = newScore;
+          AsyncStorage.setItem('ngHighScore', String(newScore)).catch(() => {});
+        }
+        setRunning(false);
+        setGameOver(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+
+      setTick(t => t + 1);
+    }, 16);
+
+    return () => clearInterval(loop);
+  }, [running]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderMove: (_, gs) => {
+        playerX.current = Math.max(0, Math.min(width - PLAYER_SIZE, gs.moveX - PLAYER_SIZE / 2));
+      },
+    })
+  ).current;
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
+        <Text style={styles.title}>NEON GALAXY</Text>
+        <View style={styles.stats}>
+          <Text style={styles.statText}>SCORE: {score}</Text>
+          <Text style={[styles.statText, { fontSize: 11, opacity: 0.7 }]}>LIVES: {lives} {multiplierActive.current ? '⚡2×' : ''}</Text>
+        </View>
+      </View>
+
+      <View style={styles.gameArea} {...panResponder.panHandlers}>
+        {/* Stars */}
+        {stars.map(star => (
+          <View key={star.id} style={{
+            position: 'absolute', left: star.x, top: star.y,
+            width: star.size, height: star.size,
+            backgroundColor: '#fff', borderRadius: star.size / 2, opacity: 0.6,
+          }} />
+        ))}
+
+        {/* Lasers */}
+        {lasers.current.map(l => (
+          <View key={l.id} style={[styles.laser, { left: l.x, top: l.y }]} />
+        ))}
+
+        {/* Power-ups */}
+        {powerUps.current.map(p => (
+          <Text key={p.id} style={{ position: 'absolute', left: p.x, top: p.y, fontSize: 24 }}>🛡️</Text>
+        ))}
+
+        {/* Enemies */}
+        {enemies.current.map(e => (
+          <Text key={e.id} style={{
+            position: 'absolute',
+            left: e.x,
+            top: e.y,
+            fontSize: ENEMY_SIZE,
+            lineHeight: ENEMY_SIZE,
+          }}>
+            {e.type}
+          </Text>
+        ))}
+
+        {/* Player ship */}
+        <Text style={{
+          position: 'absolute',
+          left: playerX.current,
+          top: GAME_HEIGHT - PLAYER_SIZE - 10,
+          fontSize: PLAYER_SIZE - 4,
+          lineHeight: PLAYER_SIZE,
+        }}>
+          🚀
+        </Text>
+
+        {!running && (
+          <View style={styles.overlay}>
+            <Text style={styles.overlayTitle}>
+              {gameOver ? 'GAME OVER' : 'DEFEND THE GALAXY'}
+            </Text>
+            {gameOver && (
+              <Text style={styles.overlaySub}>BEST: {highScore.current}</Text>
+            )}
+            <Text style={styles.overlaySub}>
+              {gameOver
+                ? 'Collect 🛡️ for extra lives. Kill fast for 2× combo!'
+                : 'Drag to move. Auto-fire enabled. Collect 🛡️ shields!'}
+            </Text>
+            <Pressable style={styles.btn} onPress={startGame}>
+              <Text style={styles.btnText}>{gameOver ? 'RETRY' : 'START'}</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+    </SafeAreaView>
+  );
+}
+
+function CyberRun({ onExit }) {
+  const [running, setRunning] = useState(false);
+  const [score, setScore] = useState(0);
+  const [gameOver, setGameOver] = useState(false);
+  const [, setTick] = useState(0);
   const [perfectBonus, setPerfectBonus] = useState(null);
 
   const playerY = useRef(GAME_HEIGHT - CR_GROUND_HEIGHT - CR_PLAYER_SIZE);
@@ -473,184 +616,6 @@ function NeonGalaxy({ onExit }) {
                 BEST: {highScore.current}
               </Text>
             )}
-              lineHeight: ENEMY_SIZE,
-            }}
-          >
-            {e.type}
-          </Text>
-        ))}
-
-        {/* Player ship */}
-        <Text
-          style={{
-            position: 'absolute',
-            left: playerX.current,
-            top: GAME_HEIGHT - PLAYER_SIZE - 10,
-            fontSize: PLAYER_SIZE - 4,
-            lineHeight: PLAYER_SIZE,
-          }}
-        >
-          🚀
-        </Text>
-
-        {!running && (
-          <View style={styles.overlay}>
-            <Text style={styles.overlayTitle}>
-              {gameOver ? 'GAME OVER' : 'DEFEND THE GALAXY'}
-            </Text>
-            {gameOver && (
-              <Text style={styles.overlaySub}>BEST: {highScore.current}</Text>
-            )}
-            <Text style={styles.overlaySub}>
-              {gameOver
-                ? 'Collect 🛡️ for extra lives. Kill fast for 2× combo!'
-                : 'Drag to move. Auto-fire enabled. Collect 🛡️ shields!'}
-            </Text>
-            <Pressable style={styles.btn} onPress={startGame}>
-              <Text style={styles.btnText}>{gameOver ? 'RETRY' : 'START'}</Text>
-            </Pressable>
-          </View>
-        )}
-      </View>
-    </SafeAreaView>
-  );
-}
-
-function CyberRun({ onExit }) {
-  const [running, setRunning] = useState(false);
-  const [score, setScore] = useState(0);
-  const [gameOver, setGameOver] = useState(false);
-  const [, setTick] = useState(0);
-
-  const playerY = useRef(GAME_HEIGHT - CR_GROUND_HEIGHT - CR_PLAYER_SIZE);
-  const velocityY = useRef(0);
-  const obstacles = useRef([]);
-  const lastObstacle = useRef(0);
-  const scoreRef = useRef(0);
-
-  const resetGame = () => {
-    setScore(0);
-    scoreRef.current = 0;
-    setGameOver(false);
-    playerY.current = GAME_HEIGHT - CR_GROUND_HEIGHT - CR_PLAYER_SIZE;
-    velocityY.current = 0;
-    obstacles.current = [];
-  };
-
-  const startGame = () => {
-    resetGame();
-    setRunning(true);
-  };
-
-  const jump = () => {
-    if (!running) return;
-    if (playerY.current >= GAME_HEIGHT - CR_GROUND_HEIGHT - CR_PLAYER_SIZE) {
-      velocityY.current = CR_JUMP_FORCE;
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-  };
-
-  useEffect(() => {
-    if (!running) return;
-
-    const loop = setInterval(() => {
-      const now = Date.now();
-
-      velocityY.current += CR_GRAVITY;
-      playerY.current += velocityY.current;
-
-      const groundY = GAME_HEIGHT - CR_GROUND_HEIGHT - CR_PLAYER_SIZE;
-      if (playerY.current >= groundY) {
-        playerY.current = groundY;
-        velocityY.current = 0;
-      }
-
-      const spawnRate = Math.max(800, 2000 - scoreRef.current * 20);
-      if (now - lastObstacle.current > spawnRate) {
-        const obsHeight = 30 + Math.random() * 50;
-        obstacles.current.push({
-          id: now,
-          x: width,
-          y: GAME_HEIGHT - CR_GROUND_HEIGHT - obsHeight,
-          width: CR_OBSTACLE_WIDTH,
-          height: obsHeight,
-          passed: false
-        });
-        lastObstacle.current = now;
-      }
-
-      let hit = false;
-      const playerRect = {
-        left: 50,
-        right: 50 + CR_PLAYER_SIZE,
-        top: playerY.current,
-        bottom: playerY.current + CR_PLAYER_SIZE
-      };
-
-      for (let i = obstacles.current.length - 1; i >= 0; i--) {
-        const obs = obstacles.current[i];
-        obs.x -= 6 + (scoreRef.current / 100);
-
-        const obsRect = {
-          left: obs.x,
-          right: obs.x + obs.width,
-          top: obs.y,
-          bottom: obs.y + obs.height
-        };
-
-        if (
-          playerRect.left < obsRect.right &&
-          playerRect.right > obsRect.left &&
-          playerRect.top < obsRect.bottom &&
-          playerRect.bottom > obsRect.top
-        ) {
-          hit = true;
-        }
-
-        if (!obs.passed && obs.x + obs.width < playerRect.left) {
-          obs.passed = true;
-          scoreRef.current += 10;
-          setScore(scoreRef.current);
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        }
-
-        if (obs.x + obs.width < 0) {
-          obstacles.current.splice(i, 1);
-        }
-      }
-
-      if (hit) {
-        setRunning(false);
-        setGameOver(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      }
-
-      setTick(t => t + 1);
-    }, 16);
-
-    return () => clearInterval(loop);
-  }, [running]);
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
-        <Text style={styles.title}>CYBER RUN</Text>
-        <View style={styles.stats}>
-          <Text style={styles.statText}>SCORE: {score}</Text>
-        </View>
-      </View>
-
-      <Pressable style={styles.gameArea} onPress={jump}>
-        <View style={[styles.ground, { height: CR_GROUND_HEIGHT }]} />
-        <View style={[styles.crPlayer, { left: 50, top: playerY.current }]} />
-        {obstacles.current.map(obs => (
-          <View key={obs.id} style={[styles.crObstacle, { left: obs.x, top: obs.y, width: obs.width, height: obs.height }]} />
-        ))}
-        {!running && (
-          <View style={styles.overlay}>
-            <Text style={styles.overlayTitle}>{gameOver ? 'CRASHED' : 'CYBER RUN'}</Text>
-            <Text style={styles.overlaySub}>Tap screen to jump.</Text>
             <Pressable style={styles.btn} onPress={startGame}>
               <Text style={styles.btnText}>{gameOver ? 'RETRY' : 'START'}</Text>
             </Pressable>
