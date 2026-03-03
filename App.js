@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import SoundManager from './utils/SoundManager';
 
 const { width, height } = Dimensions.get('window');
 const GAME_HEIGHT = Math.min(height - 230, 560);
@@ -91,14 +90,7 @@ function NeonGalaxy({ onExit }) {
     setRunning(true);
   };
 
-  // ─── sonido ───────────────────────────────
   useEffect(() => {
-    SoundManager.preload();
-    return () => { SoundManager.unload(); };
-  }, []);
-
-  useEffect(() => {
-    if (!running) return;
 
     const loop = setInterval(() => {
       const now = Date.now();
@@ -117,7 +109,6 @@ function NeonGalaxy({ onExit }) {
         });
         lastFire.current = now;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        SoundManager.play('laser');
       }
 
       const spawnRate = Math.max(300, 1200 - scoreRef.current * 15);
@@ -155,11 +146,6 @@ function NeonGalaxy({ onExit }) {
           newLives = Math.min(newLives + 1, 9);
           powerUps.current.splice(i, 1);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          SoundManager.play('powerup');
-        }
-      }
-
-      // Enemy collisions
       for (let i = enemies.current.length - 1; i >= 0; i--) {
         const e = enemies.current[i];
         let enemyDestroyed = false;
@@ -174,7 +160,6 @@ function NeonGalaxy({ onExit }) {
           newLives -= 1;
           enemyDestroyed = true;
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-          SoundManager.play('hit');
         }
 
         if (!enemyDestroyed) {
@@ -220,7 +205,6 @@ function NeonGalaxy({ onExit }) {
               if (Math.random() < 0.1) {
                 powerUps.current.push({ id: now + Math.random(), x: e.x, y: e.y, type: 'shield' });
               }
-              SoundManager.play('kill');
               enemyDestroyed = true;
               break;
             }
@@ -248,7 +232,6 @@ function NeonGalaxy({ onExit }) {
         setRunning(false);
         setGameOver(true);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        SoundManager.play('gameover');
       }
 
       setTick(t => t + 1);
@@ -389,12 +372,6 @@ function CyberRun({ onExit }) {
 
   const startGame = () => { resetGame(); setRunning(true); };
 
-  // ─── sonido ───────────────────────────────
-  useEffect(() => {
-    SoundManager.preload();
-    return () => { SoundManager.unload(); };
-  }, []);
-
   const jump = () => {
     if (!running) return;
     if (jumpsLeft.current > 0) {
@@ -402,7 +379,6 @@ function CyberRun({ onExit }) {
       velocityY.current = isDoubleJump ? CR_JUMP_FORCE * 0.7 : CR_JUMP_FORCE;
       jumpsLeft.current -= 1;
       Haptics.impactAsync(isDoubleJump ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light);
-      SoundManager.play('jump');
     }
   };
 
@@ -504,7 +480,6 @@ function CyberRun({ onExit }) {
             if (perfectBonusTimer.current) clearTimeout(perfectBonusTimer.current);
             perfectBonusTimer.current = setTimeout(() => setPerfectBonus(null), 1000);
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-            SoundManager.play('coin');
           }
         }
 
@@ -527,7 +502,6 @@ function CyberRun({ onExit }) {
           scoreRef.current += 25;
           setScore(scoreRef.current);
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          SoundManager.play('coin');
         }
         if (coin.x + coin.size < 0) { coins.current.splice(i, 1); }
       }
@@ -537,7 +511,6 @@ function CyberRun({ onExit }) {
         setRunning(false);
         setGameOver(true);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        SoundManager.play('gameover');
       }
 
       setTick(t => t + 1);
@@ -1040,12 +1013,6 @@ function PixelQuest({ onExit }) {
     setRunning(true);
   };
 
-  // ─── sonido ───────────────────────────────
-  useEffect(() => {
-    SoundManager.preload();
-    return () => { SoundManager.unload(); };
-  }, []);
-
   const saveGame = async () => {
     try {
       await AsyncStorage.setItem('pixelQuestSave', JSON.stringify({ level, lives }));
@@ -1077,7 +1044,6 @@ function PixelQuest({ onExit }) {
 
   const handleDeath = () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    SoundManager.play('hit');
     if (lives > 1) {
       setLives(l => l - 1);
       // Respawn slightly back and high up
@@ -1106,7 +1072,6 @@ function PixelQuest({ onExit }) {
     if (onGround) {
       p.vy = PQ_JUMP;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      SoundManager.play('jump');
     }
   };
 
@@ -1190,8 +1155,7 @@ function PixelQuest({ onExit }) {
         if (p.x < e.x + e.w && p.x + p.w > e.x && p.y < e.y + e.h && p.y + p.h > e.y) {
           if (invincibilityTimer.current > 0) {
             e.active = false; // Kill enemy
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            SoundManager.play('kill');
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);  // Kill enemy via stomp
           } else {
             handleDeath();
           }
@@ -1207,7 +1171,6 @@ function PixelQuest({ onExit }) {
           setHasGun(true);
           invincibilityTimer.current = 5000; // 5 seconds
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-          SoundManager.play('powerup');
         }
       }
 
@@ -1230,7 +1193,6 @@ function PixelQuest({ onExit }) {
             e.active = false;
             proj.active = false;
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-            SoundManager.play('kill');
             break;
           }
         }
@@ -1239,7 +1201,6 @@ function PixelQuest({ onExit }) {
       // Goal collision
       if (w.goal && p.x < w.goal.x + w.goal.w && p.x + p.w > w.goal.x && p.y < w.goal.y + w.goal.h && p.y + p.h > w.goal.y) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        SoundManager.play('powerup');
         if (level >= 10) {
           setRunning(false); setGameWon(true);
         } else {
@@ -1498,7 +1459,6 @@ function GalacticHunt({ onExit }) {
     showCrosshair(cx, cy);
     addSplatter(cx, cy);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    SoundManager.play('kill');
     setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 80);
     if (ammoRef.current <= 0) endRound();
   };
@@ -1509,7 +1469,6 @@ function GalacticHunt({ onExit }) {
     setAmmo(ammoRef.current);
     showCrosshair(lx, ly);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    SoundManager.play('shoot');
     if (ammoRef.current <= 0) endRound();
   };
 
@@ -1532,12 +1491,6 @@ function GalacticHunt({ onExit }) {
   };
 
   useEffect(() => () => cleanup(), []);
-
-  // ─── sonido ───────────────────────────────
-  useEffect(() => {
-    SoundManager.preload();
-    return () => { SoundManager.unload(); };
-  }, []);
 
   const ammoBar = Array.from({ length: 10 }, (_, i) => (i < ammo ? '🔫' : '▫️')).join('');
 
