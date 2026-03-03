@@ -66,7 +66,13 @@ let loaded = false;
 async function preload() {
   if (!Audio || !FileSystem || loaded) return;
   try {
-    await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+    await Audio.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+      allowsRecordingIOS: false,
+      staysActiveInBackground: false,
+      shouldDuckAndroid: false,
+      playThroughEarpieceAndroid: false,
+    });
     const dir = FileSystem.cacheDirectory + 'arcade_sounds/';
     const dirInfo = await FileSystem.getInfoAsync(dir);
     if (!dirInfo.exists) await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
