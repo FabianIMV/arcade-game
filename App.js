@@ -1650,6 +1650,418 @@ function GalacticHunt({ onExit }) {
   );
 }
 
+function SnakePower({ onExit }) {
+  const COLS = 20;
+  const ROWS = 20;
+  const CELL_SIZE = Math.floor(Math.min(width, GAME_HEIGHT) / COLS);
+  const GRID_PX = CELL_SIZE * COLS;
+
+  const DIR_RIGHT = { x: 1, y: 0 };
+  const DIR_LEFT  = { x: -1, y: 0 };
+  const DIR_UP    = { x: 0, y: -1 };
+  const DIR_DOWN  = { x: 0, y: 1 };
+  const POWER_TYPES = ['⚡', '🛡️', '💎', '🌀'];
+
+  const initSnakeArr = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }];
+
+  const [gamePhase, setGamePhase] = useState('idle');
+  const [snakeDisp, setSnakeDisp] = useState(initSnakeArr);
+  const [foodDisp, setFoodDisp] = useState({ x: 15, y: 10 });
+  const [puDisp, setPuDisp] = useState(null);
+  const [score, setScore] = useState(0);
+  const [highScore, setHighScore] = useState(0);
+  const [activeEffect, setActiveEffect] = useState(null);
+
+  const snakeRef    = useRef(initSnakeArr);
+  const dirRef      = useRef(DIR_RIGHT);
+  const nextDirRef  = useRef(null);
+  const foodRef     = useRef({ x: 15, y: 10 });
+  const puRef       = useRef(null);
+  const scoreRef    = useRef(0);
+  const effectRef   = useRef(null);
+  const phaseRef    = useRef('idle');
+  const intervalRef = useRef(null);
+  const puTimeoutRef = useRef(null);
+  const fxTimeoutRef = useRef(null);
+  const tickFnRef   = useRef(null);
+
+  useEffect(() => {
+    AsyncStorage.getItem('snakeHighScore').then(v => {
+      if (v) setHighScore(parseInt(v, 10));
+    });
+    return () => {
+      clearInterval(intervalRef.current);
+      clearTimeout(puTimeoutRef.current);
+      clearTimeout(fxTimeoutRef.current);
+    };
+  }, []);
+
+  const randomPos = (exclude) => {
+    let pos;
+    do {
+      pos = { x: Math.floor(Math.random() * COLS), y: Math.floor(Math.random() * ROWS) };
+    } while (exclude.some(p => p.x === pos.x && p.y === pos.y));
+    return pos;
+  };
+
+  const startLoop = (ms) => {
+    clearInterval(intervalRef.current);
+    intervalRef.current = setInterval(() => { tickFnRef.current && tickFnRef.current(); }, ms);
+  };
+
+  const schedulePu = () => {
+    clearTimeout(puTimeoutRef.current);
+    puTimeoutRef.current = setTimeout(() => {
+      if (phaseRef.current !== 'playing') return;
+      const type = POWER_TYPES[Math.floor(Math.random() * POWER_TYPES.length)];
+      const pos  = randomPos([...snakeRef.current, foodRef.current]);
+      const pu   = { ...pos, type };
+      puRef.current = pu;
+      setPuDisp({ ...pu });
+      puTimeoutRef.current = setTimeout(() => {
+        puRef.current = null;
+        setPuDisp(null);
+        schedulePu();
+      }, 10000);
+    }, 30000);
+  };
+
+  const applyEffect = (type, currentSnake) => {
+    clearTimeout(fxTimeoutRef.current);
+    if (type === '⚡') {
+      effectRef.current = 'speed';
+      setActiveEffect('speed');
+      startLoop(75);
+      fxTimeoutRef.current = setTimeout(() => {
+        effectRef.current = null;
+        setActiveEffect(null);
+        if (phaseRef.current === 'playing') startLoop(150);
+      }, 5000);
+    } else if (type === '🛡️') {
+      effectRef.current = 'shield';
+      setActiveEffect('shield');
+      fxTimeoutRef.current = setTimeout(() => {
+        effectRef.current = null;
+        setActiveEffect(null);
+      }, 5000);
+    } else if (type === '💎') {
+      scoreRef.current += 50;
+      setScore(scoreRef.current);
+    } else if (type === '🌀') {
+      dirRef.current  = { x: -dirRef.current.x, y: -dirRef.current.y };
+      nextDirRef.current = null;
+      const rev = [...currentSnake].reverse();
+      snakeRef.current = rev;
+      setSnakeDisp([...rev]);
+    }
+  };
+
+  const doGameOver = () => {
+    clearInterval(intervalRef.current);
+    clearTimeout(puTimeoutRef.current);
+    clearTimeout(fxTimeoutRef.current);
+    phaseRef.current  = 'gameover';
+    effectRef.current = null;
+    setGamePhase('gameover');
+    setActiveEffect(null);
+    const fs = scoreRef.current;
+    AsyncStorage.getItem('snakeHighScore').then(v => {
+      const prev = v ? parseInt(v, 10) : 0;
+      if (fs > prev) {
+        AsyncStorage.setItem('snakeHighScore', String(fs));
+        setHighScore(fs);
+      }
+    });
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+  };
+
+  const tick = () => {
+    if (phaseRef.current !== 'playing') return;
+    const dir = nextDirRef.current || dirRef.current;
+    dirRef.current    = dir;
+    nextDirRef.current = null;
+
+    const head = snakeRef.current[0];
+    let nx = head.x + dir.x;
+    let ny = head.y + dir.y;
+
+    if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) {
+      if (effectRef.current === 'shield') {
+        nx = (nx + COLS) % COLS;
+        ny = (ny + ROWS) % ROWS;
+      } else {
+        doGameOver();
+        return;
+      }
+    }
+
+    const newHead = { x: nx, y: ny };
+
+    if (effectRef.current !== 'shield') {
+      for (let i = 1; i < snakeRef.current.length; i++) {
+        if (snakeRef.current[i].x === newHead.x && snakeRef.current[i].y === newHead.y) {
+          doGameOver();
+          return;
+        }
+      }
+    }
+
+    const newSnake = [newHead, ...snakeRef.current];
+    let grew = false;
+
+    if (newHead.x === foodRef.current.x && newHead.y === foodRef.current.y) {
+      grew = true;
+      scoreRef.current += 10;
+      setScore(scoreRef.current);
+      const nf = randomPos(newSnake);
+      foodRef.current = nf;
+      setFoodDisp({ ...nf });
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+
+    const pu = puRef.current;
+    if (pu && pu.x === newHead.x && pu.y === newHead.y) {
+      grew = true;
+      clearTimeout(puTimeoutRef.current);
+      puRef.current = null;
+      setPuDisp(null);
+      applyEffect(pu.type, newSnake);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      schedulePu();
+    }
+
+    if (!grew) newSnake.pop();
+    snakeRef.current = newSnake;
+    setSnakeDisp([...newSnake]);
+  };
+
+  tickFnRef.current = tick;
+
+  const changeDir = (newDir) => {
+    const cur = dirRef.current;
+    if (newDir.x === -cur.x && newDir.y === -cur.y) return;
+    nextDirRef.current = newDir;
+  };
+
+  const startGame = () => {
+    const iSnake = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }];
+    const iFood  = randomPos(iSnake);
+    snakeRef.current    = iSnake;
+    foodRef.current     = iFood;
+    dirRef.current      = DIR_RIGHT;
+    nextDirRef.current  = null;
+    scoreRef.current    = 0;
+    effectRef.current   = null;
+    puRef.current       = null;
+    phaseRef.current    = 'playing';
+    setSnakeDisp([...iSnake]);
+    setFoodDisp({ ...iFood });
+    setScore(0);
+    setActiveEffect(null);
+    setPuDisp(null);
+    setGamePhase('playing');
+    clearInterval(intervalRef.current);
+    clearTimeout(puTimeoutRef.current);
+    clearTimeout(fxTimeoutRef.current);
+    startLoop(150);
+    schedulePu();
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder:  () => true,
+      onPanResponderRelease: (_, gs) => {
+        if (phaseRef.current !== 'playing') return;
+        const { dx, dy } = gs;
+        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+        if (Math.abs(dx) > Math.abs(dy)) {
+          tickFnRef.current && (dx > 0
+            ? (nextDirRef.current = DIR_RIGHT)
+            : (nextDirRef.current = DIR_LEFT));
+          if (dx > 0 && dirRef.current.x !== -1) nextDirRef.current = DIR_RIGHT;
+          else if (dx < 0 && dirRef.current.x !== 1) nextDirRef.current = DIR_LEFT;
+        } else {
+          if (dy > 0 && dirRef.current.y !== -1) nextDirRef.current = DIR_DOWN;
+          else if (dy < 0 && dirRef.current.y !== 1) nextDirRef.current = DIR_UP;
+        }
+      },
+    })
+  ).current;
+
+  const snkStyles = StyleSheet.create({
+    cell: {
+      position: 'absolute',
+      textAlign: 'center',
+      lineHeight: CELL_SIZE,
+      fontSize: CELL_SIZE - 2,
+      width: CELL_SIZE,
+      height: CELL_SIZE,
+    },
+    grid: {
+      width: GRID_PX,
+      height: GRID_PX,
+      backgroundColor: '#0d1117',
+      position: 'relative',
+      alignSelf: 'center',
+      borderWidth: 2,
+      borderColor: '#21262d',
+      borderRadius: 4,
+    },
+    effectPill: {
+      paddingHorizontal: 10,
+      paddingVertical: 2,
+      borderRadius: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    effectTxt: {
+      fontSize: 12,
+      fontWeight: 'bold',
+      color: '#000',
+    },
+    controls: {
+      alignItems: 'center',
+      paddingBottom: 6,
+      paddingTop: 4,
+    },
+    ctrlRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    ctrlBtn: {
+      width: 54,
+      height: 54,
+      backgroundColor: '#161b22',
+      borderRadius: 10,
+      margin: 4,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: '#30363d',
+    },
+    ctrlTxt: {
+      color: '#c9d1d9',
+      fontSize: 20,
+      fontWeight: 'bold',
+    },
+    ctrlGap: {
+      width: 54,
+      height: 54,
+      margin: 4,
+    },
+  });
+
+  const renderBoard = () => {
+    const nodes = [];
+    snakeDisp.forEach((seg, i) => {
+      nodes.push(
+        <Text
+          key={`s${i}`}
+          style={[snkStyles.cell, { left: seg.x * CELL_SIZE, top: seg.y * CELL_SIZE }]}
+        >
+          {i === 0 ? '🐍' : '🟢'}
+        </Text>
+      );
+    });
+    nodes.push(
+      <Text
+        key="food"
+        style={[snkStyles.cell, { left: foodDisp.x * CELL_SIZE, top: foodDisp.y * CELL_SIZE }]}
+      >
+        🍎
+      </Text>
+    );
+    if (puDisp) {
+      nodes.push(
+        <Text
+          key="pu"
+          style={[snkStyles.cell, { left: puDisp.x * CELL_SIZE, top: puDisp.y * CELL_SIZE }]}
+        >
+          {puDisp.type}
+        </Text>
+      );
+    }
+    return nodes;
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Pressable onPress={onExit} style={styles.backBtn}>
+          <Text style={styles.backText}>←</Text>
+        </Pressable>
+        <Text style={styles.title}>🐍 SNAKE POWER</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
+      <View style={[styles.stats, { alignItems: 'center' }]}>
+        <Text style={styles.statText}>Score: {score}</Text>
+        <Text style={styles.statText}>Best: {highScore}</Text>
+        {activeEffect === 'speed'  && (
+          <View style={[snkStyles.effectPill, { backgroundColor: '#f6c90e' }]}>
+            <Text style={snkStyles.effectTxt}>⚡ FAST</Text>
+          </View>
+        )}
+        {activeEffect === 'shield' && (
+          <View style={[snkStyles.effectPill, { backgroundColor: '#3fb950' }]}>
+            <Text style={snkStyles.effectTxt}>🛡️ SHIELD</Text>
+          </View>
+        )}
+      </View>
+
+      <View style={styles.gameArea} {...panResponder.panHandlers}>
+        <View style={snkStyles.grid}>
+          {renderBoard()}
+        </View>
+        {gamePhase !== 'playing' && (
+          <View style={styles.overlay}>
+            <Text style={styles.overlayTitle}>
+              {gamePhase === 'idle' ? '🐍 Snake Power' : '💀 Game Over'}
+            </Text>
+            <Text style={styles.overlaySub}>
+              {gamePhase === 'idle'
+                ? 'Desliza o usa los botones'
+                : `Puntuación: ${score}`}
+            </Text>
+            {gamePhase === 'gameover' && (
+              <Text style={[styles.overlaySub, { marginBottom: 10 }]}>
+                Récord: {highScore}
+              </Text>
+            )}
+            <Pressable style={styles.btn} onPress={startGame}>
+              <Text style={styles.btnText}>
+                {gamePhase === 'idle' ? 'START' : 'RETRY'}
+              </Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+
+      <View style={snkStyles.controls}>
+        <View style={snkStyles.ctrlRow}>
+          <View style={snkStyles.ctrlGap} />
+          <Pressable style={snkStyles.ctrlBtn} onPress={() => changeDir(DIR_UP)}>
+            <Text style={snkStyles.ctrlTxt}>▲</Text>
+          </Pressable>
+          <View style={snkStyles.ctrlGap} />
+        </View>
+        <View style={snkStyles.ctrlRow}>
+          <Pressable style={snkStyles.ctrlBtn} onPress={() => changeDir(DIR_LEFT)}>
+            <Text style={snkStyles.ctrlTxt}>◀</Text>
+          </Pressable>
+          <Pressable style={snkStyles.ctrlBtn} onPress={() => changeDir(DIR_DOWN)}>
+            <Text style={snkStyles.ctrlTxt}>▼</Text>
+          </Pressable>
+          <Pressable style={snkStyles.ctrlBtn} onPress={() => changeDir(DIR_RIGHT)}>
+            <Text style={snkStyles.ctrlTxt}>▶</Text>
+          </Pressable>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+}
+
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState('menu');
 
@@ -1667,6 +2079,10 @@ export default function App() {
 
   if (currentScreen === 'galactic') {
     return <GalacticHunt onExit={() => setCurrentScreen('menu')} />;
+  }
+
+  if (currentScreen === 'snake') {
+    return <SnakePower onExit={() => setCurrentScreen('menu')} />;
   }
 
   return (
@@ -1692,6 +2108,11 @@ export default function App() {
       <Pressable style={[styles.menuBtn, { backgroundColor: '#7c3aed' }]} onPress={() => setCurrentScreen('galactic')}>
         <Text style={styles.menuBtnTitle}>GALACTIC HUNT</Text>
         <Text style={styles.menuBtnSub}>UFO / Duck Shooter</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#16a34a' }]} onPress={() => setCurrentScreen('snake')}>
+        <Text style={styles.menuBtnTitle}>🐍 SNAKE POWER</Text>
+        <Text style={styles.menuBtnSub}>Snake clásico con poderes</Text>
       </Pressable>
     </SafeAreaView>
   );
