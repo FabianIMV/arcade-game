@@ -653,136 +653,349 @@ function PixelQuest({ onExit }) {
   const projectiles = useRef([]);
 
   const generateLevel = (lvl) => {
-    const GROUND_Y = GAME_HEIGHT - 60;
-    const PLATFORM_H = 20;
+    // GY = top of the ground floor. All "y" for objects = GY - objectHeight (so feet land on GY).
+    const GY = GAME_HEIGHT - 60; // ground Y (top surface)
+    const GH = 60;               // ground thickness
+    const PH = 18;               // floating platform height
+    const ld = { platforms: [], enemies: [], powerups: [], goal: null, length: 0 };
 
-    const chunks = {
-      flat: (startX, currentLvl) => {
-        const width = 400;
-        const platforms = [{ x: startX, y: GROUND_Y, w: width, h: PLATFORM_H }];
-        const enemies = [];
-        if (currentLvl >= 3) {
-          enemies.push({ x: startX + 200, y: GROUND_Y - 40, w: 40, h: 40, vx: 2 + (currentLvl * 0.1), startX: startX + 200, range: 100, active: true });
-        }
-        return { platforms, enemies, powerups: [], width };
-      },
-      pit: (startX, currentLvl) => {
-        const width = 500;
-        const platforms = [
-          { x: startX, y: GROUND_Y, w: 150, h: PLATFORM_H },
-          { x: startX + 200, y: GROUND_Y - 80, w: 100, h: PLATFORM_H },
-          { x: startX + 350, y: GROUND_Y, w: 150, h: PLATFORM_H }
-        ];
-        return { platforms, enemies: [], powerups: [], width };
-      },
-      staircase: (startX, currentLvl) => {
-        const width = 600;
-        const platforms = [
-          { x: startX, y: GROUND_Y, w: 100, h: PLATFORM_H },
-          { x: startX + 150, y: GROUND_Y - 50, w: 100, h: PLATFORM_H },
-          { x: startX + 300, y: GROUND_Y - 100, w: 100, h: PLATFORM_H },
-          { x: startX + 450, y: GROUND_Y - 50, w: 100, h: PLATFORM_H },
-          { x: startX + 550, y: GROUND_Y, w: 50, h: PLATFORM_H }
-        ];
-        const powerups = currentLvl >= 4 ? [{ x: startX + 335, y: GROUND_Y - 140, w: 30, h: 30, active: true }] : [];
-        return { platforms, enemies: [], powerups, width };
-      },
-      enemyPatrol: (startX, currentLvl) => {
-        const width = 600;
-        const platforms = [{ x: startX, y: GROUND_Y, w: width, h: PLATFORM_H }];
-        const enemies = [{ x: startX + 300, y: GROUND_Y - 40, w: 40, h: 40, vx: 2 + (currentLvl * 0.2), startX: startX + 300, range: 150, active: true }];
-        if (currentLvl >= 6) {
-          enemies.push({ x: startX + 100, y: GROUND_Y - 40, w: 40, h: 40, vx: -3, startX: startX + 100, range: 80, active: true });
-        }
-        return { platforms, enemies, powerups: [], width };
-      },
-      highPlatform: (startX, currentLvl) => {
-        const width = 500;
-        const platforms = [
-          { x: startX, y: GROUND_Y, w: width, h: PLATFORM_H },
-          { x: startX + 150, y: GROUND_Y - 120, w: 200, h: PLATFORM_H }
-        ];
-        const powerups = [{ x: startX + 235, y: GROUND_Y - 160, w: 30, h: 30, active: true }];
-        const enemies = currentLvl >= 5 ? [{ x: startX + 250, y: GROUND_Y - 40, w: 40, h: 40, vx: 3, startX: startX + 250, range: 100, active: true }] : [];
-        return { platforms, enemies, powerups, width };
-      },
-      movingPlatforms: (startX, currentLvl) => {
-        const width = 700;
-        const platforms = [
-          { x: startX, y: GROUND_Y, w: 100, h: PLATFORM_H },
-          { x: startX + 200, y: GROUND_Y - 60, w: 80, h: PLATFORM_H },
-          { x: startX + 400, y: GROUND_Y - 120, w: 80, h: PLATFORM_H },
-          { x: startX + 600, y: GROUND_Y, w: 100, h: PLATFORM_H }
-        ];
-        const enemies = [{ x: startX + 200, y: GROUND_Y - 100, w: 30, h: 30, vx: 1.5, startX: startX + 200, range: 80, active: true }];
-        return { platforms, enemies, powerups: [], width };
-      },
-      dangerZone: (startX, currentLvl) => {
-        const width = 800;
-        const platforms = [
-          { x: startX, y: GROUND_Y, w: 150, h: PLATFORM_H },
-          { x: startX + 250, y: GROUND_Y - 50, w: 50, h: PLATFORM_H },
-          { x: startX + 400, y: GROUND_Y - 100, w: 50, h: PLATFORM_H },
-          { x: startX + 550, y: GROUND_Y - 50, w: 50, h: PLATFORM_H },
-          { x: startX + 700, y: GROUND_Y, w: 100, h: PLATFORM_H }
-        ];
-        const enemies = [
-          { x: startX + 100, y: GROUND_Y - 40, w: 30, h: 30, vx: 2, startX: startX + 50, range: 100, active: true },
-          { x: startX + 700, y: GROUND_Y - 40, w: 30, h: 30, vx: -2, startX: startX + 650, range: 50, active: true }
-        ];
-        const powerups = currentLvl >= 6 ? [{ x: startX + 410, y: GROUND_Y - 140, w: 30, h: 30, active: true }] : [];
-        return { platforms, enemies, powerups, width };
-      }
-    };
+    // Helpers
+    const gnd  = (x, w)              => ({ x, y: GY,     w, h: GH });      // ground slab
+    const plat = (x, yUp, w)         => ({ x, y: GY - yUp, w, h: PH });    // floating (yUp = px above GY)
+    const enm  = (x, range, spd)     => ({ x, y: GY - 30, w: 30, h: 30, vx: spd, startX: x, range, active: true });
+    const enmP = (x, yUp, range, spd)=> ({ x, y: GY - yUp - 30, w: 30, h: 30, vx: spd, startX: x, range, active: true });
+    const star = (x, yUp)            => ({ x, y: GY - yUp, w: 25, h: 25, active: true });
+    const goal = (x, yUp = 140)      => ({ x, y: GY - yUp, w: 55, h: yUp });
 
-    const levelData = { platforms: [], enemies: [], powerups: [], goal: null, length: 0 };
-    let currentX = 0;
+    switch (lvl) {
 
-    const appendChunk = (chunk) => {
-      levelData.platforms.push(...chunk.platforms);
-      levelData.enemies.push(...chunk.enemies);
-      levelData.powerups.push(...chunk.powerups);
-      currentX += chunk.width;
-    };
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 1 ── COLINAS VERDES  (tutorial)
+      // Terreno continuo con 2 hoyos pequeños, 2 enemigos lentos.
+      // El jugador aprende a saltar gaps y esquivar enemigos.
+      // ═══════════════════════════════════════════════════════════════
+      case 1:
+        ld.platforms.push(
+          gnd(0,   440),          // suelo largo de inicio
+          gnd(530, 350),          // suelo central  (gap 90px → fácil)
+          gnd(990, 850),          // suelo final largo (gap 110px → fácil)
+          // puente sobre el primer gap
+          plat(450, 65, 120),     // x=450-570, cubre gap 440-530
+          // puente sobre el segundo gap
+          plat(905, 70, 130),     // x=905-1035, cubre gap 880-990
+          // plataforma bonus alta (recompensa exploración)
+          plat(280, 110, 110),    // yUp=110 < límite 125 → alcanzable
+        );
+        ld.enemies.push(
+          enm(330, 130, 1.5),     // patrulla lenta en suelo inicio
+          enm(1250, 160, 1.8),    // patrulla lenta en suelo final
+        );
+        ld.powerups.push(star(290, 155)); // ⭐ sobre plataforma bonus
+        ld.goal = goal(1680);
+        ld.length = 1850;
+        break;
 
-    if (lvl === 1) {
-      // Nivel 1: Coherente y diseñado a mano (estilo Mario 1-1)
-      levelData.length = 2500;
-      levelData.platforms.push({ x: 0, y: GAME_HEIGHT - 60, w: 800, h: 60 });
-      levelData.platforms.push({ x: 950, y: GAME_HEIGHT - 60, w: 400, h: 60 });
-      levelData.platforms.push({ x: 1500, y: GAME_HEIGHT - 60, w: 1000, h: 60 });
-      levelData.platforms.push({ x: 400, y: GAME_HEIGHT - 160, w: 120, h: 20 });
-      levelData.platforms.push({ x: 600, y: GAME_HEIGHT - 240, w: 120, h: 20 });
-      levelData.platforms.push({ x: 1100, y: GAME_HEIGHT - 180, w: 150, h: 20 });
-      levelData.enemies.push({ x: 600, y: GAME_HEIGHT - 90, w: 30, h: 30, vx: 2, startX: 500, range: 200, active: true });
-      levelData.enemies.push({ x: 1150, y: GAME_HEIGHT - 210, w: 30, h: 30, vx: 1.5, startX: 1100, range: 100, active: true });
-      levelData.enemies.push({ x: 1700, y: GAME_HEIGHT - 90, w: 30, h: 30, vx: 2.5, startX: 1600, range: 200, active: true });
-      levelData.powerups.push({ x: 650, y: GAME_HEIGHT - 280, w: 20, h: 20, active: true });
-      levelData.goal = { x: 2400, y: GAME_HEIGHT - 200, w: 60, h: 140 };
-      world.current = levelData;
-      return;
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 2 ── SENDERO ROCOSO  (3 gaps, introduce alturas)
+      // Tres hoyos de dificultad creciente con puentes a distinta altura.
+      // ═══════════════════════════════════════════════════════════════
+      case 2:
+        ld.platforms.push(
+          gnd(0,   350),          // inicio
+          gnd(470, 270),          // tras gap 1  (gap=120px)
+          gnd(850, 250),          // tras gap 2  (gap=110px)
+          gnd(1200,800),          // final largo (gap=100px)
+          // puentes crecientes en altura
+          plat(365, 70, 145),     // sobre gap 1
+          plat(740, 80, 140),     // sobre gap 2
+          plat(1090, 90, 140),    // sobre gap 3  (1100-1200)
+          // bonus 1 y bonus 2
+          plat(160, 115, 105),    // bonus izquierda
+          plat(1420, 115, 105),   // bonus derecha
+        );
+        ld.enemies.push(
+          enm(200,  130, 2.0),
+          enm(520,  120, 2.2),
+          enm(1300, 150, 2.0),
+        );
+        ld.powerups.push(star(165, 160), star(1428, 160));
+        ld.goal = goal(1830);
+        ld.length = 2000;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 3 ── LA GRAN ESCALERA  (subida y bajada simétricas)
+      // 4 peldaños ascendentes (+35px cada uno) y 3 descendentes.
+      // Camino VISUAL Y LÓGICAMENTE claro: sube → llega a la cima → baja.
+      // Cada peldaño: ancho=115, gap=15px entre peldaños (muy légible).
+      // ═══════════════════════════════════════════════════════════════
+      case 3:
+        ld.platforms.push(
+          gnd(0,   290),               // suelo de inicio
+          gnd(1240, 650),              // suelo tras bajar la escalera
+          // ── SUBIDA (4 peldaños) ──
+          plat(310, 60,  115),         // escalón 1  yUp= 60
+          plat(440, 95,  115),         // escalón 2  yUp= 95  gap=15
+          plat(570, 130, 115),         // escalón 3  yUp=130  gap=15
+          plat(700, 165, 115),         // escalón 4  yUp=165  gap=15  ← CIMA
+          // ── BAJADA (3 peldaños) ──
+          plat(840, 130, 115),         // escalón 5  yUp=130  gap=25
+          plat(970, 95,  115),         // escalón 6  yUp= 95  gap=15
+          plat(1100, 60, 115),         // escalón 7  yUp= 60  gap=15
+        );
+        ld.enemies.push(
+          enm(150,  110, 2.0),         // patrulla en inicio
+          enmP(340,  60, 70, 2.3),     // guarda escalón 1
+          enmP(855, 130, 70, 2.5),     // guarda escalón 5 (bajada)
+          enm(1450, 140, 2.2),         // patrulla en final
+        );
+        ld.powerups.push(star(710, 212)); // ⭐ flotando sobre la CIMA (yUp=165+47)
+        ld.goal = goal(1720);
+        ld.length = 1900;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 4 ── PATRULLA ENEMIGA  (terreno con muchos enemies)
+      // 4 suelos con gaps medios, 5 enemigos de velocidad creciente.
+      // El reto es ESQUIVAR enemigos mientras saltas los hoyos.
+      // ═══════════════════════════════════════════════════════════════
+      case 4:
+        ld.platforms.push(
+          gnd(0,   320),
+          gnd(440, 250),          // gap 120
+          gnd(800, 230),          // gap 110
+          gnd(1140,280),          // gap 110
+          gnd(1520,800),          // gap 100 → final largo
+          plat(340, 75, 140),     // puente 1
+          plat(700, 80, 140),     // puente 2
+          plat(1040, 85, 130),    // puente 3
+          plat(1425, 80, 125),    // puente 4
+          plat(150, 120, 100),    // bonus izq
+          plat(1700, 115, 100),   // bonus der
+        );
+        ld.enemies.push(
+          enm(180,  120, 2.2),
+          enm(490,  110, 2.5),
+          enm(845,  120, 2.8),
+          enm(1190, 110, 2.5),
+          enm(1650, 150, 2.2),
+        );
+        ld.powerups.push(star(155, 165), star(1705, 160));
+        ld.goal = goal(2180);
+        ld.length = 2350;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 5 ── ISLAS FLOTANTES  (casi sin suelo, ritmo up-down)
+      // Cadena de 12 plataformas flotantes alternando bajo(75)↔alto(130).
+      // El patrón rítmico enseña al jugador el timing de saltos continuos.
+      // ═══════════════════════════════════════════════════════════════
+      case 5:
+        ld.platforms.push(
+          gnd(0,   160),               // pequeño inicio
+          gnd(2200, 500),              // aterrizaje final
+          // ── CADENA RÍTMICA (bajo=75, alto=130, gap ~60px) ──
+          plat(210,  75, 105),         // isla 1  baja
+          plat(375, 130, 100),         // isla 2  alta   gap=60 rise=55
+          plat(535,  75, 105),         // isla 3  baja   gap=60 drop=55
+          plat(700, 130, 100),         // isla 4  alta   gap=60 rise=55
+          plat(860,  75, 105),         // isla 5  baja   gap=60 drop=55
+          plat(1025,130, 100),         // isla 6  alta   gap=60
+          plat(1185, 75, 105),         // isla 7  baja
+          plat(1350,135, 100),         // isla 8  alta
+          plat(1510, 75, 105),         // isla 9  baja
+          plat(1675,130, 100),         // isla 10 alta
+          plat(1835, 80, 105),         // isla 11 baja
+          plat(2000,120, 150),         // isla 12 amplia (aterrizaje seguro)
+        );
+        ld.enemies.push(
+          enmP(220,  75,  80, 2.5),    // isla 1
+          enmP(720,  130, 70, 2.8),    // isla 4
+          enmP(1045, 130, 70, 3.0),    // isla 6
+          enmP(1695, 130, 70, 3.0),    // isla 10
+          enmP(2015, 120, 90, 2.8),    // isla 12
+        );
+        ld.powerups.push(star(710, 178), star(1860, 125)); // sobre islas altas
+        ld.goal = goal(2550);
+        ld.length = 2700;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 6 ── VELOCIDAD  (enemigos rápidos, gaps medios-grandes)
+      // Mismo esquema de gaps+puentes pero los enemigos se mueven rápido.
+      // 4 suelos + 4 puentes + 2 bonus. 6 enemigos a 3.0–3.5.
+      // ═══════════════════════════════════════════════════════════════
+      case 6:
+        ld.platforms.push(
+          gnd(0,   340),
+          gnd(480, 260),          // gap 140
+          gnd(860, 240),          // gap 120
+          gnd(1220,250),          // gap 120
+          gnd(1600,750),          // gap 130 → final
+          plat(360, 80, 160),     // puente 1
+          plat(740, 85, 155),     // puente 2
+          plat(1100, 90, 155),    // puente 3
+          plat(1475, 85, 155),    // puente 4
+          plat(160, 120, 100),    // bonus izq
+          plat(1780, 125, 100),   // bonus der
+        );
+        ld.enemies.push(
+          enm(200,  130, 3.0),
+          enm(530,  120, 3.5),
+          enm(910,  130, 3.2),
+          enm(1270, 110, 3.5),
+          enm(1660, 150, 3.0),
+          enm(1930, 140, 3.2),
+        );
+        ld.powerups.push(star(165, 165), star(1785, 170));
+        ld.goal = goal(2170);
+        ld.length = 2320;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 7 ── PLATAFORMAS ANGOSTAS  (90→80px, gaps crecen)
+      // Sin suelo central. Plataformas alternas angostas sobre el vacío.
+      // Cada salto exige precisión. Enemies en posiciones que obligan a moverse.
+      // ═══════════════════════════════════════════════════════════════
+      case 7:
+        ld.platforms.push(
+          gnd(0,   200),
+          gnd(2620, 450),
+          // ── CADENA ANGOSTA (gap ~85px, alternas baja/alta) ──
+          plat(250,  70,  90),     // p1  end=340
+          plat(425, 125,  85),     // p2  gap=85  rise=55
+          plat(595,  70,  90),     // p3  gap=85  drop=55
+          plat(775, 135,  85),     // p4  gap=85  rise=65
+          plat(950,  75,  90),     // p5  gap=90  drop=60
+          plat(1135,140,  85),     // p6  gap=90  rise=65
+          plat(1315, 80,  90),     // p7  gap=95  drop=60
+          plat(1505,145,  85),     // p8  gap=95  rise=65
+          plat(1685, 85,  90),     // p9  gap=95  drop=60
+          plat(1880,150,  85),     // p10 gap=100 rise=65
+          plat(2065, 90,  90),     // p11 gap=100 drop=60
+          plat(2260, 75, 100),     // p12 gap=105
+          plat(2450, 80, 180),     // p13 amplia → entrada a suelo final
+        );
+        ld.enemies.push(
+          enm(100,  80, 2.8),
+          enmP(455, 125, 60, 3.0),
+          enmP(800, 135, 60, 3.5),
+          enmP(1160,140, 55, 3.2),
+          enmP(1530,145, 55, 3.5),
+          enmP(1905,150, 55, 3.8),
+        );
+        ld.powerups.push(star(785, 182), star(1515, 192));
+        ld.goal = goal(2900);
+        ld.length = 3050;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 8 ── BLOQUES EN ALTURA  (plataformas altas en parejas)
+      // Clusters de 2 plataformas a la misma altura, con saltos entre clusters.
+      // Lo difícil: subir de cluster bajo→alto→muy alto→alto→bajo.
+      // ═══════════════════════════════════════════════════════════════
+      case 8:
+        ld.platforms.push(
+          gnd(0,   200),
+          gnd(2800, 500),
+          // cluster A (bajo yUp=80)
+          plat(250, 80, 100),  plat(420, 80, 100),   // end=520
+          // cluster B (medio yUp=130)
+          plat(600, 130, 95),  plat(775, 130, 95),   // end=870
+          // cluster C (alto yUp=175)
+          plat(970, 175, 90),  plat(1145,175, 90),   // end=1235  ← CIMA
+          // cluster D (medio yUp=130)
+          plat(1340,130, 95),  plat(1515,130, 95),   // end=1610
+          // cluster E (bajo yUp=80)
+          plat(1710, 80, 100), plat(1885, 80, 100),  // end=1985
+          // finale (alto yUp=150, ancho)
+          plat(2090,150, 90),  plat(2270,150, 90),   plat(2460, 90, 200),
+        );
+        ld.enemies.push(
+          enm(110,  80, 3.5),
+          enmP(280, 80, 70, 3.5),  enmP(450, 80, 70, 3.8),
+          enmP(630,130, 70, 3.8),  enmP(805,130, 65, 4.0),
+          enmP(1000,175, 60, 4.0),
+          enmP(1370,130, 65, 4.2), enmP(1740, 80, 65, 4.0),
+          enmP(2120,150, 60, 4.5), enmP(2490, 90, 80, 4.0),
+        );
+        ld.powerups.push(star(785, 178), star(1155, 222), star(2285, 196));
+        ld.goal = goal(3020, 160);
+        ld.length = 3200;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 9 ── CAOS TOTAL  (todo mezclado, enemigos muy rápidos)
+      // Alterna: suelo corto → gap → plataforma → gap → …
+      // 7 enemigos a 4.0–4.5. Requiere dominar saltos Y combate.
+      // ═══════════════════════════════════════════════════════════════
+      case 9:
+        ld.platforms.push(
+          gnd(0,   200), gnd(380, 210), gnd(700, 190), gnd(1010,200),
+          gnd(1310,210), gnd(1650,190), gnd(1980,200), gnd(2550,600),
+          // puentes sobre gaps + plataformas altas opcionales
+          plat(230,  75, 190),   // puente gap1  (200-380)
+          plat(560,  80, 170),   // puente gap2  (590-700)
+          plat(870,  85, 170),   // puente gap3  (900-1010)
+          plat(1180, 90, 160),   // puente gap4  (1200-1310)
+          plat(1520, 85, 160),   // puente gap5  (1520-1650)
+          plat(1840, 90, 170),   // puente gap6  (1840-1980)
+          plat(2250, 95, 170),   // puente gap7 + inicio zona final
+          // bonus
+          plat(80,  120, 100), plat(1320,125, 100), plat(2180,120, 100),
+        );
+        ld.enemies.push(
+          enm(120,  110, 4.0),
+          enm(420,  110, 4.0),  enm(740, 120, 4.2),
+          enm(1050, 110, 4.2),  enm(1350,120, 4.5),
+          enm(1690, 110, 4.5),  enm(2030,120, 4.5),
+        );
+        ld.powerups.push(star(85, 165), star(1325, 170), star(2185, 165));
+        ld.goal = goal(2980, 160);
+        ld.length = 3150;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 10 ── EL FINAL  (todo al máximo)
+      // Plataformas angostas (80-85px), gaps grandes (90-110px),
+      // 10 enemigos a 4.5-5.0, estrellas en posiciones peligrosas.
+      // ═══════════════════════════════════════════════════════════════
+      default:
+        ld.platforms.push(
+          gnd(0,   180),
+          gnd(2920, 500),
+          // ── SECCIÓN 1: zigzag de 5 plataformas ──
+          plat(230,  75,  85),   // end=315
+          plat(405, 145,  80),   // gap=90   rise=70
+          plat(575,  80,  85),   // gap=90   drop=65
+          plat(760, 150,  80),   // gap=90   rise=70
+          plat(930,  80,  85),   // gap=90   drop=70
+          // ── SECCIÓN 2: serie alta ──
+          plat(1110,160,  80),   // gap=95   rise=80
+          plat(1285, 90,  85),   // gap=95   drop=70
+          plat(1470,165,  80),   // gap=100  rise=75
+          plat(1650, 90,  85),   // gap=100  drop=75
+          plat(1840,170,  80),   // gap=105  rise=80
+          // ── SECCIÓN 3: bajada y aterrizaje ──
+          plat(2025,110,  85),   // gap=100  drop=60
+          plat(2215, 80,  90),   // gap=105  drop=30
+          plat(2410, 85, 120),   // gap=105  (ancho para seguridad)
+          plat(2630, 80, 200),   // amplia → suelo final
+        );
+        ld.enemies.push(
+          enmP(265,  75,  60, 4.5),  enmP(440, 145, 55, 5.0),
+          enmP(610,  80,  55, 4.8),  enmP(795, 150, 55, 5.0),
+          enmP(965,  80,  55, 4.5),  enmP(1145,160, 50, 5.0),
+          enmP(1505,165,  50, 5.0),  enmP(1875,170, 50, 5.0),
+          enmP(2055,110,  55, 4.8),  enmP(2445, 85, 70, 4.5),
+        );
+        ld.powerups.push(star(770, 197), star(1295, 137), star(1855, 215));
+        ld.goal = goal(3000, 180);
+        ld.length = 3200;
+        break;
     }
 
-    // Niveles 2-10: Generación por chunks
-    appendChunk(chunks.flat(currentX, lvl));
-    const numChunks = 3 + Math.floor(lvl * 1.5);
-    const availableChunks = ['flat', 'pit'];
-    if (lvl >= 3) availableChunks.push('staircase', 'enemyPatrol');
-    if (lvl >= 4) availableChunks.push('highPlatform');
-    if (lvl >= 5) availableChunks.push('movingPlatforms');
-    if (lvl >= 7) availableChunks.push('dangerZone');
-
-    for (let i = 0; i < numChunks; i++) {
-      const chunkIndex = (lvl + i * 7 + i * i) % availableChunks.length;
-      appendChunk(chunks[availableChunks[chunkIndex]](currentX, lvl));
-    }
-
-    const endStartX = currentX;
-    appendChunk(chunks.flat(currentX, lvl));
-    levelData.goal = { x: endStartX + 200, y: GROUND_Y - 80, w: 60, h: 140 };
-    levelData.length = currentX;
-    
-    world.current = levelData;
+    world.current = ld;
   };
 
   const initLevel = (lvl) => {
@@ -1021,7 +1234,7 @@ function PixelQuest({ onExit }) {
         </View>
       </View>
 
-      <View style={[styles.gameArea, { backgroundColor: bgColor, borderColor: '#fff', marginBottom: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }]}>
+      <View style={[styles.gameArea, { backgroundColor: bgColor, borderColor: '#fff', height: GAME_HEIGHT, flex: 0, marginBottom: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }]}>
         {/* Render World */}
         <View style={{ transform: [{ translateX: -cameraX.current }] }}>
           {world.current.platforms.map((plat, i) => (
@@ -1055,23 +1268,35 @@ function PixelQuest({ onExit }) {
         )}
       </View>
 
-      {/* D-Pad OUTSIDE game view so it never covers the player */}
-      {running && (
-        <View style={styles.controlBar}>
-          <View style={styles.dpadLeftRight}>
-            <View onTouchStart={() => keys.current.left = true} onTouchEnd={() => keys.current.left = false} style={styles.dpadBtn}>
-              <Text style={styles.dpadText}>◀</Text>
-            </View>
-            <View onTouchStart={() => keys.current.right = true} onTouchEnd={() => keys.current.right = false} style={styles.dpadBtn}>
-              <Text style={styles.dpadText}>▶</Text>
-            </View>
+      {/* D-Pad — siempre renderizado para mantener altura consistente */}
+      <View style={[styles.controlBar, !running && { opacity: 0, pointerEvents: 'none' }]}>
+        <View style={styles.dpadLeftRight}>
+          <View
+            onTouchStart={() => { if (running) keys.current.left = true; }}
+            onTouchEnd={() => { keys.current.left = false; }}
+            style={styles.dpadBtn}
+          >
+            <Text style={styles.dpadText}>◀</Text>
           </View>
-          <View style={{flexDirection: 'row', gap: 10}}>
-            {hasGun && <View onTouchStart={shoot} style={[styles.dpadBtnJump, {backgroundColor: 'rgba(255,69,0,0.6)'}]}><Text style={styles.dpadText}>🔥</Text></View>}
-            <View onTouchStart={jump} style={styles.dpadBtnJump}><Text style={styles.dpadText}>JUMP</Text></View>
+          <View
+            onTouchStart={() => { if (running) keys.current.right = true; }}
+            onTouchEnd={() => { keys.current.right = false; }}
+            style={styles.dpadBtn}
+          >
+            <Text style={styles.dpadText}>▶</Text>
           </View>
         </View>
-      )}
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          {hasGun && (
+            <View onTouchStart={shoot} style={[styles.dpadBtnJump, { backgroundColor: 'rgba(255,69,0,0.8)' }]}>
+              <Text style={styles.dpadText}>🔥</Text>
+            </View>
+          )}
+          <View onTouchStart={jump} style={styles.dpadBtnJump}>
+            <Text style={styles.dpadText}>🅰</Text>
+          </View>
+        </View>
+      </View>
     </SafeAreaView>
   );
 }
