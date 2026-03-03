@@ -27,6 +27,8 @@ const CR_GRAVITY = 0.8;
 const CR_JUMP_FORCE = -15;
 const CR_OBSTACLE_WIDTH = 30;
 
+const NG_ENEMY_TYPES = ['👾', '🛸', '💀'];
+
 function NeonGalaxy({ onExit }) {
   const [running, setRunning] = useState(false);
   const [score, setScore] = useState(0);
@@ -34,19 +36,51 @@ function NeonGalaxy({ onExit }) {
   const [gameOver, setGameOver] = useState(false);
   const [, setTick] = useState(0);
 
+  // Refs for mutable game state (avoids stale closures in the loop)
+  const scoreRef = useRef(0);
+  const livesRef = useRef(3);
+  const highScore = useRef(0);
+
+  // Game objects
   const playerX = useRef(width / 2 - PLAYER_SIZE / 2);
   const enemies = useRef([]);
   const lasers = useRef([]);
+  const powerUps = useRef([]);
   const lastFire = useRef(0);
   const lastEnemy = useRef(0);
 
+  // Wave system
+  const killCount = useRef(0);
+
+  // Combo / multiplier system
+  const recentKillTimes = useRef([]);
+  const multiplierActive = useRef(false);
+  const multiplierEndTime = useRef(0);
+
+  // Static starfield – generated once
+  const stars = useRef(
+    Array.from({ length: 40 }, (_, i) => ({
+      id: i,
+      x: Math.random() * (width - 4),
+      y: Math.random() * GAME_HEIGHT,
+      size: Math.random() * 2 + 1,
+    }))
+  ).current;
+
   const resetGame = () => {
+    scoreRef.current = 0;
+    livesRef.current = 3;
     setScore(0);
     setLives(3);
     setGameOver(false);
     playerX.current = width / 2 - PLAYER_SIZE / 2;
     enemies.current = [];
     lasers.current = [];
+    powerUps.current = [];
+    killCount.current = 0;
+    recentKillTimes.current = [];
+    multiplierActive.current = false;
+    multiplierEndTime.current = 0;
   };
 
   const startGame = () => {
@@ -60,39 +94,67 @@ function NeonGalaxy({ onExit }) {
     const loop = setInterval(() => {
       const now = Date.now();
 
+      // Expire multiplier
+      if (multiplierActive.current && now > multiplierEndTime.current) {
+        multiplierActive.current = false;
+      }
+
+      // Auto-fire
       if (now - lastFire.current > 250) {
         lasers.current.push({
-          id: now,
+          id: now + Math.random(),
           x: playerX.current + PLAYER_SIZE / 2 - LASER_WIDTH / 2,
-          y: GAME_HEIGHT - PLAYER_SIZE - 20
+          y: GAME_HEIGHT - PLAYER_SIZE - 20,
         });
         lastFire.current = now;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
 
-      const spawnRate = Math.max(300, 1200 - score * 15);
+      // Spawn regular enemy
+      const spawnRate = Math.max(300, 1200 - scoreRef.current * 15);
       if (now - lastEnemy.current > spawnRate) {
+        const type = NG_ENEMY_TYPES[Math.floor(Math.random() * NG_ENEMY_TYPES.length)];
         enemies.current.push({
-          id: now,
+          id: now + Math.random(),
           x: Math.random() * (width - ENEMY_SIZE - 20) + 10,
           y: -ENEMY_SIZE,
-          speed: 2 + Math.random() * 3 + (score / 100)
+          speed: 2 + Math.random() * 3 + (scoreRef.current / 100),
+          type,
         });
         lastEnemy.current = now;
       }
 
-      lasers.current.forEach(l => l.y -= 12);
+      // Move objects
+      lasers.current.forEach(l => { l.y -= 12; });
       lasers.current = lasers.current.filter(l => l.y > -LASER_HEIGHT);
+      enemies.current.forEach(e => { e.y += e.speed; });
+      powerUps.current.forEach(p => { p.y += 2; });
+      powerUps.current = powerUps.current.filter(p => p.y < GAME_HEIGHT + 40);
 
-      enemies.current.forEach(e => e.y += e.speed);
+      let newScore = scoreRef.current;
+      let newLives = livesRef.current;
 
-      let newScore = score;
-      let newLives = lives;
+      // Power-up collection
+      for (let i = powerUps.current.length - 1; i >= 0; i--) {
+        const p = powerUps.current[i];
+        if (
+          p.y + 30 > GAME_HEIGHT - PLAYER_SIZE - 10 &&
+          p.y < GAME_HEIGHT &&
+          p.x + 30 > playerX.current &&
+          p.x < playerX.current + PLAYER_SIZE
+        ) {
+          newLives = Math.min(newLives + 1, 9);
+          powerUps.current.splice(i, 1);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+      }
 
+      // Enemy collisions
       for (let i = enemies.current.length - 1; i >= 0; i--) {
         const e = enemies.current[i];
         let enemyDestroyed = false;
 
+        // Hit player
         if (
           e.y + ENEMY_SIZE > GAME_HEIGHT - PLAYER_SIZE - 10 &&
           e.y < GAME_HEIGHT &&
@@ -104,6 +166,7 @@ function NeonGalaxy({ onExit }) {
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         }
 
+        // Hit by laser
         if (!enemyDestroyed) {
           for (let j = lasers.current.length - 1; j >= 0; j--) {
             const l = lasers.current[j];
@@ -114,73 +177,335 @@ function NeonGalaxy({ onExit }) {
               l.y + LASER_HEIGHT > e.y
             ) {
               lasers.current.splice(j, 1);
-              newScore += 10;
-              enemyDestroyed = true;
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              break;
-            }
+
+              // Combo tracking
+              recentKillTimes.current = recentKillTimes.current.filter(t => now - t < 2000);
+              recentKillTimes.current.push(now);
+              if (recentKillTimes.current.length >= 3 && !multiplierActive.current) {
+                multiplierActive.current = true;
+                multiplierEndTime.current = now + 5000;
+              }
+
+              const points = multiplierActive.current ? 20 : 10;
+              newScore += points;
+
+              // Wave system: every 5 kills spawn 3 enemies in a row
+              killCount.current += 1;
+              if (killCount.current % 5 === 0) {
+                const waveSpeed = 2.5 + (scoreRef.current / 100);
+                const slot = (width - 60) / 3;
+                for (let w = 0; w < 3; w++) {
+                  const wt = NG_ENEMY_TYPES[Math.floor(Math.random() * NG_ENEMY_TYPES.length)];
+  const [perfectBonus, setPerfectBonus] = useState(null);
+
+  const playerY = useRef(GAME_HEIGHT - CR_GROUND_HEIGHT - CR_PLAYER_SIZE);
+  const velocityY = useRef(0);
+  const jumpsLeft = useRef(2);
+  const obstacles = useRef([]);
+  const coins = useRef([]);
+  const lastObstacle = useRef(0);
+  const lastCoin = useRef(0);
+  const scoreRef = useRef(0);
+  const highScore = useRef(0);
+  const perfectBonusTimer = useRef(null);
+
+  const getSpeed = () => 6 + (scoreRef.current / 100);
+
+  const getBgColor = () => {
+    const t = Math.min((getSpeed() - 6) / 5, 1);
+    const r = Math.round(20 + t * 180);
+    const g = Math.round(20 - t * 10);
+    const b = Math.round(40 - t * 30);
+    return `rgb(${r},${g},${b})`;
+  };
+
+  const resetGame = () => {
+    setScore(0);
+    scoreRef.current = 0;
+    setGameOver(false);
+    setPerfectBonus(null);
+    playerY.current = GAME_HEIGHT - CR_GROUND_HEIGHT - CR_PLAYER_SIZE;
+    velocityY.current = 0;
+    jumpsLeft.current = 2;
+    obstacles.current = [];
+    coins.current = [];
+    lastCoin.current = 0;
+    if (perfectBonusTimer.current) clearTimeout(perfectBonusTimer.current);
+  };
+
+  const startGame = () => { resetGame(); setRunning(true); };
+
+  const jump = () => {
+    if (!running) return;
+    if (jumpsLeft.current > 0) {
+      const isDoubleJump = jumpsLeft.current === 1;
+      velocityY.current = isDoubleJump ? CR_JUMP_FORCE * 0.7 : CR_JUMP_FORCE;
+      jumpsLeft.current -= 1;
+      Haptics.impactAsync(isDoubleJump ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light);
+    }
+  };
+
+  useEffect(() => {
+    if (!running) return;
+
+    const loop = setInterval(() => {
+      const now = Date.now();
+      const currentSpeed = getSpeed();
+
+      velocityY.current += CR_GRAVITY;
+      playerY.current += velocityY.current;
+
+      const groundY = GAME_HEIGHT - CR_GROUND_HEIGHT - CR_PLAYER_SIZE;
+      if (playerY.current >= groundY) {
+        playerY.current = groundY;
+        velocityY.current = 0;
+        jumpsLeft.current = 2;
+      }
+
+      // Spawn obstacles
+      const spawnRate = Math.max(800, 2000 - scoreRef.current * 20);
+      if (now - lastObstacle.current > spawnRate) {
+        const roll = Math.random();
+        let obsHeight, obsWidth, emoji;
+        if (roll < 0.4) {
+          obsHeight = 60 + Math.random() * 20;
+          obsWidth = CR_OBSTACLE_WIDTH;
+          emoji = '🌵';
+        } else if (roll < 0.7) {
+          obsHeight = 30 + Math.random() * 10;
+          obsWidth = CR_OBSTACLE_WIDTH + 10;
+          emoji = '🚧';
+        } else {
+          obsHeight = 20 + Math.random() * 10;
+          obsWidth = CR_OBSTACLE_WIDTH + 20;
+          emoji = '⬛';
+        }
+        obstacles.current.push({
+          id: now,
+          x: width,
+          y: GAME_HEIGHT - CR_GROUND_HEIGHT - obsHeight,
+          width: obsWidth,
+          height: obsHeight,
+          passed: false,
+          emoji,
+        });
+        lastObstacle.current = now;
+      }
+
+      // Spawn coins
+      const coinSpawnRate = Math.max(1200, 3000 - scoreRef.current * 10);
+      if (now - lastCoin.current > coinSpawnRate) {
+        const floatHeights = [
+          GAME_HEIGHT - CR_GROUND_HEIGHT - CR_PLAYER_SIZE - 20,
+          GAME_HEIGHT - CR_GROUND_HEIGHT - CR_PLAYER_SIZE - 60,
+          GAME_HEIGHT - CR_GROUND_HEIGHT - CR_PLAYER_SIZE - 110,
+        ];
+        const coinY = floatHeights[Math.floor(Math.random() * floatHeights.length)];
+        coins.current.push({ id: now + 1, x: width + 50, y: coinY, size: 30, collected: false });
+        lastCoin.current = now;
+      }
+
+      let hit = false;
+      const playerRect = {
+        left: 50,
+        right: 50 + CR_PLAYER_SIZE,
+        top: playerY.current,
+        bottom: playerY.current + CR_PLAYER_SIZE,
+      };
+
+      // Update obstacles
+      for (let i = obstacles.current.length - 1; i >= 0; i--) {
+        const obs = obstacles.current[i];
+        obs.x -= currentSpeed;
+        const obsRect = { left: obs.x, right: obs.x + obs.width, top: obs.y, bottom: obs.y + obs.height };
+
+        if (
+          playerRect.left < obsRect.right &&
+          playerRect.right > obsRect.left &&
+          playerRect.top < obsRect.bottom &&
+          playerRect.bottom > obsRect.top
+        ) {
+          hit = true;
+        }
+
+        if (!obs.passed && obs.x + obs.width < playerRect.left) {
+          obs.passed = true;
+          scoreRef.current += 10;
+          setScore(scoreRef.current);
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+          // Perfect dodge: obstacle edge passed within 5px of player edge
+          const gap = playerRect.left - (obs.x + obs.width);
+          if (gap <= 5) {
+            scoreRef.current += 5;
+            setScore(scoreRef.current);
+            setPerfectBonus('+5 PERFECT!');
+            if (perfectBonusTimer.current) clearTimeout(perfectBonusTimer.current);
+            perfectBonusTimer.current = setTimeout(() => setPerfectBonus(null), 1000);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
           }
         }
 
-        if (enemyDestroyed || e.y > GAME_HEIGHT) {
-          enemies.current.splice(i, 1);
-        }
+        if (obs.x + obs.width < 0) { obstacles.current.splice(i, 1); }
       }
 
-      if (newLives <= 0) {
+      // Update coins
+      for (let i = coins.current.length - 1; i >= 0; i--) {
+        const coin = coins.current[i];
+        if (coin.collected) { coins.current.splice(i, 1); continue; }
+        coin.x -= currentSpeed;
+        const coinRect = { left: coin.x, right: coin.x + coin.size, top: coin.y, bottom: coin.y + coin.size };
+        if (
+          playerRect.left < coinRect.right &&
+          playerRect.right > coinRect.left &&
+          playerRect.top < coinRect.bottom &&
+          playerRect.bottom > coinRect.top
+        ) {
+          coin.collected = true;
+          scoreRef.current += 25;
+          setScore(scoreRef.current);
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        }
+        if (coin.x + coin.size < 0) { coins.current.splice(i, 1); }
+      }
+
+      if (hit) {
+        if (scoreRef.current > highScore.current) { highScore.current = scoreRef.current; }
         setRunning(false);
         setGameOver(true);
-        setLives(0);
-      } else {
-        if (newScore !== score) setScore(newScore);
-        if (newLives !== lives) setLives(newLives);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
 
       setTick(t => t + 1);
     }, 16);
 
     return () => clearInterval(loop);
-  }, [running, score, lives]);
+  }, [running]);
 
-  const dragStartX = useRef(0);
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => {
-        dragStartX.current = playerX.current;
-      },
-      onPanResponderMove: (_, gesture) => {
-        let newX = dragStartX.current + gesture.dx;
-        newX = Math.max(0, Math.min(newX, width - PLAYER_SIZE - 20));
-        playerX.current = newX;
-      }
-    })
-  ).current;
+  const isOnGround = playerY.current >= GAME_HEIGHT - CR_GROUND_HEIGHT - CR_PLAYER_SIZE - 1;
+  const bgColor = getBgColor();
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
-        <Text style={styles.title}>NEON GALAXY</Text>
+        <Text style={styles.title}>CYBER RUN</Text>
         <View style={styles.stats}>
           <Text style={styles.statText}>SCORE: {score}</Text>
-          <Text style={styles.statText}>LIVES: {lives}</Text>
+          <Text style={[styles.statText, { fontSize: 11, opacity: 0.7 }]}>BEST: {highScore.current}</Text>
         </View>
       </View>
 
-      <View style={styles.gameArea} {...panResponder.panHandlers}>
-        <View style={[styles.player, { left: playerX.current, top: GAME_HEIGHT - PLAYER_SIZE - 10 }]} />
-        {enemies.current.map(e => (
-          <View key={e.id} style={[styles.enemy, { left: e.x, top: e.y }]} />
+      <Pressable style={[styles.gameArea, { backgroundColor: bgColor }]} onPress={jump}>
+        <View style={[styles.ground, { height: CR_GROUND_HEIGHT }]} />
+
+        {/* Player emoji — 🏃 on ground, 🤖 in air */}
+        <Text style={{
+          position: 'absolute',
+          left: 46,
+          top: playerY.current - 4,
+          fontSize: CR_PLAYER_SIZE,
+          lineHeight: CR_PLAYER_SIZE + 8,
+        }}>
+          {isOnGround ? '🏃' : '🤖'}
+        </Text>
+
+        {/* Obstacles */}
+        {obstacles.current.map(obs => (
+          <Text key={obs.id} style={{
+            position: 'absolute',
+            left: obs.x,
+            top: obs.y,
+            fontSize: obs.height * 0.85,
+            lineHeight: obs.height + 4,
+            width: obs.width + 8,
+            textAlign: 'center',
+          }}>
+            {obs.emoji}
+          </Text>
         ))}
-        {lasers.current.map(l => (
-          <View key={l.id} style={[styles.laser, { left: l.x, top: l.y }]} />
+
+        {/* Coins */}
+        {coins.current.map(coin => (
+          <Text key={coin.id} style={{
+            position: 'absolute',
+            left: coin.x,
+            top: coin.y,
+            fontSize: coin.size,
+            lineHeight: coin.size + 4,
+          }}>
+            🪙
+          </Text>
         ))}
+
+        {/* Perfect dodge flash */}
+        {perfectBonus && (
+          <Text style={{
+            position: 'absolute',
+            left: 100,
+            top: playerY.current - 32,
+            color: '#FFD700',
+            fontWeight: 'bold',
+            fontSize: 16,
+          }}>
+            {perfectBonus}
+          </Text>
+        )}
+
+        {/* Double jump indicator */}
+        {running && jumpsLeft.current === 1 && (
+          <Text style={{
+            position: 'absolute',
+            left: 52,
+            top: playerY.current - 20,
+            fontSize: 12,
+            color: '#00ffcc',
+            opacity: 0.9,
+          }}>▲</Text>
+        )}
+
         {!running && (
           <View style={styles.overlay}>
-            <Text style={styles.overlayTitle}>{gameOver ? 'GAME OVER' : 'DEFEND THE GALAXY'}</Text>
-            <Text style={styles.overlaySub}>Drag to move. Auto-fire enabled.</Text>
+            <Text style={styles.overlayTitle}>{gameOver ? '💥 CRASHED' : '🤖 CYBER RUN'}</Text>
+            <Text style={styles.overlaySub}>Tap to jump • Tap again mid-air for double jump</Text>
+            {gameOver && (
+              <Text style={[styles.overlaySub, { color: '#FFD700', marginBottom: 4 }]}>
+                BEST: {highScore.current}
+              </Text>
+            )}
+              lineHeight: ENEMY_SIZE,
+            }}
+          >
+            {e.type}
+          </Text>
+        ))}
+
+        {/* Player ship */}
+        <Text
+          style={{
+            position: 'absolute',
+            left: playerX.current,
+            top: GAME_HEIGHT - PLAYER_SIZE - 10,
+            fontSize: PLAYER_SIZE - 4,
+            lineHeight: PLAYER_SIZE,
+          }}
+        >
+          🚀
+        </Text>
+
+        {!running && (
+          <View style={styles.overlay}>
+            <Text style={styles.overlayTitle}>
+              {gameOver ? 'GAME OVER' : 'DEFEND THE GALAXY'}
+            </Text>
+            {gameOver && (
+              <Text style={styles.overlaySub}>BEST: {highScore.current}</Text>
+            )}
+            <Text style={styles.overlaySub}>
+              {gameOver
+                ? 'Collect 🛡️ for extra lives. Kill fast for 2× combo!'
+                : 'Drag to move. Auto-fire enabled. Collect 🛡️ shields!'}
+            </Text>
             <Pressable style={styles.btn} onPress={startGame}>
               <Text style={styles.btnText}>{gameOver ? 'RETRY' : 'START'}</Text>
             </Pressable>
