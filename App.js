@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  Animated,
   Dimensions,
   PanResponder,
   Pressable,
@@ -1001,6 +1002,7 @@ function PixelQuest({ onExit }) {
   const initLevel = (lvl) => {
     setLevel(lvl);
     pRef.current = { x: 50, y: 100, vx: 0, vy: 0, w: PQ_PLAYER_SIZE, h: PQ_PLAYER_SIZE, facingRight: true };
+    keys.current = { left: false, right: false };
     cameraX.current = 0;
     setInvincible(false);
     setHasGun(false);
@@ -1274,6 +1276,7 @@ function PixelQuest({ onExit }) {
           <View
             onTouchStart={() => { if (running) keys.current.left = true; }}
             onTouchEnd={() => { keys.current.left = false; }}
+            onTouchCancel={() => { keys.current.left = false; }}
             style={styles.dpadBtn}
           >
             <Text style={styles.dpadText}>◀</Text>
@@ -1281,6 +1284,7 @@ function PixelQuest({ onExit }) {
           <View
             onTouchStart={() => { if (running) keys.current.right = true; }}
             onTouchEnd={() => { keys.current.right = false; }}
+            onTouchCancel={() => { keys.current.right = false; }}
             style={styles.dpadBtn}
           >
             <Text style={styles.dpadText}>▶</Text>
@@ -1308,6 +1312,8 @@ function GalacticHunt({ onExit }) {
   const [ammo, setAmmo] = useState(10);
   const [timeLeft, setTimeLeft] = useState(30);
   const [targets, setTargets] = useState([]);
+  const [crosshair, setCrosshair] = useState(null);   // { x, y }
+  const [splatters, setSplatters] = useState([]);      // [{ id, x, y, anim, dots }]
 
   const targetsRef = useRef([]);
   const ammoRef = useRef(10);
@@ -1319,6 +1325,8 @@ function GalacticHunt({ onExit }) {
   const gameLoopRef = useRef(null);
   const timerRef = useRef(null);
   const spawnTimeoutRef = useRef(null);
+  const crosshairTimer = useRef(null);
+  const splatterIdRef = useRef(0);
 
   const stars = useRef(
     Array.from({ length: 60 }, (_, i) => ({
@@ -1425,7 +1433,28 @@ function GalacticHunt({ onExit }) {
     scheduleSpawn();
   };
 
-  const handleTargetHit = (targetId, points) => {
+  const showCrosshair = (x, y) => {
+    setCrosshair({ x, y });
+    if (crosshairTimer.current) clearTimeout(crosshairTimer.current);
+    crosshairTimer.current = setTimeout(() => setCrosshair(null), 350);
+  };
+
+  const addSplatter = (x, y) => {
+    const id = splatterIdRef.current++;
+    const anim = new Animated.Value(1);
+    const dots = Array.from({ length: 8 }, (_, i) => {
+      const angle = (i / 8) * Math.PI * 2 + (i * 0.3);
+      const r = 6 + (i % 3) * 9;
+      const size = 5 + (i % 4) * 3;
+      return { dx: Math.cos(angle) * r, dy: Math.sin(angle) * r, size };
+    });
+    setSplatters(prev => [...prev, { id, x, y, anim, dots }]);
+    Animated.timing(anim, { toValue: 0, duration: 600, useNativeDriver: true }).start(() => {
+      setSplatters(prev => prev.filter(s => s.id !== id));
+    });
+  };
+
+  const handleTargetHit = (targetId, points, cx, cy) => {
     if (ammoRef.current <= 0 || gameStateRef.current !== 'playing') return;
     ammoRef.current -= 1;
     scoreRef.current += points;
@@ -1433,7 +1462,20 @@ function GalacticHunt({ onExit }) {
     setAmmo(ammoRef.current);
     setScore(scoreRef.current);
     setTargets([...targetsRef.current]);
+    showCrosshair(cx, cy);
+    addSplatter(cx, cy);
+    // Heavy pulse = kill sound feedback
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 80);
+    if (ammoRef.current <= 0) endRound();
+  };
+
+  const handleMiss = (lx, ly) => {
+    if (ammoRef.current <= 0 || gameStateRef.current !== 'playing') return;
+    ammoRef.current -= 1;
+    setAmmo(ammoRef.current);
+    showCrosshair(lx, ly);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (ammoRef.current <= 0) endRound();
   };
 
@@ -1472,7 +1514,8 @@ function GalacticHunt({ onExit }) {
         </View>
       </View>
 
-      <View style={[styles.gameArea, { backgroundColor: '#070720', borderColor: '#2e1065' }]}>
+      <Pressable style={[styles.gameArea, { backgroundColor: '#070720', borderColor: '#2e1065' }]}
+        onPress={e => handleMiss(e.nativeEvent.locationX, e.nativeEvent.locationY)}>
         {/* Starfield */}
         {stars.map(star => (
           <View
@@ -1499,11 +1542,41 @@ function GalacticHunt({ onExit }) {
           </View>
         )}
 
+        {/* Blood splatters */}
+        {splatters.map(s => (
+          <Animated.View key={s.id} pointerEvents="none" style={{ position: 'absolute', left: s.x, top: s.y, opacity: s.anim, zIndex: 16 }}>
+            {s.dots.map((d, i) => (
+              <View key={i} style={{
+                position: 'absolute',
+                left: d.dx - d.size / 2,
+                top: d.dy - d.size / 2,
+                width: d.size,
+                height: d.size,
+                borderRadius: d.size / 2,
+                backgroundColor: i % 2 === 0 ? '#cc0000' : '#ff2222',
+              }} />
+            ))}
+            <View style={{ position: 'absolute', left: -5, top: -5, width: 10, height: 10, borderRadius: 5, backgroundColor: '#ff0000' }} />
+          </Animated.View>
+        ))}
+
+        {/* Crosshair */}
+        {crosshair && (
+          <View pointerEvents="none" style={{ position: 'absolute', left: crosshair.x - 22, top: crosshair.y - 22, width: 44, height: 44, zIndex: 17 }}>
+            <View style={{ position: 'absolute', top: 21, left: 0, width: 44, height: 2, backgroundColor: '#ffff00', opacity: 0.9 }} />
+            <View style={{ position: 'absolute', left: 21, top: 0, width: 2, height: 44, backgroundColor: '#ffff00', opacity: 0.9 }} />
+            <View style={{ position: 'absolute', top: 7, left: 7, width: 30, height: 30, borderRadius: 15, borderWidth: 2, borderColor: '#ffff00', backgroundColor: 'transparent', opacity: 0.8 }} />
+          </View>
+        )}
+
         {/* Targets */}
         {gameState === 'playing' && targets.map(target => (
           <Pressable
             key={target.id}
-            onPress={() => handleTargetHit(target.id, target.points)}
+            onPress={e => {
+              e.stopPropagation();
+              handleTargetHit(target.id, target.points, target.x + target.size / 2, target.y + target.size / 2);
+            }}
             style={{
               position: 'absolute',
               left: target.x,
@@ -1575,7 +1648,7 @@ function GalacticHunt({ onExit }) {
             </Pressable>
           </View>
         )}
-      </View>
+      </Pressable>
     </SafeAreaView>
   );
 }
@@ -1658,5 +1731,5 @@ const styles = StyleSheet.create({
   dpadBtn: { width: 60, height: 60, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 30, justifyContent: 'center', alignItems: 'center' },
   dpadBtnJump: { width: 80, height: 80, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 40, justifyContent: 'center', alignItems: 'center' },
   dpadText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
-  controlBar: { height: 100, backgroundColor: 'rgba(0,0,0,0.4)', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 10 }
+  controlBar: { height: 100, backgroundColor: 'rgba(0,0,0,0.4)', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 30 }
 });
