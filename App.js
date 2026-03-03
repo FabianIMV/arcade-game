@@ -47,6 +47,30 @@ const BK_BALL_R = 8;
 
 const NG_ENEMY_TYPES = ['👾', '🛸', '💀'];
 
+// ─── Haptic Helpers (iPhone Taptic Engine patterns) ─────────────
+const deathVibrate = () => {
+  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+  setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 100);
+  setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 220);
+  setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 380);
+  setTimeout(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error), 520);
+};
+const celebrateVibrate = () => {
+  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 150);
+  setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 300);
+  setTimeout(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success), 480);
+};
+const popVibrate = () => {
+  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+  setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light), 65);
+};
+const scoreVibrate = () => {
+  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 80);
+};
+// ─────────────────────────────────────────────────────────────────
+
 function NeonGalaxy({ onExit }) {
   const [running, setRunning] = useState(false);
   const [score, setScore] = useState(0);
@@ -199,6 +223,7 @@ function NeonGalaxy({ onExit }) {
               if (recentKillTimes.current.length >= 3 && !multiplierActive.current) {
                 multiplierActive.current = true;
                 multiplierEndTime.current = now + 5000;
+                celebrateVibrate();
               }
 
               const points = multiplierActive.current ? 20 : 10;
@@ -225,6 +250,7 @@ function NeonGalaxy({ onExit }) {
               if (Math.random() < 0.1) {
                 powerUps.current.push({ id: now + Math.random(), x: e.x, y: e.y, type: 'shield' });
               }
+              popVibrate();
               enemyDestroyed = true;
               break;
             }
@@ -251,7 +277,7 @@ function NeonGalaxy({ onExit }) {
         }
         setRunning(false);
         setGameOver(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        deathVibrate();
       }
 
       setTick(t => t + 1);
@@ -521,7 +547,8 @@ function CyberRun({ onExit }) {
           coin.collected = true;
           scoreRef.current += 25;
           setScore(scoreRef.current);
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 60);
         }
         if (coin.x + coin.size < 0) { coins.current.splice(i, 1); }
       }
@@ -530,7 +557,7 @@ function CyberRun({ onExit }) {
         if (scoreRef.current > highScore.current) { highScore.current = scoreRef.current; }
         setRunning(false);
         setGameOver(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        deathVibrate();
       }
 
       setTick(t => t + 1);
@@ -1215,8 +1242,9 @@ function PixelQuest({ onExit }) {
   };
 
   const handleDeath = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     if (lives > 1) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 90);
       setLives(l => l - 1);
       // Respawn slightly back and high up
       pRef.current.y = 0;
@@ -1225,6 +1253,7 @@ function PixelQuest({ onExit }) {
       setInvincible(true);
       invincibilityTimer.current = 3000; // 3 seconds of invincibility
     } else {
+      deathVibrate();
       setLives(0);
       setRunning(false);
       setGameOver(true);
@@ -1342,7 +1371,9 @@ function PixelQuest({ onExit }) {
           setInvincible(true);
           setHasGun(true);
           invincibilityTimer.current = 5000; // 5 seconds
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 120);
+          setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 240);
         }
       }
 
@@ -1372,7 +1403,7 @@ function PixelQuest({ onExit }) {
 
       // Goal collision
       if (w.goal && p.x < w.goal.x + w.goal.w && p.x + p.w > w.goal.x && p.y < w.goal.y + w.goal.h && p.y + p.h > w.goal.y) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        celebrateVibrate();
         if (level >= 15) {
           setRunning(false); setGameWon(true);
         } else {
@@ -1542,7 +1573,8 @@ function PingPong({ onExit }) {
           const rel = (b.x + PP_BALL_SIZE / 2 - playerX.current) / PP_PADDLE_W;
           b.vx = (rel - 0.5) * 12;
           normalizeSpeed(b, 14);
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light), 45);
         }
       }
 
@@ -1556,14 +1588,14 @@ function PingPong({ onExit }) {
       if (b.y > GAME_HEIGHT + 20) {
         aScore.current += 1;
         setScoreAI(aScore.current);
+        if (aScore.current >= PP_MAX_SCORE) { deathVibrate(); setGameState('gameover'); return; }
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        if (aScore.current >= PP_MAX_SCORE) { setGameState('gameover'); return; }
         resetBall(true);
       } else if (b.y < -20) {
         pScore.current += 1;
         setScoreP(pScore.current);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        if (pScore.current >= PP_MAX_SCORE) { setGameState('gameover'); return; }
+        if (pScore.current >= PP_MAX_SCORE) { celebrateVibrate(); setGameState('gameover'); return; }
+        scoreVibrate();
         resetBall(false);
       }
 
@@ -1681,6 +1713,7 @@ function Breakout({ onExit }) {
   const levelRef = useRef(1);
   const highScore = useRef(0);
   const launched = useRef(false);
+  const bkGameStateRef = useRef('idle');
 
   const BRICK_COLORS = ['#ff4444', '#ff6600', '#ffcc00', '#44cc44', '#0099ff', '#9933ff', '#ff66bb', '#00ffcc'];
 
@@ -1729,7 +1762,7 @@ function Breakout({ onExit }) {
   };
 
   const launchBall = () => {
-    if (launched.current || gameState !== 'playing') return;
+    if (launched.current || bkGameStateRef.current !== 'playing') return;
     launched.current = true;
     const spd = 7 + levelRef.current * 0.4;
     ball.current.vx = (Math.random() > 0.5 ? 1 : -1) * (4 + Math.random() * 2);
@@ -1747,6 +1780,7 @@ function Breakout({ onExit }) {
     buildLevel(1);
     resetBallToPaddle();
     setGameState('playing');
+    bkGameStateRef.current = 'playing';
   };
 
   useEffect(() => {
@@ -1779,7 +1813,8 @@ function Breakout({ onExit }) {
           const spd = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
           const maxSpd = 8 + levelRef.current * 0.4;
           if (spd > maxSpd + 3) { b.vx = (b.vx / spd) * (maxSpd + 3); b.vy = (b.vy / spd) * (maxSpd + 3); }
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light), 50);
         }
       }
 
@@ -1801,7 +1836,7 @@ function Breakout({ onExit }) {
           else b.vx = -b.vx;
           scoreRef.current += br.maxHits * 10;
           setScore(scoreRef.current);
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          if (br.hits <= 0) { popVibrate(); } else { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }
           break;
         }
       }
@@ -1812,19 +1847,22 @@ function Breakout({ onExit }) {
         setLevel(levelRef.current);
         buildLevel(levelRef.current);
         resetBallToPaddle();
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        celebrateVibrate();
       }
 
       // Ball lost
       if (b.y > GAME_HEIGHT + 30) {
         livesRef.current -= 1;
         setLives(livesRef.current);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         if (livesRef.current <= 0) {
           if (scoreRef.current > highScore.current) highScore.current = scoreRef.current;
+          bkGameStateRef.current = 'gameover';
+          deathVibrate();
           setGameState('gameover');
           return;
         }
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 90);
         resetBallToPaddle();
       }
 
@@ -2391,7 +2429,7 @@ function SnakePower({ onExit }) {
         setHighScore(fs);
       }
     });
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    deathVibrate();
   };
 
   const tick = () => {
@@ -2435,7 +2473,8 @@ function SnakePower({ onExit }) {
       const nf = randomPos(newSnake);
       foodRef.current = nf;
       setFoodDisp({ ...nf });
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 60);
     }
 
     const pu = puRef.current;
@@ -2460,6 +2499,7 @@ function SnakePower({ onExit }) {
     const cur = dirRef.current;
     if (newDir.x === -cur.x && newDir.y === -cur.y) return;
     nextDirRef.current = newDir;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const startGame = () => {
