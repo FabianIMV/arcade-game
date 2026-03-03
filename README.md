@@ -1,8 +1,25 @@
 # 🕹️ ARCADE HUB
 
-> *Built by an AI. Played by humans. Vibes immaculate.* 🤖✨
+> *Un proyecto casero de tardes y fines de semana — orquestado desde un iPhone 12, sin tocar una PC.* 📱✨
 
-A fully-featured **multi-game arcade hub** built with **React Native + Expo**, packed with haptic feedback, emoji sprites, and retro neon energy. Four unique games, one app, zero excuses to be bored.
+## 🧑‍💻 Sobre este proyecto
+
+Este es un **proyecto personal y casero** hecho enteramente desde mi **iPhone 12**, aprovechando **GitHub Codespaces** como entorno de desarrollo en la nube y los modelos de IA como mis "manos" para escribir el código.
+
+No hay PC. No hay escritorio. Solo yo, mi cel, y los modelos:
+
+| Modelo | Rol |
+|--------|-----|
+| **Claude Sonnet 4.6** (GitHub Copilot) | Arquitectura, juegos, lógica, haptics, correcciones |
+| **Gemini Pro 3.1** | Consultas, ideas, revisión de diseño |
+
+Lo voy orquestando en mis ratos libres — una tarde aquí, un fin de semana allá. Le digo qué quiero, los modelos escriben, yo pruebo en Expo Go y pido ajustes. Así de simple y así de divertido.
+
+> *Prueba de que no necesitas una PC, ni saber programar de memoria, para construir algo cool.* 🚀
+
+---
+
+A fully-featured **multi-game arcade hub** built with **React Native + Expo**, packed with haptic feedback, emoji sprites, and retro neon energy. 7 unique games, one app, zero excuses to be bored.
 
 Deployed over-the-air via **EAS Update** straight to your iPhone through **Expo Go** — no App Store required.
 

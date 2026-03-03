@@ -45,6 +45,13 @@ const BK_PADDLE_W = 85;
 const BK_PADDLE_H = 14;
 const BK_BALL_R = 8;
 
+// --- VOID CRAWLER CONSTANTS ---
+const VC_COLS = 19;
+const VC_ROWS = 13;
+const VC_CELL = Math.floor((width - 16) / VC_COLS);
+const VC_WALL  = 0;
+const VC_FLOOR = 1;
+
 const NG_ENEMY_TYPES = ['👾', '🛸', '💀'];
 
 // ─── Haptic Helpers (iPhone Taptic Engine patterns) ─────────────
@@ -2721,6 +2728,444 @@ function SnakePower({ onExit }) {
   );
 }
 
+// ============================================================
+// 8. VOID CRAWLER  —  Neon Roguelike Dungeon Crawler
+// ============================================================
+const VC_FLOOR_THEMES = [
+  { bg: '#08081a', wall: '#16163a', floor: '#0d0d28', accent: '#6677ff', name: 'DUNGEON DEPTHS'  },
+  { bg: '#081408', wall: '#163a16', floor: '#0d280d', accent: '#44ff88', name: 'POISON SWAMP'    },
+  { bg: '#1a0808', wall: '#3a1616', floor: '#280d0d', accent: '#ff5544', name: 'FIRE CAVERN'     },
+  { bg: '#180818', wall: '#381638', floor: '#260d26', accent: '#ee44ff', name: 'SHADOW REALM'    },
+  { bg: '#1a1808', wall: '#3a3816', floor: '#28260d', accent: '#ffdd00', name: 'DRAGON LAIR 🐉'  },
+];
+const VC_ENEMY_DEFS = {
+  skeleton: { emoji: '💀', hp: 6,  atk: 2, def: 0, xp: 5   },
+  goblin:   { emoji: '👺', hp: 4,  atk: 3, def: 0, xp: 8   },
+  orc:      { emoji: '👹', hp: 10, atk: 4, def: 1, xp: 12  },
+  demon:    { emoji: '😈', hp: 15, atk: 6, def: 2, xp: 20  },
+  dragon:   { emoji: '🐉', hp: 50, atk: 12,def: 3, xp: 100, isBoss: true },
+};
+const VC_FLOOR_ENEMIES = [
+  ['skeleton','skeleton','goblin'],
+  ['goblin','goblin','orc','orc'],
+  ['orc','orc','orc','demon'],
+  ['demon','demon','demon','orc'],
+  ['dragon','demon','demon'],
+];
+const VC_ITEM_DEFS = [
+  { emoji: '⚔️',  type: 'atk',   value: 2,  label: '+2 ATK'   },
+  { emoji: '🛡️', type: 'def',   value: 1,  label: '+1 DEF'   },
+  { emoji: '❤️',  type: 'heal',  value: 8,  label: '+8 HP'    },
+  { emoji: '💊',  type: 'maxhp', value: 5,  label: '+5 MaxHP' },
+  { emoji: '💎',  type: 'xp',    value: 25, label: '+25 XP'   },
+];
+
+function VoidCrawler({ onExit }) {
+  const [phase, setPhase] = useState('idle');
+  const [msgLog, setMsgLog] = useState(['⚔️ Fight. 🏚️ Explore. 🚪 Reach the exit.']);
+  const [, setTick] = useState(0);
+
+  const mapRef     = useRef([]);
+  const stairsRef  = useRef({ x: 0, y: 0 });
+  const playerRef  = useRef({ x:1, y:1, hp:20, maxHp:20, atk:3, def:1, floor:1, xp:0, level:1 });
+  const enemiesRef = useRef([]);
+  const itemsRef   = useRef([]);
+  const eidRef     = useRef(0);
+  const iidRef     = useRef(0);
+  const phaseRef   = useRef('idle');
+
+  const addMsg = (msg) => setMsgLog(prev => [msg, ...prev].slice(0, 4));
+
+  const xpNeeded = (lvl) => lvl * 20;
+
+  const checkLevelUp = () => {
+    const p = playerRef.current;
+    while (p.xp >= xpNeeded(p.level)) {
+      p.xp   -= xpNeeded(p.level);
+      p.level += 1;
+      p.atk   += 1;
+      p.maxHp += 5;
+      p.hp     = Math.min(p.hp + 5, p.maxHp);
+      addMsg(`⬆️ LEVEL UP! Lv.${p.level} — ATK+1 MaxHP+5`);
+      celebrateVibrate();
+    }
+  };
+
+  // ── Dungeon generation ──────────────────────────────────
+  const generateFloor = (floorNum) => {
+    const m = Array.from({ length: VC_ROWS }, () =>
+      Array(VC_COLS).fill(VC_WALL)
+    );
+    const rooms = [];
+
+    const tryRoom = () => {
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const rw = 4 + Math.floor(Math.random() * 4);
+        const rh = 3 + Math.floor(Math.random() * 3);
+        const rx = 1 + Math.floor(Math.random() * (VC_COLS - rw - 2));
+        const ry = 1 + Math.floor(Math.random() * (VC_ROWS - rh - 2));
+        if (!rooms.some(r =>
+          rx <= r.x + r.w && rx + rw >= r.x &&
+          ry <= r.y + r.h && ry + rh >= r.y
+        )) { rooms.push({ x: rx, y: ry, w: rw, h: rh }); return; }
+      }
+    };
+    for (let i = 0; i < 6 + Math.floor(Math.random() * 3); i++) tryRoom();
+
+    // Carve rooms
+    for (const room of rooms)
+      for (let r = room.y; r < room.y + room.h; r++)
+        for (let c = room.x; c < room.x + room.w; c++)
+          m[r][c] = VC_FLOOR;
+
+    // Connect consecutive rooms with L corridors
+    for (let i = 0; i < rooms.length - 1; i++) {
+      const a = rooms[i], b = rooms[i + 1];
+      const ax = Math.floor(a.x + a.w / 2), ay = Math.floor(a.y + a.h / 2);
+      const bx = Math.floor(b.x + b.w / 2), by = Math.floor(b.y + b.h / 2);
+      for (let c = Math.min(ax, bx); c <= Math.max(ax, bx); c++) m[ay][c] = VC_FLOOR;
+      for (let r = Math.min(ay, by); r <= Math.max(ay, by); r++) m[r][bx] = VC_FLOOR;
+    }
+    mapRef.current = m;
+
+    // Place stairs in center of last room
+    const last = rooms[rooms.length - 1];
+    stairsRef.current = {
+      x: Math.floor(last.x + last.w / 2),
+      y: Math.floor(last.y + last.h / 2),
+    };
+
+    // Respawn player at center of first room
+    const p = playerRef.current;
+    const first = rooms[0];
+    p.x = Math.floor(first.x + first.w / 2);
+    p.y = Math.floor(first.y + first.h / 2);
+
+    // Place enemies (avoid first room)
+    enemiesRef.current = [];
+    const enemyTypes = VC_FLOOR_ENEMIES[Math.min(floorNum - 1, 4)];
+    for (const type of enemyTypes) {
+      const def = VC_ENEMY_DEFS[type];
+      let ex = 0, ey = 0, tries = 60;
+      do {
+        const ri = 1 + Math.floor(Math.random() * (rooms.length - 1));
+        const room = rooms[Math.min(ri, rooms.length - 1)];
+        ex = room.x + 1 + Math.floor(Math.random() * Math.max(1, room.w - 2));
+        ey = room.y + 1 + Math.floor(Math.random() * Math.max(1, room.h - 2));
+        tries--;
+      } while (tries > 0 && (
+        m[ey]?.[ex] !== VC_FLOOR ||
+        (ex === p.x && ey === p.y) ||
+        enemiesRef.current.some(e => e.x === ex && e.y === ey)
+      ));
+      if (tries <= 0) continue;
+      enemiesRef.current.push({
+        id: eidRef.current++, type, emoji: def.emoji,
+        x: ex, y: ey,
+        hp:    def.hp    + (floorNum - 1) * 3,
+        maxHp: def.hp    + (floorNum - 1) * 3,
+        atk:   def.atk   + Math.floor((floorNum - 1) * 0.6),
+        def:   def.def,
+        xp:    def.xp,
+        isBoss: def.isBoss || false,
+      });
+    }
+
+    // Place items
+    itemsRef.current = [];
+    const numItems = 2 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < numItems; i++) {
+      const itemDef = VC_ITEM_DEFS[Math.floor(Math.random() * VC_ITEM_DEFS.length)];
+      let ix = 0, iy = 0, tries = 40;
+      do {
+        const room = rooms[Math.floor(Math.random() * rooms.length)];
+        ix = room.x + Math.floor(Math.random() * room.w);
+        iy = room.y + Math.floor(Math.random() * room.h);
+        tries--;
+      } while (tries > 0 && (
+        m[iy]?.[ix] !== VC_FLOOR ||
+        (ix === p.x && iy === p.y) ||
+        (ix === stairsRef.current.x && iy === stairsRef.current.y) ||
+        itemsRef.current.some(it => it.x === ix && it.y === iy) ||
+        enemiesRef.current.some(e => e.x === ix && e.y === iy)
+      ));
+      if (tries <= 0) continue;
+      itemsRef.current.push({ id: iidRef.current++, ...itemDef, x: ix, y: iy });
+    }
+  };
+
+  // ── Enemy turn ──────────────────────────────────────────
+  const moveEnemies = () => {
+    if (phaseRef.current !== 'playing') return;
+    const p = playerRef.current;
+    const m = mapRef.current;
+    for (const e of enemiesRef.current) {
+      const dx = p.x - e.x, dy = p.y - e.y;
+      if (Math.abs(dx) + Math.abs(dy) === 1) {
+        const dmg = Math.max(1, e.atk - p.def);
+        p.hp -= dmg;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        if (p.hp <= 0) {
+          p.hp = 0;
+          phaseRef.current = 'dead';
+          deathVibrate();
+          setPhase('dead');
+          addMsg(`💀 Slain by ${e.emoji} on floor ${p.floor}!`);
+          setTick(t => t + 1);
+          return;
+        }
+        continue;
+      }
+      // Pathfind: try best direction toward player first
+      const steps = [
+        { x: e.x + Math.sign(dx), y: e.y },
+        { x: e.x,                 y: e.y + Math.sign(dy) },
+        { x: e.x - Math.sign(dx), y: e.y },
+        { x: e.x,                 y: e.y - Math.sign(dy) },
+      ];
+      for (const s of steps) {
+        if (
+          s.y >= 0 && s.y < VC_ROWS && s.x >= 0 && s.x < VC_COLS &&
+          m[s.y][s.x] === VC_FLOOR &&
+          !(s.x === p.x && s.y === p.y) &&
+          !enemiesRef.current.some(o => o !== e && o.x === s.x && o.y === s.y)
+        ) { e.x = s.x; e.y = s.y; break; }
+      }
+    }
+    setTick(t => t + 1);
+  };
+
+  // ── Player action ────────────────────────────────────────
+  const movePlayer = (dx, dy) => {
+    if (phaseRef.current !== 'playing') return;
+    const p = playerRef.current;
+    const m = mapRef.current;
+    const nx = p.x + dx, ny = p.y + dy;
+    if (ny < 0 || ny >= VC_ROWS || nx < 0 || nx >= VC_COLS) return;
+    if (m[ny][nx] === VC_WALL) { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); return; }
+
+    // Attack enemy
+    const ei = enemiesRef.current.findIndex(e => e.x === nx && e.y === ny);
+    if (ei !== -1) {
+      const e = enemiesRef.current[ei];
+      const dmg = Math.max(1, p.atk - e.def);
+      e.hp -= dmg;
+      popVibrate();
+      if (e.hp <= 0) {
+        p.xp += e.xp;
+        addMsg(`⚔️ Slew ${e.emoji}! +${e.xp} XP${e.isBoss ? '  🏆 BOSS!' : ''}`);
+        if (e.isBoss) celebrateVibrate();
+        enemiesRef.current.splice(ei, 1);
+        checkLevelUp();
+      } else {
+        addMsg(`🗡️ Hit ${e.emoji} for ${dmg} dmg (${e.hp}/${e.maxHp} HP left)`);
+      }
+      moveEnemies();
+      setTick(t => t + 1);
+      return;
+    }
+
+    // Move
+    p.x = nx; p.y = ny;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    // Pick up item
+    const ii = itemsRef.current.findIndex(it => it.x === nx && it.y === ny);
+    if (ii !== -1) {
+      const item = itemsRef.current[ii];
+      if (item.type === 'atk')   p.atk    += item.value;
+      if (item.type === 'def')   p.def    += item.value;
+      if (item.type === 'heal')  p.hp      = Math.min(p.hp + item.value, p.maxHp);
+      if (item.type === 'maxhp') { p.maxHp += item.value; p.hp = Math.min(p.hp + item.value, p.maxHp); }
+      if (item.type === 'xp')    { p.xp    += item.value; checkLevelUp(); }
+      addMsg(`${item.emoji} Picked up: ${item.label}`);
+      scoreVibrate();
+      itemsRef.current.splice(ii, 1);
+    }
+
+    // Stairs
+    const s = stairsRef.current;
+    if (nx === s.x && ny === s.y) {
+      if (p.floor >= 5) {
+        phaseRef.current = 'won';
+        celebrateVibrate();
+        addMsg('🏆 YOU ESCAPED THE VOID! All 5 floors cleared!');
+        setPhase('won');
+        setTick(t => t + 1);
+        return;
+      }
+      p.floor += 1;
+      addMsg(`🚪 Descending to Floor ${p.floor}... ${VC_FLOOR_THEMES[p.floor - 1].name}`);
+      celebrateVibrate();
+      generateFloor(p.floor);
+      setTick(t => t + 1);
+      return;
+    }
+
+    moveEnemies();
+    setTick(t => t + 1);
+  };
+
+  const startGame = () => {
+    playerRef.current = { x:1, y:1, hp:20, maxHp:20, atk:3, def:1, floor:1, xp:0, level:1 };
+    eidRef.current = 0; iidRef.current = 0;
+    phaseRef.current = 'playing';
+    generateFloor(1);
+    setMsgLog(['🏺 Floor 1: DUNGEON DEPTHS', '⚔️ Touch D-Pad to move. Step on enemies to attack!']);
+    setPhase('playing');
+    setTick(t => t + 1);
+  };
+
+  // ── Render ───────────────────────────────────────────────
+  const p   = playerRef.current;
+  const floorIdx = Math.min((p.floor ?? 1) - 1, 4);
+  const theme = VC_FLOOR_THEMES[floorIdx];
+  const hpPct = Math.max(0, p.hp / p.maxHp);
+  const hpColor = hpPct > 0.5 ? '#44ff88' : hpPct > 0.25 ? '#ffaa00' : '#ff3344';
+
+  const renderGrid = () => {
+    if (!mapRef.current.length) return null;
+    const m = mapRef.current;
+    const cells = [];
+    const stairs = stairsRef.current;
+    for (let row = 0; row < VC_ROWS; row++) {
+      for (let col = 0; col < VC_COLS; col++) {
+        const isWall   = m[row][col] === VC_WALL;
+        const isStairs = stairs.x === col && stairs.y === row;
+        const enemy    = enemiesRef.current.find(e => e.x === col && e.y === row);
+        const item     = itemsRef.current.find(it => it.x === col && it.y === row);
+        const isPlayer = p.x === col && p.y === row;
+
+        const bgCell = isWall
+          ? theme.wall
+          : (row + col) % 2 === 0 ? theme.floor : theme.floor + 'dd';
+
+        const fs = VC_CELL - 5;
+        let content = null;
+        if      (isPlayer) content = <Text style={{ fontSize: fs, lineHeight: VC_CELL }}>😤</Text>;
+        else if (enemy)    content = <Text style={{ fontSize: fs - 2, lineHeight: VC_CELL }}>{enemy.emoji}</Text>;
+        else if (isStairs) content = <Text style={{ fontSize: fs - 2, lineHeight: VC_CELL }}>🚪</Text>;
+        else if (item)     content = <Text style={{ fontSize: fs - 3, lineHeight: VC_CELL }}>{item.emoji}</Text>;
+
+        cells.push(
+          <View key={`${row}-${col}`} style={{
+            position: 'absolute', left: col * VC_CELL, top: row * VC_CELL,
+            width: VC_CELL, height: VC_CELL,
+            backgroundColor: bgCell,
+            borderWidth: isWall ? 0 : 0.5,
+            borderColor: 'rgba(255,255,255,0.05)',
+            justifyContent: 'center', alignItems: 'center', overflow: 'hidden',
+          }}>
+            {content}
+          </View>
+        );
+      }
+    }
+    return cells;
+  };
+
+  const dpadBtn = (label, onPress) => (
+    <Pressable onPress={onPress} style={{
+      width: 62, height: 62,
+      backgroundColor: 'rgba(255,255,255,0.10)',
+      borderRadius: 14,
+      justifyContent: 'center', alignItems: 'center',
+      borderWidth: 1, borderColor: theme.accent + '60',
+    }}>
+      <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold' }}>{label}</Text>
+    </Pressable>
+  );
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
+      {/* HUD */}
+      <View style={[styles.header, { backgroundColor: 'rgba(0,0,0,0.55)', paddingVertical: 10 }]}>
+        <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
+        <View style={{ alignItems: 'center' }}>
+          <Text style={[styles.title, { color: theme.accent, fontSize: 20 }]}>☠️ VOID CRAWLER</Text>
+          <Text style={{ color: '#888', fontSize: 11 }}>{theme.name}  •  Floor {p.floor}/5</Text>
+        </View>
+        <Text style={{ color: '#ccc', fontSize: 13, fontWeight: 'bold' }}>Lv.{p.level} ⚔️{p.atk} 🛡️{p.def}</Text>
+      </View>
+
+      {/* HP + XP bars */}
+      {phase === 'playing' && (
+        <View style={{ paddingHorizontal: 14, paddingVertical: 5, backgroundColor: 'rgba(0,0,0,0.45)' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+            <Text style={{ color: hpColor, fontSize: 12, fontWeight: 'bold', width: 80 }}>❤️ {p.hp}/{p.maxHp}</Text>
+            <View style={{ flex: 1, height: 7, backgroundColor: '#111', borderRadius: 4, overflow: 'hidden' }}>
+              <View style={{ width: `${hpPct * 100}%`, height: '100%', backgroundColor: hpColor, borderRadius: 4 }} />
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={{ color: '#ffcc44', fontSize: 11, width: 80 }}>✨ {p.xp}/{xpNeeded(p.level)} XP</Text>
+            <View style={{ flex: 1, height: 5, backgroundColor: '#111', borderRadius: 4, overflow: 'hidden' }}>
+              <View style={{ width: `${Math.min((p.xp / xpNeeded(p.level)) * 100, 100)}%`, height: '100%', backgroundColor: '#ffcc44', borderRadius: 4 }} />
+            </View>
+          </View>
+        </View>
+      )}
+
+      {/* Grid */}
+      <View style={{
+        width: VC_COLS * VC_CELL, height: VC_ROWS * VC_CELL,
+        alignSelf: 'center', position: 'relative', marginTop: 4,
+        borderWidth: 2, borderColor: theme.accent + '44', borderRadius: 4,
+        overflow: 'hidden',
+      }}>
+        {renderGrid()}
+      </View>
+
+      {/* Message log */}
+      {phase === 'playing' && (
+        <View style={{ paddingHorizontal: 14, paddingVertical: 4, minHeight: 38, backgroundColor: 'rgba(0,0,0,0.4)' }}>
+          {msgLog.slice(0, 2).map((msg, i) => (
+            <Text key={i} style={{ color: i === 0 ? '#ddd' : '#555', fontSize: 12 }}>{msg}</Text>
+          ))}
+        </View>
+      )}
+
+      {/* D-Pad */}
+      {phase === 'playing' && (
+        <View style={{ alignItems: 'center', paddingTop: 6, paddingBottom: 6 }}>
+          <View style={{ marginBottom: 4 }}>
+            {dpadBtn('▲', () => movePlayer(0, -1))}
+          </View>
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            {dpadBtn('◄', () => movePlayer(-1, 0))}
+            {dpadBtn('▼', () => movePlayer(0, 1))}
+            {dpadBtn('►', () => movePlayer(1, 0))}
+          </View>
+        </View>
+      )}
+
+      {/* Overlay */}
+      {phase !== 'playing' && (
+        <View style={[styles.overlay, { backgroundColor: 'rgba(0,0,0,0.9)' }]}>
+          <Text style={[styles.overlayTitle, { color: theme.accent, textAlign: 'center' }]}>
+            {phase === 'idle' ? '☠️ VOID CRAWLER' : phase === 'won' ? '🏆 VOID ESCAPED!' : '💀 YOU DIED'}
+          </Text>
+          <Text style={[styles.overlaySub, { textAlign: 'center', lineHeight: 22, marginBottom: 6 }]}>
+            {phase === 'idle'
+              ? '5 floors of procedural darkness.\nFight 💀👺👹😈🐉  Loot ⚔️🛡️❤️  Level up ⬆️  Escape 🚪'
+              : phase === 'won'
+              ? `Lv.${p.level} ⚔️${p.atk} 🛡️${p.def} — ${p.hp}/${p.maxHp} HP remaining\n${msgLog[0] ?? ''}`
+              : `${msgLog[0] ?? ''}\nFloor ${p.floor} — Lv.${p.level} ⚔️${p.atk} 🛡️${p.def}`}
+          </Text>
+          <Text style={{ color: '#444', fontSize: 12, textAlign: 'center', marginBottom: 20 }}>
+            {phase === 'idle' ? '😤 Hero  🚪 Stairs down  💀👺👹😈🐉 Enemies  ⚔️🛡️❤️💊💎 Items' : ''}
+          </Text>
+          <Pressable style={[styles.btn, { backgroundColor: theme.accent }]} onPress={startGame}>
+            <Text style={[styles.btnText, { color: '#000' }]}>
+              {phase === 'idle' ? 'ENTER THE VOID' : 'DESCEND AGAIN'}
+            </Text>
+          </Pressable>
+        </View>
+      )}
+    </SafeAreaView>
+  );
+}
+
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState('menu');
 
@@ -2750,6 +3195,10 @@ export default function App() {
 
   if (currentScreen === 'breakout') {
     return <Breakout onExit={() => setCurrentScreen('menu')} />;
+  }
+
+  if (currentScreen === 'void') {
+    return <VoidCrawler onExit={() => setCurrentScreen('menu')} />;
   }
 
   return (
@@ -2791,6 +3240,11 @@ export default function App() {
       <Pressable style={[styles.menuBtn, { backgroundColor: '#f97316' }]} onPress={() => setCurrentScreen('breakout')}>
         <Text style={styles.menuBtnTitle}>🧱 BREAKOUT</Text>
         <Text style={styles.menuBtnSub}>Rompe todos los ladrillos</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#6644dd' }]} onPress={() => setCurrentScreen('void')}>
+        <Text style={[styles.menuBtnTitle, { color: '#fff' }]}>☠️ VOID CRAWLER</Text>
+        <Text style={[styles.menuBtnSub, { color: '#ccc' }]}>Roguelike • 5 pisos • combate por turnos</Text>
       </Pressable>
       </ScrollView>
     </SafeAreaView>
