@@ -15,7 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import SoundManager from './utils/SoundManager';
 
 const { width, height } = Dimensions.get('window');
-const GAME_HEIGHT = Math.min(height * 0.75, 700);
+const GAME_HEIGHT = Math.min(height - 230, 560);
 
 // --- NEON GALAXY CONSTANTS ---
 const PLAYER_SIZE = 50;
@@ -1269,7 +1269,7 @@ function PixelQuest({ onExit }) {
         </View>
       </View>
 
-      <View style={[styles.gameArea, { backgroundColor: bgColor, borderColor: '#fff', flex: 1, marginBottom: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }]}>
+      <View style={[styles.gameArea, { backgroundColor: bgColor, borderColor: '#fff', height: GAME_HEIGHT, flex: 0, marginBottom: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }]}>
         {/* Render World */}
         <View style={{ transform: [{ translateX: -cameraX.current }] }}>
           {world.current.platforms.map((plat, i) => (
