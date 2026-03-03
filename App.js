@@ -3,13 +3,13 @@ import {
   Animated,
   Dimensions,
   PanResponder,
+  Platform,
   Pressable,
   SafeAreaView,
   StyleSheet,
   Text,
   View
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SoundManager from './utils/SoundManager';
@@ -656,7 +656,7 @@ const PQ_SPEED = 7;
 const PQ_PLAYER_SIZE = 30;
 
 function PixelQuest({ onExit }) {
-  const insets = useSafeAreaInsets();
+  const bottomInset = Platform.OS === 'ios' ? 34 : 0;
   const [running, setRunning] = useState(false);
   const [level, setLevel] = useState(1);
   const [lives, setLives] = useState(3);
@@ -1304,7 +1304,7 @@ function PixelQuest({ onExit }) {
       </View>
 
       {/* D-Pad — siempre renderizado para mantener altura consistente */}
-      <View style={[styles.controlBar, { paddingBottom: insets.bottom + 12, height: insets.bottom + 95 }, !running && { opacity: 0, pointerEvents: 'none' }]}>
+      <View style={[styles.controlBar, { paddingBottom: bottomInset + 12, height: bottomInset + 95 }, !running && { opacity: 0, pointerEvents: 'none' }]}>
         <View style={styles.dpadLeftRight}>
           <View
             onTouchStart={() => { if (running) keys.current.left = true; }}
