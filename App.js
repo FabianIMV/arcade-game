@@ -146,6 +146,10 @@ function NeonGalaxy({ onExit }) {
           newLives = Math.min(newLives + 1, 9);
           powerUps.current.splice(i, 1);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
+      }
+
+      // Enemy collisions
       for (let i = enemies.current.length - 1; i >= 0; i--) {
         const e = enemies.current[i];
         let enemyDestroyed = false;
