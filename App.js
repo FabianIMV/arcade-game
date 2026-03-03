@@ -9,6 +9,7 @@ import {
   Text,
   View
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SoundManager from './utils/SoundManager';
@@ -655,6 +656,7 @@ const PQ_SPEED = 7;
 const PQ_PLAYER_SIZE = 30;
 
 function PixelQuest({ onExit }) {
+  const insets = useSafeAreaInsets();
   const [running, setRunning] = useState(false);
   const [level, setLevel] = useState(1);
   const [lives, setLives] = useState(3);
@@ -1267,7 +1269,7 @@ function PixelQuest({ onExit }) {
         </View>
       </View>
 
-      <View style={[styles.gameArea, { backgroundColor: bgColor, borderColor: '#fff', height: GAME_HEIGHT, flex: 0, marginBottom: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }]}>
+      <View style={[styles.gameArea, { backgroundColor: bgColor, borderColor: '#fff', flex: 1, marginBottom: 0, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }]}>
         {/* Render World */}
         <View style={{ transform: [{ translateX: -cameraX.current }] }}>
           {world.current.platforms.map((plat, i) => (
@@ -1302,7 +1304,7 @@ function PixelQuest({ onExit }) {
       </View>
 
       {/* D-Pad — siempre renderizado para mantener altura consistente */}
-      <View style={[styles.controlBar, !running && { opacity: 0, pointerEvents: 'none' }]}>
+      <View style={[styles.controlBar, { paddingBottom: insets.bottom + 12, height: insets.bottom + 95 }, !running && { opacity: 0, pointerEvents: 'none' }]}>
         <View style={styles.dpadLeftRight}>
           <View
             onTouchStart={() => { if (running) keys.current.left = true; }}
@@ -1769,5 +1771,5 @@ const styles = StyleSheet.create({
   dpadBtn: { width: 60, height: 60, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 30, justifyContent: 'center', alignItems: 'center' },
   dpadBtnJump: { width: 80, height: 80, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 40, justifyContent: 'center', alignItems: 'center' },
   dpadText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
-  controlBar: { height: 140, backgroundColor: 'rgba(0,0,0,0.4)', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 70 }
+  controlBar: { backgroundColor: 'rgba(0,0,0,0.4)', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 15, height: 80 }
 });
