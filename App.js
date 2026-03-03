@@ -398,6 +398,15 @@ function CyberRun({ onExit }) {
       jumpsLeft.current -= 1;
       Haptics.impactAsync(isDoubleJump ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light);
       SoundManager.play('jump');
+    }
+  };
+
+  useEffect(() => {
+    if (!running) return;
+
+    const loop = setInterval(() => {
+      const now = Date.now();
+      const currentSpeed = getSpeed();
 
       velocityY.current += CR_GRAVITY;
       playerY.current += velocityY.current;
