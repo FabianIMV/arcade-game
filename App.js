@@ -117,6 +117,8 @@ function NeonGalaxy({ onExit }) {
         lastFire.current = now;
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         SoundManager.play('laser');
+      }
+
       const spawnRate = Math.max(300, 1200 - scoreRef.current * 15);
       if (now - lastEnemy.current > spawnRate) {
         const type = NG_ENEMY_TYPES[Math.floor(Math.random() * NG_ENEMY_TYPES.length)];
@@ -172,6 +174,8 @@ function NeonGalaxy({ onExit }) {
           enemyDestroyed = true;
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
           SoundManager.play('hit');
+        }
+
         if (!enemyDestroyed) {
           for (let j = lasers.current.length - 1; j >= 0; j--) {
             const l = lasers.current[j];
