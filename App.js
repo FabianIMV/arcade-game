@@ -6,6 +6,7 @@ import {
   Platform,
   Pressable,
   SafeAreaView,
+  ScrollView,
   StyleSheet,
   Text,
   View
@@ -28,6 +29,21 @@ const CR_GROUND_HEIGHT = 60;
 const CR_GRAVITY = 0.8;
 const CR_JUMP_FORCE = -15;
 const CR_OBSTACLE_WIDTH = 30;
+
+// --- PING PONG CONSTANTS ---
+const PP_PADDLE_W = 90;
+const PP_PADDLE_H = 14;
+const PP_BALL_SIZE = 14;
+const PP_MAX_SCORE = 7;
+
+// --- BREAKOUT CONSTANTS ---
+const BK_COLS = 8;
+const BK_MARGIN = 4;
+const BK_BRICK_H = 22;
+const BK_BRICKS_TOP = 60;
+const BK_PADDLE_W = 85;
+const BK_PADDLE_H = 14;
+const BK_BALL_R = 8;
 
 const NG_ENEMY_TYPES = ['👾', '🛸', '💀'];
 
@@ -959,7 +975,7 @@ function PixelQuest({ onExit }) {
       // Plataformas angostas (80-85px), gaps grandes (90-110px),
       // 10 enemigos a 4.5-5.0, estrellas en posiciones peligrosas.
       // ═══════════════════════════════════════════════════════════════
-      default:
+      case 10:
         ld.platforms.push(
           gnd(0,   180),
           gnd(2920, 500),
@@ -991,6 +1007,158 @@ function PixelQuest({ onExit }) {
         ld.powerups.push(star(770, 197), star(1295, 137), star(1855, 215));
         ld.goal = goal(3000, 180);
         ld.length = 3200;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 11 ── CASCADA  (bajada y subida en espiral, 9 enemigos)
+      // El camino baja gradualmente y luego sube. Gaps 85-95px.
+      // ═══════════════════════════════════════════════════════════════
+      case 11:
+        ld.platforms.push(
+          gnd(0,   250),
+          gnd(2800, 500),
+          // bajada progresiva
+          plat(280,  130, 100), plat(450, 110, 100), plat(620,  90, 100),
+          plat(790,   70,  95),
+          // suelo intermedio
+          gnd(930, 220),
+          // subida progresiva
+          plat(1200,  70, 100), plat(1370,  95, 100), plat(1540, 120, 100),
+          plat(1710, 150, 100),
+          // cima y bajada final
+          plat(1890, 170,  90), plat(2070, 140,  90), plat(2250, 110,  90),
+          plat(2440,  80, 150),
+        );
+        ld.enemies.push(
+          enm(130, 120, 3.5),
+          enmP(300, 130, 75, 3.5), enmP(470, 110, 75, 4.0),
+          enm(980, 110, 3.8),
+          enmP(1220, 70, 70, 4.0), enmP(1560, 120, 70, 4.2),
+          enmP(1730, 150, 65, 4.2), enmP(1910, 170, 60, 4.5),
+          enmP(2460, 80, 80, 4.0),
+        );
+        ld.powerups.push(star(800, 115), star(1725, 195));
+        ld.goal = goal(3000, 180);
+        ld.length = 3200;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 12 ── LABERINTO  (zigzag extremo, 15 plataformas 80px)
+      // Alternancia bajo/alto/muy alto, gaps 95-100px, 9 enemigos 4.5-5.0.
+      // ═══════════════════════════════════════════════════════════════
+      case 12:
+        ld.platforms.push(
+          gnd(0,   180),
+          gnd(3100, 500),
+          plat(220,  65,  85), plat(400, 145,  80), plat(575,  70,  85),
+          plat(755, 155,  80), plat(935,  75,  85), plat(1115, 165,  80),
+          plat(1295, 80,  85), plat(1475,170,  80), plat(1655,  85,  85),
+          plat(1835,165,  80), plat(2015, 90,  80), plat(2200,155,  80),
+          plat(2380, 95,  80), plat(2560, 80, 150),
+          plat(2750, 80, 200),
+        );
+        ld.enemies.push(
+          enm(100, 80, 4.0),
+          enmP(250, 65, 60, 4.0), enmP(430, 145, 55, 4.5),
+          enmP(785, 155, 55, 4.5), enmP(1145, 165, 50, 4.8),
+          enmP(1505, 170, 50, 4.8), enmP(1865, 165, 50, 5.0),
+          enmP(2230, 155, 50, 5.0), enmP(2590, 80, 80, 4.5),
+        );
+        ld.powerups.push(star(765, 200), star(1485, 215));
+        ld.goal = goal(3280, 180);
+        ld.length = 3450;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 13 ── TORMENTA  (gaps de 115px, 14 plataformas 90px)
+      // Tres zonas de dificultad creciente, 10 enemigos 4.0-5.0.
+      // ═══════════════════════════════════════════════════════════════
+      case 13:
+        ld.platforms.push(
+          gnd(0,   160),
+          gnd(3300, 500),
+          // zona 1
+          plat(200,  80, 100), plat(390, 155, 95), plat(580,  85, 100),
+          // zona 2
+          plat(790, 165, 90), plat(995,  90, 95), plat(1205, 170, 90),
+          // zona 3
+          plat(1420, 95, 90), plat(1630,175, 85), plat(1850, 100, 90),
+          // zona final
+          plat(2075, 170, 85), plat(2295, 95, 90), plat(2510, 165, 85),
+          plat(2725, 100, 85), plat(2920, 80, 200),
+        );
+        ld.enemies.push(
+          enm(100, 80, 4.2),
+          enmP(220, 80, 75, 4.0), enmP(810, 165, 65, 4.5),
+          enmP(1010, 90, 65, 4.5), enmP(1225, 170, 60, 4.8),
+          enmP(1440, 95, 60, 5.0), enmP(1650, 175, 55, 5.0),
+          enmP(2095, 170, 55, 5.0), enmP(2530, 165, 55, 5.0),
+          enmP(2935, 80, 80, 4.8),
+        );
+        ld.powerups.push(star(800, 210), star(1645, 220));
+        ld.goal = goal(3450, 180);
+        ld.length = 3620;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 14 ── ABISMO  (plataformas 75px, gaps 115-125px)
+      // Enemies ultra rápidos 5.0-5.5, máxima precisión.
+      // ═══════════════════════════════════════════════════════════════
+      case 14:
+        ld.platforms.push(
+          gnd(0,   160),
+          gnd(3500, 500),
+          plat(200,  75,  80), plat(390, 160,  75), plat(580,  80,  80),
+          plat(775, 165,  75), plat(975,  80,  80), plat(1175, 170,  75),
+          plat(1380, 80,  80), plat(1580, 165,  75), plat(1785, 85,  80),
+          plat(1985, 170,  75), plat(2190, 90,  80), plat(2390, 160,  75),
+          plat(2595, 95,  80), plat(2795, 75, 115),
+          plat(2995, 80, 200),
+        );
+        ld.enemies.push(
+          enm(100, 80, 4.5),
+          enmP(220, 75, 55, 4.5), enmP(410, 160, 50, 5.0),
+          enmP(795, 165, 50, 5.0), enmP(1195, 170, 45, 5.5),
+          enmP(1600, 165, 45, 5.5), enmP(2005, 170, 45, 5.5),
+          enmP(2410, 160, 45, 5.5), enmP(2615, 95, 60, 5.0),
+          enmP(3010, 80, 80, 5.0),
+        );
+        ld.powerups.push(star(785, 208), star(2002, 215));
+        ld.goal = goal(3630, 180);
+        ld.length = 3800;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 15 ── EL OLIMPO  (nivel final absoluto)
+      // Plataformas 70px, gaps 120-125px, 12 enemies 5.0-6.0.
+      // ═══════════════════════════════════════════════════════════════
+      default:
+        ld.platforms.push(
+          gnd(0,   140),
+          gnd(3800, 500),
+          // fase 1
+          plat(190,  80,  75), plat(385, 165,  70), plat(580,  85,  75),
+          plat(785, 170,  70), plat(985,  85,  75),
+          // fase 2
+          plat(1200, 170,  70), plat(1410, 90,  75), plat(1625, 175,  70),
+          plat(1840, 90,  75), plat(2055, 170,  70),
+          // fase 3
+          plat(2280,  90,  75), plat(2505, 170,  70), plat(2725,  90,  75),
+          plat(2950, 165,  70), plat(3175,  85,  80),
+          plat(3395,  80, 200),
+        );
+        ld.enemies.push(
+          enm(100, 80, 5.0),
+          enmP(210, 80, 50, 5.0), enmP(405, 165, 45, 5.5),
+          enmP(805, 170, 45, 5.5), enmP(1005, 85, 50, 5.0),
+          enmP(1220, 170, 45, 5.5), enmP(1645, 175, 45, 6.0),
+          enmP(1860, 90, 45, 6.0), enmP(2075, 170, 45, 6.0),
+          enmP(2525, 170, 45, 6.0), enmP(2745, 90, 50, 5.5),
+          enmP(3415, 80, 90, 5.5),
+        );
+        ld.powerups.push(star(795, 213), star(1640, 220), star(3205, 130));
+        ld.goal = goal(3920, 185);
+        ld.length = 4100;
         break;
     }
 
@@ -1205,7 +1373,7 @@ function PixelQuest({ onExit }) {
       // Goal collision
       if (w.goal && p.x < w.goal.x + w.goal.w && p.x + p.w > w.goal.x && p.y < w.goal.y + w.goal.h && p.y + p.h > w.goal.y) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        if (level >= 10) {
+        if (level >= 15) {
           setRunning(false); setGameWon(true);
         } else {
           initLevel(level + 1);
@@ -1218,8 +1386,8 @@ function PixelQuest({ onExit }) {
   }, [running, level]);
 
   // World colors based on level (Lighter colors for better visibility)
-  const worldColors = ['#87CEEB', '#98FB98', '#DDA0DD', '#F0E68C', '#FFB6C1', '#87CEFA', '#E0FFFF', '#FFDAB9', '#B0E0E6', '#FFE4E1'];
-  const bgColor = worldColors[(level - 1) % 10];
+  const worldColors = ['#87CEEB', '#98FB98', '#DDA0DD', '#F0E68C', '#FFB6C1', '#87CEFA', '#E0FFFF', '#FFDAB9', '#B0E0E6', '#FFE4E1', '#D8F3DC', '#FDE8D8', '#D6EAF8', '#F9EBEA', '#2C3E50'];
+  const bgColor = worldColors[(level - 1) % 15];
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: bgColor }]}>
@@ -1259,7 +1427,7 @@ function PixelQuest({ onExit }) {
         {!running && (
           <View style={styles.overlay}>
             <Text style={styles.overlayTitle}>{gameWon ? 'YOU WIN!' : gameOver ? 'GAME OVER' : 'PIXEL QUEST'}</Text>
-            <Text style={styles.overlaySub}>{gameWon ? 'All 10 worlds cleared!' : 'Reach the green pillar. Grab ⭐ for invincibility + gun.'}</Text>
+            <Text style={styles.overlaySub}>{gameWon ? '¡Todos los 15 mundos conquistados! 🏆' : 'Reach the green pillar. Grab ⭐ for invincibility + gun.'}</Text>
             <View style={{flexDirection: 'row', gap: 20}}>
               <Pressable style={styles.btn} onPress={startGame}><Text style={styles.btnText}>{gameOver || gameWon ? 'RESTART' : 'START'}</Text></Pressable>
               {(!gameOver && !gameWon) && <Pressable style={[styles.btn, {backgroundColor: '#ffd700'}]} onPress={loadGame}><Text style={styles.btnText}>LOAD</Text></Pressable>}
@@ -1303,6 +1471,457 @@ function PixelQuest({ onExit }) {
   );
 }
 
+// ==========================================
+// 4. PING PONG
+// ==========================================
+function PingPong({ onExit }) {
+  const [gameState, setGameState] = useState('idle'); // idle | playing | gameover
+  const [scoreP, setScoreP] = useState(0);
+  const [scoreAI, setScoreAI] = useState(0);
+  const [, setTick] = useState(0);
+
+  const ball = useRef({ x: width / 2, y: GAME_HEIGHT / 2, vx: 4, vy: 6 });
+  const playerX = useRef(width / 2 - PP_PADDLE_W / 2);
+  const aiX = useRef(width / 2 - PP_PADDLE_W / 2);
+  const pScore = useRef(0);
+  const aScore = useRef(0);
+
+  const normalizeSpeed = (b, maxSpd) => {
+    const spd = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+    if (spd > maxSpd) { b.vx = (b.vx / spd) * maxSpd; b.vy = (b.vy / spd) * maxSpd; }
+    if (Math.abs(b.vy) < 4) b.vy = b.vy > 0 ? 4 : -4;
+  };
+
+  const resetBall = (toPlayer = true) => {
+    ball.current = {
+      x: width / 2 - PP_BALL_SIZE / 2,
+      y: GAME_HEIGHT / 2 - PP_BALL_SIZE / 2,
+      vx: (Math.random() > 0.5 ? 1 : -1) * (4 + Math.random() * 2),
+      vy: toPlayer ? Math.abs(5 + Math.random() * 2) : -(5 + Math.random() * 2),
+    };
+  };
+
+  const startGame = () => {
+    pScore.current = 0;
+    aScore.current = 0;
+    setScoreP(0);
+    setScoreAI(0);
+    playerX.current = width / 2 - PP_PADDLE_W / 2;
+    aiX.current = width / 2 - PP_PADDLE_W / 2;
+    resetBall(true);
+    setGameState('playing');
+  };
+
+  useEffect(() => {
+    if (gameState !== 'playing') return;
+    const loop = setInterval(() => {
+      const b = ball.current;
+      b.x += b.vx;
+      b.y += b.vy;
+
+      // Left/right wall bounce
+      if (b.x <= 0) { b.x = 0; b.vx = Math.abs(b.vx); }
+      if (b.x >= width - PP_BALL_SIZE) { b.x = width - PP_BALL_SIZE; b.vx = -Math.abs(b.vx); }
+
+      // AI paddle collision (top)
+      const aiPadY = 40;
+      if (b.vy < 0 && b.y <= aiPadY + PP_PADDLE_H && b.y + PP_BALL_SIZE >= aiPadY) {
+        if (b.x + PP_BALL_SIZE > aiX.current && b.x < aiX.current + PP_PADDLE_W) {
+          b.vy = Math.abs(b.vy);
+          const rel = (b.x + PP_BALL_SIZE / 2 - aiX.current) / PP_PADDLE_W;
+          b.vx = (rel - 0.5) * 12;
+          normalizeSpeed(b, 13);
+        }
+      }
+
+      // Player paddle collision (bottom)
+      const pPadY = GAME_HEIGHT - PP_PADDLE_H - 40;
+      if (b.vy > 0 && b.y + PP_BALL_SIZE >= pPadY && b.y <= pPadY + PP_PADDLE_H) {
+        if (b.x + PP_BALL_SIZE > playerX.current && b.x < playerX.current + PP_PADDLE_W) {
+          b.vy = -Math.abs(b.vy) * 1.04;
+          const rel = (b.x + PP_BALL_SIZE / 2 - playerX.current) / PP_PADDLE_W;
+          b.vx = (rel - 0.5) * 12;
+          normalizeSpeed(b, 14);
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
+      }
+
+      // AI movement with progressive difficulty
+      const aiTarget = b.x + PP_BALL_SIZE / 2 - PP_PADDLE_W / 2;
+      const aiDiff = aiTarget - aiX.current;
+      const aiSpd = Math.min(Math.abs(aiDiff), 3 + aScore.current * 0.2);
+      aiX.current = Math.max(0, Math.min(width - PP_PADDLE_W, aiX.current + Math.sign(aiDiff) * aiSpd));
+
+      // Scoring
+      if (b.y > GAME_HEIGHT + 20) {
+        aScore.current += 1;
+        setScoreAI(aScore.current);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        if (aScore.current >= PP_MAX_SCORE) { setGameState('gameover'); return; }
+        resetBall(true);
+      } else if (b.y < -20) {
+        pScore.current += 1;
+        setScoreP(pScore.current);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        if (pScore.current >= PP_MAX_SCORE) { setGameState('gameover'); return; }
+        resetBall(false);
+      }
+
+      setTick(t => t + 1);
+    }, 16);
+    return () => clearInterval(loop);
+  }, [gameState]);
+
+  const ppPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderMove: (_, gs) => {
+        playerX.current = Math.max(0, Math.min(width - PP_PADDLE_W, gs.moveX - PP_PADDLE_W / 2));
+      },
+    })
+  ).current;
+
+  const won = pScore.current >= PP_MAX_SCORE;
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
+        <Text style={[styles.title, { color: '#fff' }]}>PING PONG 🏓</Text>
+        <View style={[styles.stats, { justifyContent: 'center', gap: 8 }]}>
+          <Text style={[styles.statText, { color: '#f55', fontSize: 20 }]}>{scoreAI}</Text>
+          <Text style={[styles.statText, { color: '#aaa' }]}>vs</Text>
+          <Text style={[styles.statText, { color: '#ff0', fontSize: 20 }]}>{scoreP}</Text>
+        </View>
+      </View>
+
+      <View style={[styles.gameArea, { backgroundColor: '#05081a' }]} {...ppPanResponder.panHandlers}>
+        {/* Center dashed line */}
+        {Array.from({ length: 16 }).map((_, i) => (
+          <View key={i} style={{
+            position: 'absolute', left: width / 2 - 2,
+            top: 50 + i * ((GAME_HEIGHT - 100) / 16),
+            width: 4, height: (GAME_HEIGHT - 100) / 16 * 0.45,
+            backgroundColor: 'rgba(255,255,255,0.18)',
+          }} />
+        ))}
+
+        {/* AI label */}
+        <Text style={{ position: 'absolute', top: 14, left: 16, color: '#f55', fontSize: 13, fontWeight: 'bold' }}>🤖 AI</Text>
+        {/* Player label */}
+        <Text style={{ position: 'absolute', bottom: 14, right: 16, color: '#ff0', fontSize: 13, fontWeight: 'bold' }}>YOU 🟡</Text>
+
+        {/* AI paddle */}
+        <View style={{
+          position: 'absolute', left: aiX.current, top: 40,
+          width: PP_PADDLE_W, height: PP_PADDLE_H,
+          backgroundColor: '#f55', borderRadius: 7,
+          shadowColor: '#f55', shadowOpacity: 0.8, shadowRadius: 8,
+        }} />
+
+        {/* Player paddle */}
+        <View style={{
+          position: 'absolute', left: playerX.current,
+          top: GAME_HEIGHT - PP_PADDLE_H - 40,
+          width: PP_PADDLE_W, height: PP_PADDLE_H,
+          backgroundColor: '#ff0', borderRadius: 7,
+          shadowColor: '#ff0', shadowOpacity: 0.8, shadowRadius: 8,
+        }} />
+
+        {/* Ball */}
+        <View style={{
+          position: 'absolute', left: ball.current.x, top: ball.current.y,
+          width: PP_BALL_SIZE, height: PP_BALL_SIZE,
+          backgroundColor: '#fff', borderRadius: PP_BALL_SIZE / 2,
+          shadowColor: '#fff', shadowOpacity: 1, shadowRadius: 8,
+        }} />
+
+        {gameState !== 'playing' && (
+          <View style={styles.overlay}>
+            <Text style={styles.overlayTitle}>
+              {gameState === 'gameover' ? (won ? '🏆 YOU WIN!' : '🤖 AI WINS') : '🏓 PING PONG'}
+            </Text>
+            {gameState === 'gameover' && (
+              <Text style={[styles.overlaySub, { color: '#ffd700', fontSize: 22, marginBottom: 8 }]}>
+                {scoreP} — {scoreAI}
+              </Text>
+            )}
+            <Text style={styles.overlaySub}>
+              {gameState === 'idle'
+                ? `¡Primero en llegar a ${PP_MAX_SCORE} gana! Arrastra tu paleta 🟡.`
+                : won ? '¡Increíble! Venciste a la IA.' : '¡Sigue intentándolo!'}
+            </Text>
+            <Pressable style={styles.btn} onPress={startGame}>
+              <Text style={styles.btnText}>{gameState === 'gameover' ? 'REVANCHA' : 'JUGAR'}</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+    </SafeAreaView>
+  );
+}
+
+// ==========================================
+// 5. BREAKOUT
+// ==========================================
+function Breakout({ onExit }) {
+  const brickW = (width - BK_MARGIN * (BK_COLS + 1)) / BK_COLS;
+  const [gameState, setGameState] = useState('idle');
+  const [score, setScore] = useState(0);
+  const [lives, setLives] = useState(3);
+  const [level, setLevel] = useState(1);
+  const [, setTick] = useState(0);
+
+  const paddleX = useRef(width / 2 - BK_PADDLE_W / 2);
+  const ball = useRef({ x: width / 2 - BK_BALL_R, y: GAME_HEIGHT - 110, vx: 0, vy: 0 });
+  const bricksRef = useRef([]);
+  const scoreRef = useRef(0);
+  const livesRef = useRef(3);
+  const levelRef = useRef(1);
+  const highScore = useRef(0);
+  const launched = useRef(false);
+
+  const BRICK_COLORS = ['#ff4444', '#ff6600', '#ffcc00', '#44cc44', '#0099ff', '#9933ff', '#ff66bb', '#00ffcc'];
+
+  const buildLevel = (lvl) => {
+    const baseRows = Math.min(4 + Math.floor((lvl - 1) / 2), 8);
+    const bs = [];
+    for (let r = 0; r < baseRows; r++) {
+      for (let c = 0; c < BK_COLS; c++) {
+        let include = true;
+        if (lvl === 3 || lvl === 6 || lvl === 9) {
+          // Diamond
+          const midC = (BK_COLS - 1) / 2;
+          const midR = (baseRows - 1) / 2;
+          if (Math.abs(c - midC) + Math.abs(r - midR) > baseRows / 2 + 0.5) include = false;
+        } else if (lvl === 4 || lvl === 7 || lvl === 10) {
+          // Checkerboard
+          include = (r + c) % 2 === 0;
+        } else if (lvl === 5 || lvl === 8) {
+          // Inverted V
+          const halfCols = BK_COLS / 2;
+          const targetRow = Math.floor(Math.abs(c - halfCols + 0.5));
+          if (r < targetRow) include = false;
+        }
+        if (!include) continue;
+        const hits = lvl >= 3 && r < 2 ? 2 : 1;
+        bs.push({
+          id: r * 100 + c,
+          x: BK_MARGIN + c * (brickW + BK_MARGIN),
+          y: BK_BRICKS_TOP + r * (BK_BRICK_H + BK_MARGIN),
+          w: brickW,
+          h: BK_BRICK_H,
+          hits,
+          maxHits: hits,
+          color: BRICK_COLORS[r % BRICK_COLORS.length],
+          active: true,
+        });
+      }
+    }
+    bricksRef.current = bs;
+  };
+
+  const resetBallToPaddle = () => {
+    launched.current = false;
+    ball.current.vx = 0;
+    ball.current.vy = 0;
+  };
+
+  const launchBall = () => {
+    if (launched.current || gameState !== 'playing') return;
+    launched.current = true;
+    const spd = 7 + levelRef.current * 0.4;
+    ball.current.vx = (Math.random() > 0.5 ? 1 : -1) * (4 + Math.random() * 2);
+    ball.current.vy = -spd;
+  };
+
+  const startGame = () => {
+    scoreRef.current = 0;
+    livesRef.current = 3;
+    levelRef.current = 1;
+    setScore(0);
+    setLives(3);
+    setLevel(1);
+    paddleX.current = width / 2 - BK_PADDLE_W / 2;
+    buildLevel(1);
+    resetBallToPaddle();
+    setGameState('playing');
+  };
+
+  useEffect(() => {
+    if (gameState !== 'playing') return;
+    const loop = setInterval(() => {
+      const b = ball.current;
+
+      if (!launched.current) {
+        b.x = paddleX.current + BK_PADDLE_W / 2 - BK_BALL_R;
+        b.y = GAME_HEIGHT - BK_PADDLE_H - 42 - BK_BALL_R * 2;
+        setTick(t => t + 1);
+        return;
+      }
+
+      b.x += b.vx;
+      b.y += b.vy;
+
+      // Wall bounce
+      if (b.x <= 0) { b.x = 0; b.vx = Math.abs(b.vx); }
+      if (b.x + BK_BALL_R * 2 >= width) { b.x = width - BK_BALL_R * 2; b.vx = -Math.abs(b.vx); }
+      if (b.y <= 0) { b.y = 0; b.vy = Math.abs(b.vy); }
+
+      // Paddle collision
+      const pY = GAME_HEIGHT - BK_PADDLE_H - 42;
+      if (b.vy > 0 && b.y + BK_BALL_R * 2 >= pY && b.y <= pY + BK_PADDLE_H) {
+        if (b.x + BK_BALL_R * 2 > paddleX.current && b.x < paddleX.current + BK_PADDLE_W) {
+          b.vy = -Math.abs(b.vy);
+          const rel = (b.x + BK_BALL_R - paddleX.current) / BK_PADDLE_W;
+          b.vx = (rel - 0.5) * 14;
+          const spd = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+          const maxSpd = 8 + levelRef.current * 0.4;
+          if (spd > maxSpd + 3) { b.vx = (b.vx / spd) * (maxSpd + 3); b.vy = (b.vy / spd) * (maxSpd + 3); }
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
+      }
+
+      // Brick collisions
+      for (let i = bricksRef.current.length - 1; i >= 0; i--) {
+        const br = bricksRef.current[i];
+        if (!br.active) continue;
+        const cx = b.x + BK_BALL_R;
+        const cy = b.y + BK_BALL_R;
+        if (cx > br.x && cx < br.x + br.w && cy > br.y && cy < br.y + br.h) {
+          br.hits -= 1;
+          if (br.hits <= 0) br.active = false;
+          const fromTop = cy - br.y;
+          const fromBottom = br.y + br.h - cy;
+          const fromLeft = cx - br.x;
+          const fromRight = br.x + br.w - cx;
+          const minPen = Math.min(fromTop, fromBottom, fromLeft, fromRight);
+          if (minPen === fromTop || minPen === fromBottom) b.vy = -b.vy;
+          else b.vx = -b.vx;
+          scoreRef.current += br.maxHits * 10;
+          setScore(scoreRef.current);
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          break;
+        }
+      }
+
+      // Level clear
+      if (bricksRef.current.every(br => !br.active)) {
+        levelRef.current += 1;
+        setLevel(levelRef.current);
+        buildLevel(levelRef.current);
+        resetBallToPaddle();
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+
+      // Ball lost
+      if (b.y > GAME_HEIGHT + 30) {
+        livesRef.current -= 1;
+        setLives(livesRef.current);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        if (livesRef.current <= 0) {
+          if (scoreRef.current > highScore.current) highScore.current = scoreRef.current;
+          setGameState('gameover');
+          return;
+        }
+        resetBallToPaddle();
+      }
+
+      setTick(t => t + 1);
+    }, 16);
+    return () => clearInterval(loop);
+  }, [gameState]);
+
+  const bkPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => launchBall(),
+      onPanResponderMove: (_, gs) => {
+        paddleX.current = Math.max(0, Math.min(width - BK_PADDLE_W, gs.moveX - BK_PADDLE_W / 2));
+      },
+    })
+  ).current;
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
+        <Text style={[styles.title, { color: '#ff6600' }]}>BREAKOUT 🧱</Text>
+        <View style={styles.stats}>
+          <Text style={styles.statText}>LVL {level}</Text>
+          <Text style={styles.statText}>❤️ {lives}</Text>
+          <Text style={styles.statText}>{score}</Text>
+        </View>
+      </View>
+
+      <View style={[styles.gameArea, { backgroundColor: '#08080f' }]} {...bkPanResponder.panHandlers}>
+        {/* Bricks */}
+        {bricksRef.current.map(br => br.active && (
+          <View key={br.id} style={{
+            position: 'absolute', left: br.x, top: br.y, width: br.w, height: br.h,
+            backgroundColor: br.hits < br.maxHits ? '#555' : br.color,
+            borderRadius: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+            justifyContent: 'center', alignItems: 'center',
+          }}>
+            {br.maxHits > 1 && (
+              <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>
+                {'●'.repeat(br.hits)}
+              </Text>
+            )}
+          </View>
+        ))}
+
+        {/* Ball */}
+        <View style={{
+          position: 'absolute',
+          left: ball.current.x, top: ball.current.y,
+          width: BK_BALL_R * 2, height: BK_BALL_R * 2,
+          backgroundColor: '#fff', borderRadius: BK_BALL_R,
+          shadowColor: '#fff', shadowOpacity: 1, shadowRadius: 6,
+        }} />
+
+        {/* Paddle */}
+        <View style={{
+          position: 'absolute',
+          left: paddleX.current, top: GAME_HEIGHT - BK_PADDLE_H - 42,
+          width: BK_PADDLE_W, height: BK_PADDLE_H,
+          backgroundColor: '#ff6600', borderRadius: 7,
+          shadowColor: '#ff6600', shadowOpacity: 0.9, shadowRadius: 8,
+        }} />
+
+        {/* Launch hint */}
+        {!launched.current && gameState === 'playing' && (
+          <Text style={{ position: 'absolute', bottom: 70, alignSelf: 'center', color: '#888', fontSize: 13 }}>
+            Toca para lanzar 🎯
+          </Text>
+        )}
+
+        {gameState !== 'playing' && (
+          <View style={styles.overlay}>
+            <Text style={styles.overlayTitle}>
+              {gameState === 'gameover' ? '💥 GAME OVER' : '🧱 BREAKOUT'}
+            </Text>
+            {gameState === 'gameover' && (
+              <Text style={[styles.overlaySub, { color: '#ffd700' }]}>
+                Score: {score}   Récord: {highScore.current}
+              </Text>
+            )}
+            <Text style={styles.overlaySub}>
+              {gameState === 'idle' ? 'Arrastra para mover la paleta. ¡Rompe todos los ladrillos!' : '¡Gracias por jugar!'}
+            </Text>
+            <Pressable style={styles.btn} onPress={startGame}>
+              <Text style={styles.btnText}>{gameState === 'gameover' ? 'RETRY' : 'START'}</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+    </SafeAreaView>
+  );
+}
+
+// ==========================================
 function GalacticHunt({ onExit }) {
   const [gameState, setGameState] = useState('idle'); // 'idle' | 'playing' | 'roundEnd' | 'gameOver'
   const [score, setScore] = useState(0);
@@ -2085,8 +2704,17 @@ export default function App() {
     return <SnakePower onExit={() => setCurrentScreen('menu')} />;
   }
 
+  if (currentScreen === 'pingpong') {
+    return <PingPong onExit={() => setCurrentScreen('menu')} />;
+  }
+
+  if (currentScreen === 'breakout') {
+    return <Breakout onExit={() => setCurrentScreen('menu')} />;
+  }
+
   return (
     <SafeAreaView style={styles.menuContainer}>
+      <ScrollView contentContainerStyle={styles.menuScroll} showsVerticalScrollIndicator={false}>
       <Text style={styles.menuTitle}>ARCADE HUB</Text>
       <Text style={styles.menuSub}>Select a game</Text>
       
@@ -2102,7 +2730,7 @@ export default function App() {
 
       <Pressable style={[styles.menuBtn, { backgroundColor: '#32cd32' }]} onPress={() => setCurrentScreen('pixel')}>
         <Text style={styles.menuBtnTitle}>PIXEL QUEST</Text>
-        <Text style={styles.menuBtnSub}>10-World Platformer</Text>
+        <Text style={styles.menuBtnSub}>15-World Platformer</Text>
       </Pressable>
 
       <Pressable style={[styles.menuBtn, { backgroundColor: '#7c3aed' }]} onPress={() => setCurrentScreen('galactic')}>
@@ -2114,13 +2742,25 @@ export default function App() {
         <Text style={styles.menuBtnTitle}>🐍 SNAKE POWER</Text>
         <Text style={styles.menuBtnSub}>Snake clásico con poderes</Text>
       </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#0ea5e9' }]} onPress={() => setCurrentScreen('pingpong')}>
+        <Text style={styles.menuBtnTitle}>🏓 PING PONG</Text>
+        <Text style={styles.menuBtnSub}>1 vs IA · primero a 7 gana</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#f97316' }]} onPress={() => setCurrentScreen('breakout')}>
+        <Text style={styles.menuBtnTitle}>🧱 BREAKOUT</Text>
+        <Text style={styles.menuBtnSub}>Rompe todos los ladrillos</Text>
+      </Pressable>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#050510' },
-  menuContainer: { flex: 1, backgroundColor: '#050510', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  menuContainer: { flex: 1, backgroundColor: '#050510' },
+  menuScroll: { alignItems: 'center', padding: 20, paddingTop: 40, paddingBottom: 40 },
   menuTitle: { color: '#fff', fontSize: 40, fontWeight: '900', marginBottom: 10, textShadowColor: '#0ff', textShadowRadius: 10 },
   menuSub: { color: '#aaa', fontSize: 18, marginBottom: 40 },
   menuBtn: { backgroundColor: '#0ff', width: '100%', padding: 20, borderRadius: 15, marginBottom: 20, alignItems: 'center', shadowColor: '#0ff', shadowOpacity: 0.5, shadowRadius: 10 },
