@@ -1044,34 +1044,34 @@ function PixelQuest({ onExit }) {
         break;
 
       // ═══════════════════════════════════════════════════════════════
-      // WORLD 11 ── CASCADA  (bajada y subida en espiral, 9 enemigos)
-      // El camino baja gradualmente y luego sube. Gaps 85-95px.
+      // WORLD 11 ── CASCADA  (sube suave → baja → sube de nuevo)
+      // Primera plataforma yUp=65 (fácilmente alcanzable), luego escala.
       // ═══════════════════════════════════════════════════════════════
       case 11:
         ld.platforms.push(
-          gnd(0,   250),
+          gnd(0,   280),
           gnd(2800, 500),
-          // bajada progresiva
-          plat(280,  130, 100), plat(450, 110, 100), plat(620,  90, 100),
-          plat(790,   70,  95),
-          // suelo intermedio
-          gnd(930, 220),
-          // subida progresiva
-          plat(1200,  70, 100), plat(1370,  95, 100), plat(1540, 120, 100),
-          plat(1710, 150, 100),
-          // cima y bajada final
-          plat(1890, 170,  90), plat(2070, 140,  90), plat(2250, 110,  90),
-          plat(2440,  80, 150),
+          // subida suave al inicio (yUp 65→85→105→120)
+          plat(320,  65, 110), plat(500,  85, 105), plat(680, 105, 100),
+          plat(850, 120, 100),
+          // suelo intermedio de descanso
+          gnd(1000, 210),
+          // bajada al otro lado (120→95→70)
+          plat(1260, 120, 105), plat(1430,  95, 105), plat(1600,  70, 100),
+          // suelo bajo y subida final (70→100→120→105→80)
+          gnd(1760, 180),
+          plat(2000, 70, 100), plat(2165, 100, 100), plat(2330, 120,  95),
+          plat(2490,  80, 160),
         );
         ld.enemies.push(
-          enm(130, 120, 3.5),
-          enmP(300, 130, 75, 3.5), enmP(470, 110, 75, 4.0),
-          enm(980, 110, 3.8),
-          enmP(1220, 70, 70, 4.0), enmP(1560, 120, 70, 4.2),
-          enmP(1730, 150, 65, 4.2), enmP(1910, 170, 60, 4.5),
-          enmP(2460, 80, 80, 4.0),
+          enm(160, 130, 3.5),
+          enmP(345,  65, 80, 3.5), enmP(525,  85, 75, 4.0),
+          enm(1050, 110, 3.8),
+          enmP(1285, 120, 75, 4.0), enmP(1455,  95, 70, 4.2),
+          enm(1810, 110, 4.0),
+          enmP(2025,  70, 70, 4.2), enmP(2355, 120, 65, 4.5),
         );
-        ld.powerups.push(star(800, 115), star(1725, 195));
+        ld.powerups.push(star(860, 165), star(1615, 115));
         ld.goal = goal(3000, 180);
         ld.length = 3200;
         break;
