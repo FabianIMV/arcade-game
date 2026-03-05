@@ -692,6 +692,8 @@ function PixelQuest({ onExit }) {
   const [invincible, setInvincible] = useState(false);
   const [hasGun, setHasGun] = useState(false);
   const [, setTick] = useState(0);
+  const [maxLevel, setMaxLevel] = useState(1);
+  const [showWorldSelect, setShowWorldSelect] = useState(false);
 
   const pRef = useRef({ x: 50, y: 100, vx: 0, vy: 0, w: PQ_PLAYER_SIZE, h: PQ_PLAYER_SIZE, facingRight: true });
   const keys = useRef({ left: false, right: false });
@@ -700,6 +702,14 @@ function PixelQuest({ onExit }) {
   const invincibilityTimer = useRef(0);
   const tickRef = useRef(0);
   const projectiles = useRef([]);
+  const maxLevelRef = useRef(1);
+  const wasRunningRef = useRef(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem('pixelQuestMaxLevel').then(v => {
+      if (v) { const n = parseInt(v); maxLevelRef.current = n; setMaxLevel(n); }
+    }).catch(() => {});
+  }, []);
 
   const generateLevel = (lvl) => {
     // GY = top of the ground floor. All "y" for objects = GY - objectHeight (so feet land on GY).
@@ -1203,6 +1213,11 @@ function PixelQuest({ onExit }) {
   const initLevel = (lvl) => {
     setLevel(lvl);
     if (lvl >= 11 && lvl <= 13) setLives(l => l + 1);
+    if (lvl > maxLevelRef.current) {
+      maxLevelRef.current = lvl;
+      setMaxLevel(lvl);
+      AsyncStorage.setItem('pixelQuestMaxLevel', String(lvl)).catch(() => {});
+    }
     pRef.current = { x: 50, y: 100, vx: 0, vy: 0, w: PQ_PLAYER_SIZE, h: PQ_PLAYER_SIZE, facingRight: true };
     keys.current = { left: false, right: false };
     cameraX.current = 0;
@@ -1223,7 +1238,11 @@ function PixelQuest({ onExit }) {
 
   const saveGame = async () => {
     try {
-      await AsyncStorage.setItem('pixelQuestSave', JSON.stringify({ level, lives }));
+      await AsyncStorage.setItem('pixelQuestSave', JSON.stringify({
+        level, lives,
+        playerX: pRef.current.x,
+        cameraX: cameraX.current,
+      }));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       alert('Game Saved!');
     } catch (e) {
@@ -1240,10 +1259,16 @@ function PixelQuest({ onExit }) {
         setGameWon(false);
         setLives(data.lives);
         initLevel(data.level);
+        if (data.playerX != null) {
+          pRef.current.x = data.playerX;
+          pRef.current.vx = 0;
+          pRef.current.vy = 0;
+        }
+        if (data.cameraX != null) cameraX.current = data.cameraX;
         setRunning(true);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
-        alert('No save found');
+        alert('No hay partida guardada');
       }
     } catch (e) {
       console.error(e);
@@ -1441,10 +1466,19 @@ function PixelQuest({ onExit }) {
       <View style={styles.header}>
         <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
         <Text style={styles.title}>WORLD {level}</Text>
-        <View style={styles.stats}>
-          <Text style={styles.statText}>LIVES: {lives}</Text>
-          <Pressable onPress={saveGame} style={{marginLeft: 15, backgroundColor: '#0ff', paddingHorizontal: 10, borderRadius: 5}}>
-            <Text style={{color: '#000', fontWeight: 'bold'}}>SAVE</Text>
+        <View style={{ position: 'absolute', right: 10, top: 8, alignItems: 'flex-end', gap: 3, zIndex: 10 }}>
+          <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold' }}>❤️ {lives}</Text>
+          <Pressable onPress={() => { wasRunningRef.current = running; setRunning(false); setShowWorldSelect(true); }}
+            style={{ backgroundColor: '#9b59b6', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 4 }}>
+            <Text style={{ color: '#fff', fontSize: 9, fontWeight: 'bold' }}>🗺 MUNDOS</Text>
+          </Pressable>
+          <Pressable onPress={loadGame}
+            style={{ backgroundColor: '#ffd700', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
+            <Text style={{ color: '#000', fontSize: 11, fontWeight: 'bold' }}>LOAD</Text>
+          </Pressable>
+          <Pressable onPress={saveGame}
+            style={{ backgroundColor: '#0ff', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
+            <Text style={{ color: '#000', fontSize: 11, fontWeight: 'bold' }}>SAVE</Text>
           </Pressable>
         </View>
       </View>
@@ -1514,6 +1548,37 @@ function PixelQuest({ onExit }) {
           </View>
         </View>
       </View>
+
+      {/* World Select Modal */}
+      {showWorldSelect && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.92)', zIndex: 999, padding: 20, justifyContent: 'center', alignItems: 'center' }}>
+          <Text style={{ color: '#fff', fontSize: 22, fontWeight: 'bold', marginBottom: 4 }}>🗺 SELECCIONAR MUNDO</Text>
+          <Text style={{ color: '#aaa', fontSize: 12, marginBottom: 16 }}>Desbloqueados: 1 – {maxLevel}</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center', maxWidth: 320 }}>
+            {Array.from({ length: maxLevel }, (_, i) => i + 1).map(w => (
+              <Pressable key={w} onPress={() => {
+                setShowWorldSelect(false);
+                setGameOver(false);
+                setGameWon(false);
+                initLevel(w);
+                setRunning(true);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              }} style={{
+                width: 58, height: 58,
+                backgroundColor: w === level ? '#0ff' : '#1a1a3a',
+                borderRadius: 10, justifyContent: 'center', alignItems: 'center',
+                borderWidth: 2, borderColor: w === level ? '#0ff' : '#444',
+              }}>
+                <Text style={{ color: w === level ? '#000' : '#fff', fontSize: 18, fontWeight: 'bold' }}>{w}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <Pressable onPress={() => { setShowWorldSelect(false); if (wasRunningRef.current) setRunning(true); }}
+            style={{ marginTop: 22, backgroundColor: '#e74c3c', paddingHorizontal: 30, paddingVertical: 10, borderRadius: 8 }}>
+            <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 16 }}>CANCELAR</Text>
+          </Pressable>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
