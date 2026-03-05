@@ -713,7 +713,8 @@ function PixelQuest({ onExit }) {
     const plat = (x, yUp, w)         => ({ x, y: GY - yUp, w, h: PH });    // floating (yUp = px above GY)
     const enm  = (x, range, spd)     => ({ x, y: GY - 30, w: 30, h: 30, vx: spd, startX: x, range, active: true });
     const enmP = (x, yUp, range, spd)=> ({ x, y: GY - yUp - 30, w: 30, h: 30, vx: spd, startX: x, range, active: true });
-    const star = (x, yUp)            => ({ x, y: GY - yUp, w: 25, h: 25, active: true });
+    const star = (x, yUp)            => ({ x, y: GY - yUp, w: 25, h: 25, active: true, type: 'star' });
+    const life = (x, yUp)            => ({ x, y: GY - yUp, w: 25, h: 25, active: true, type: 'life' });
     const goal = (x, yUp = 140)      => ({ x, y: GY - yUp, w: 55, h: yUp });
 
     switch (lvl) {
@@ -739,7 +740,7 @@ function PixelQuest({ onExit }) {
           enm(330, 130, 1.5),     // patrulla lenta en suelo inicio
           enm(1250, 160, 1.8),    // patrulla lenta en suelo final
         );
-        ld.powerups.push(star(290, 155)); // ⭐ sobre plataforma bonus
+        ld.powerups.push(star(290, 155), life(700, 35)); // ⭐ plataforma bonus, ❤️ mid-level
         ld.goal = goal(1680);
         ld.length = 1850;
         break;
@@ -767,7 +768,7 @@ function PixelQuest({ onExit }) {
           enm(520,  120, 2.2),
           enm(1300, 150, 2.0),
         );
-        ld.powerups.push(star(165, 160), star(1428, 160));
+        ld.powerups.push(star(165, 160), star(1428, 160), life(1100, 35));
         ld.goal = goal(1830);
         ld.length = 2000;
         break;
@@ -798,7 +799,7 @@ function PixelQuest({ onExit }) {
           enmP(855, 130, 70, 2.5),     // guarda escalón 5 (bajada)
           enm(1450, 140, 2.2),         // patrulla en final
         );
-        ld.powerups.push(star(710, 212)); // ⭐ flotando sobre la CIMA (yUp=165+47)
+        ld.powerups.push(star(710, 212), life(1400, 35)); // ⭐ CIMA, ❤️ final ground
         ld.goal = goal(1720);
         ld.length = 1900;
         break;
@@ -829,7 +830,7 @@ function PixelQuest({ onExit }) {
           enm(1190, 110, 2.5),
           enm(1650, 150, 2.2),
         );
-        ld.powerups.push(star(155, 165), star(1705, 160));
+        ld.powerups.push(star(155, 165), star(1705, 160), life(950, 35));
         ld.goal = goal(2180);
         ld.length = 2350;
         break;
@@ -864,7 +865,7 @@ function PixelQuest({ onExit }) {
           enmP(1695, 130, 70, 3.0),    // isla 10
           enmP(2015, 120, 90, 2.8),    // isla 12
         );
-        ld.powerups.push(star(710, 178), star(1860, 125)); // sobre islas altas
+        ld.powerups.push(star(710, 178), star(1860, 125), life(2300, 35)); // islas altas, ❤️ final
         ld.goal = goal(2550);
         ld.length = 2700;
         break;
@@ -896,7 +897,7 @@ function PixelQuest({ onExit }) {
           enm(1660, 150, 3.0),
           enm(1930, 140, 3.2),
         );
-        ld.powerups.push(star(165, 165), star(1785, 170));
+        ld.powerups.push(star(165, 165), star(1785, 170), life(1000, 35));
         ld.goal = goal(2170);
         ld.length = 2320;
         break;
@@ -933,7 +934,7 @@ function PixelQuest({ onExit }) {
           enmP(1530,145, 55, 3.5),
           enmP(1905,150, 55, 3.8),
         );
-        ld.powerups.push(star(785, 182), star(1515, 192));
+        ld.powerups.push(star(785, 182), star(1515, 192), life(2700, 35));
         ld.goal = goal(2900);
         ld.length = 3050;
         break;
@@ -968,7 +969,7 @@ function PixelQuest({ onExit }) {
           enmP(1370,130, 65, 4.2), enmP(1740, 80, 65, 4.0),
           enmP(2120,150, 60, 4.5), enmP(2490, 90, 80, 4.0),
         );
-        ld.powerups.push(star(785, 178), star(1155, 222), star(2285, 196));
+        ld.powerups.push(star(785, 178), star(1155, 222), star(2285, 196), life(2900, 35));
         ld.goal = goal(3020, 160);
         ld.length = 3200;
         break;
@@ -999,7 +1000,7 @@ function PixelQuest({ onExit }) {
           enm(1050, 110, 4.2),  enm(1350,120, 4.5),
           enm(1690, 110, 4.5),  enm(2030,120, 4.5),
         );
-        ld.powerups.push(star(85, 165), star(1325, 170), star(2185, 165));
+        ld.powerups.push(star(85, 165), star(1325, 170), star(2185, 165), life(1700, 35));
         ld.goal = goal(2980, 160);
         ld.length = 3150;
         break;
@@ -1038,7 +1039,7 @@ function PixelQuest({ onExit }) {
           enmP(1505,165,  50, 5.0),  enmP(1875,170, 50, 5.0),
           enmP(2055,110,  55, 4.8),  enmP(2445, 85, 70, 4.5),
         );
-        ld.powerups.push(star(770, 197), star(1295, 137), star(1855, 215));
+        ld.powerups.push(star(770, 197), star(1295, 137), star(1855, 215), life(2680, 115));
         ld.goal = goal(3000, 180);
         ld.length = 3200;
         break;
@@ -1157,7 +1158,7 @@ function PixelQuest({ onExit }) {
           enmP(2410, 160, 45, 5.5), enmP(2615, 95, 60, 5.0),
           enmP(3010, 80, 80, 5.0),
         );
-        ld.powerups.push(star(785, 208), star(2002, 215));
+        ld.powerups.push(star(785, 208), star(2002, 215), life(3045, 115));
         ld.goal = goal(3630, 180);
         ld.length = 3800;
         break;
@@ -1190,7 +1191,7 @@ function PixelQuest({ onExit }) {
           enmP(2525, 170, 45, 6.0), enmP(2745, 90, 50, 5.5),
           enmP(3415, 80, 90, 5.5),
         );
-        ld.powerups.push(star(795, 213), star(1640, 220), star(3205, 130));
+        ld.powerups.push(star(795, 213), star(1640, 220), star(3205, 130), life(3435, 115));
         ld.goal = goal(3920, 185);
         ld.length = 4100;
         break;
@@ -1201,6 +1202,7 @@ function PixelQuest({ onExit }) {
 
   const initLevel = (lvl) => {
     setLevel(lvl);
+    if (lvl >= 11 && lvl <= 13) setLives(l => l + 1);
     pRef.current = { x: 50, y: 100, vx: 0, vy: 0, w: PQ_PLAYER_SIZE, h: PQ_PLAYER_SIZE, facingRight: true };
     keys.current = { left: false, right: false };
     cameraX.current = 0;
@@ -1308,11 +1310,11 @@ function PixelQuest({ onExit }) {
       if (keys.current.left) {
         p.vx = -PQ_SPEED;
         p.facingRight = false;
-        if (tickRef.current % 8 === 0) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (tickRef.current % 8 === 0) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       } else if (keys.current.right) {
         p.vx = PQ_SPEED;
         p.facingRight = true;
-        if (tickRef.current % 8 === 0) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (tickRef.current % 8 === 0) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       } else {
         p.vx = 0;
       }
@@ -1375,12 +1377,19 @@ function PixelQuest({ onExit }) {
         if (!pu.active) continue;
         if (p.x < pu.x + pu.w && p.x + p.w > pu.x && p.y < pu.y + pu.h && p.y + p.h > pu.y) {
           pu.active = false;
-          setInvincible(true);
-          setHasGun(true);
-          invincibilityTimer.current = 5000; // 5 seconds
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 120);
-          setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 240);
+          if (pu.type === 'life') {
+            setLives(l => Math.min(l + 1, 9));
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 80);
+            setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 160);
+          } else {
+            setInvincible(true);
+            setHasGun(true);
+            invincibilityTimer.current = 5000; // 5 seconds
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 120);
+            setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 240);
+          }
         }
       }
 
@@ -1450,7 +1459,7 @@ function PixelQuest({ onExit }) {
             <Text key={`e${i}`} style={{ position: 'absolute', left: e.x, top: e.y - 5, fontSize: 30 }}>👾</Text>
           ))}
           {world.current.powerups.map((pu, i) => pu.active && (
-            <Text key={`pu${i}`} style={{ position: 'absolute', left: pu.x, top: pu.y - 5, fontSize: 25 }}>⭐</Text>
+            <Text key={`pu${i}`} style={{ position: 'absolute', left: pu.x, top: pu.y - 5, fontSize: 25 }}>{pu.type === 'life' ? '❤️' : '⭐'}</Text>
           ))}
           {world.current.goal && (
             <View style={{ position: 'absolute', left: world.current.goal.x, top: world.current.goal.y, width: world.current.goal.w, height: world.current.goal.h, backgroundColor: '#32cd32', borderRadius: 10, borderWidth: 3, borderColor: '#fff' }} />
@@ -2506,7 +2515,7 @@ function SnakePower({ onExit }) {
     const cur = dirRef.current;
     if (newDir.x === -cur.x && newDir.y === -cur.y) return;
     nextDirRef.current = newDir;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
   };
 
   const startGame = () => {
@@ -2596,8 +2605,8 @@ function SnakePower({ onExit }) {
       alignItems: 'center',
     },
     ctrlBtn: {
-      width: 54,
-      height: 54,
+      width: 72,
+      height: 72,
       backgroundColor: '#161b22',
       borderRadius: 10,
       margin: 4,
@@ -2942,7 +2951,7 @@ function VoidCrawler({ onExit }) {
     const m = mapRef.current;
     const nx = p.x + dx, ny = p.y + dy;
     if (ny < 0 || ny >= VC_ROWS || nx < 0 || nx >= VC_COLS) return;
-    if (m[ny][nx] === VC_WALL) { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); return; }
+    if (m[ny][nx] === VC_WALL) { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); return; }
 
     // Attack enemy
     const ei = enemiesRef.current.findIndex(e => e.x === nx && e.y === ny);
@@ -2967,7 +2976,7 @@ function VoidCrawler({ onExit }) {
 
     // Move
     p.x = nx; p.y = ny;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     // Pick up item
     const ii = itemsRef.current.findIndex(it => it.x === nx && it.y === ny);
@@ -3066,7 +3075,7 @@ function VoidCrawler({ onExit }) {
 
   const dpadBtn = (label, onPress) => (
     <Pressable onPress={onPress} style={{
-      width: 62, height: 62,
+      width: 75, height: 75,
       backgroundColor: 'rgba(255,255,255,0.10)',
       borderRadius: 14,
       justifyContent: 'center', alignItems: 'center',
@@ -3280,8 +3289,8 @@ const styles = StyleSheet.create({
   btnText: { color: '#000', fontSize: 20, fontWeight: '900' },
   dpadContainer: { position: 'absolute', bottom: 20, left: 20, right: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
   dpadLeftRight: { flexDirection: 'row', gap: 10 },
-  dpadBtn: { width: 60, height: 60, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 30, justifyContent: 'center', alignItems: 'center' },
-  dpadBtnJump: { width: 80, height: 80, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 40, justifyContent: 'center', alignItems: 'center' },
+  dpadBtn: { width: 72, height: 72, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 36, justifyContent: 'center', alignItems: 'center' },
+  dpadBtnJump: { width: 90, height: 90, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 45, justifyContent: 'center', alignItems: 'center' },
   dpadText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
   controlBar: { backgroundColor: 'rgba(0,0,0,0.4)', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 15, height: 80 }
 });
