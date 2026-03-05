@@ -691,19 +691,21 @@ function PixelQuest({ onExit }) {
   const [gameWon, setGameWon] = useState(false);
   const [invincible, setInvincible] = useState(false);
   const [hasGun, setHasGun] = useState(false);
+  const [hasDoubleJump, setHasDoubleJump] = useState(false);
   const [, setTick] = useState(0);
   const [maxLevel, setMaxLevel] = useState(1);
   const [showWorldSelect, setShowWorldSelect] = useState(false);
 
   const pRef = useRef({ x: 50, y: 100, vx: 0, vy: 0, w: PQ_PLAYER_SIZE, h: PQ_PLAYER_SIZE, facingRight: true });
   const keys = useRef({ left: false, right: false });
-  const world = useRef({ platforms: [], enemies: [], powerups: [], goal: null, length: 2000 });
+  const world = useRef({ platforms: [], enemies: [], powerups: [], blocks: [], goal: null, length: 2000 });
   const cameraX = useRef(0);
   const invincibilityTimer = useRef(0);
   const tickRef = useRef(0);
   const projectiles = useRef([]);
   const maxLevelRef = useRef(1);
   const wasRunningRef = useRef(false);
+  const doubleJumpRef = useRef(0);
 
   useEffect(() => {
     AsyncStorage.getItem('pixelQuestMaxLevel').then(v => {
@@ -716,16 +718,19 @@ function PixelQuest({ onExit }) {
     const GY = GAME_HEIGHT - 60; // ground Y (top surface)
     const GH = 60;               // ground thickness
     const PH = 18;               // floating platform height
-    const ld = { platforms: [], enemies: [], powerups: [], goal: null, length: 0 };
+    const ld = { platforms: [], enemies: [], powerups: [], blocks: [], goal: null, length: 0 };
 
     // Helpers
-    const gnd  = (x, w)              => ({ x, y: GY,     w, h: GH });      // ground slab
-    const plat = (x, yUp, w)         => ({ x, y: GY - yUp, w, h: PH });    // floating (yUp = px above GY)
-    const enm  = (x, range, spd)     => ({ x, y: GY - 30, w: 30, h: 30, vx: spd, startX: x, range, active: true });
-    const enmP = (x, yUp, range, spd)=> ({ x, y: GY - yUp - 30, w: 30, h: 30, vx: spd, startX: x, range, active: true });
-    const star = (x, yUp)            => ({ x, y: GY - yUp, w: 25, h: 25, active: true, type: 'star' });
-    const life = (x, yUp)            => ({ x, y: GY - yUp, w: 25, h: 25, active: true, type: 'life' });
-    const goal = (x, yUp = 140)      => ({ x, y: GY - yUp, w: 55, h: yUp });
+    const gnd   = (x, w)              => ({ x, y: GY,     w, h: GH });      // ground slab
+    const plat  = (x, yUp, w)         => ({ x, y: GY - yUp, w, h: PH });    // floating (yUp = px above GY)
+    const enm   = (x, range, spd)     => ({ x, y: GY - 30, w: 30, h: 30, vx: spd, startX: x, range, active: true });
+    const enmP  = (x, yUp, range, spd)=> ({ x, y: GY - yUp - 30, w: 30, h: 30, vx: spd, startX: x, range, active: true });
+    const star  = (x, yUp)            => ({ x, y: GY - yUp, w: 25, h: 25, active: true, type: 'star' });
+    const life  = (x, yUp)            => ({ x, y: GY - yUp, w: 25, h: 25, active: true, type: 'life' });
+    const djump = (x, yUp)            => ({ x, y: GY - yUp, w: 25, h: 25, active: true, type: 'doublejump' });
+    const goal  = (x, yUp = 140)      => ({ x, y: GY - yUp, w: 55, h: yUp });
+    // Bloques ❓ golpeables desde abajo (tipo: 'star' | 'life' | 'doublejump')
+    const qBlock = (x, yUp, type)     => ({ x, y: GY - yUp, w: 35, h: 35, active: true, hit: false, type });
 
     switch (lvl) {
 
@@ -1109,7 +1114,12 @@ function PixelQuest({ onExit }) {
           enmP(1505, 170, 50, 4.8), enmP(1865, 165, 50, 5.0),
           enmP(2230, 155, 50, 5.0), enmP(2590, 80, 80, 4.5),
         );
-        ld.powerups.push(star(765, 200), star(1485, 215));
+        ld.powerups.push(star(765, 200), djump(1130, 215), star(1485, 215));
+        ld.blocks.push(
+          qBlock(420, 190, 'star'),
+          qBlock(1120, 130, 'doublejump'),
+          qBlock(2015, 135, 'life'),
+        );
         ld.goal = goal(3280, 180);
         ld.length = 3450;
         break;
@@ -1140,25 +1150,32 @@ function PixelQuest({ onExit }) {
           enmP(2095, 170, 55, 5.0), enmP(2530, 165, 55, 5.0),
           enmP(2935, 80, 80, 4.8),
         );
-        ld.powerups.push(star(800, 210), star(1645, 220));
+        ld.powerups.push(star(800, 210), djump(1210, 215), star(1645, 220));
+        ld.blocks.push(
+          qBlock(590, 130, 'doublejump'),
+          qBlock(1425, 140, 'star'),
+          qBlock(2510, 210, 'life'),
+        );
         ld.goal = goal(3450, 180);
         ld.length = 3620;
         break;
 
       // ═══════════════════════════════════════════════════════════════
-      // WORLD 14 ── ABISMO  (plataformas 75px, gaps 115-125px)
-      // Enemies ultra rápidos 5.0-5.5, máxima precisión.
+      // WORLD 14 ── ABISMO  (plataformas 75-80px, gaps manejables)
+      // Enemies ultra rápidos 5.0-5.5. Doble salto disponible.
+      // CORREGIDO: plataforma puente al final para alcanzar la meta.
       // ═══════════════════════════════════════════════════════════════
       case 14:
         ld.platforms.push(
           gnd(0,   160),
-          gnd(3500, 500),
+          gnd(3380, 500),
           plat(200,  75,  80), plat(390, 160,  75), plat(580,  80,  80),
           plat(775, 165,  75), plat(975,  80,  80), plat(1175, 170,  75),
           plat(1380, 80,  80), plat(1580, 165,  75), plat(1785, 85,  80),
           plat(1985, 170,  75), plat(2190, 90,  80), plat(2390, 160,  75),
           plat(2595, 95,  80), plat(2795, 75, 115),
-          plat(2995, 80, 200),
+          plat(2995, 80, 200),   // termina en x=3195
+          plat(3270, 85,  85),   // PUENTE: gap=75px desde x=3195, termina en x=3355
         );
         ld.enemies.push(
           enm(100, 80, 4.5),
@@ -1168,9 +1185,19 @@ function PixelQuest({ onExit }) {
           enmP(2410, 160, 45, 5.5), enmP(2615, 95, 60, 5.0),
           enmP(3010, 80, 80, 5.0),
         );
-        ld.powerups.push(star(785, 208), star(2002, 215), life(3045, 115));
-        ld.goal = goal(3630, 180);
-        ld.length = 3800;
+        ld.powerups.push(
+          star(785, 208), djump(1195, 215), star(2002, 215),
+          djump(2800, 120), life(3050, 115),
+        );
+        ld.blocks.push(
+          qBlock(600,  130, 'doublejump'),
+          qBlock(1395, 125, 'star'),
+          qBlock(1790, 130, 'doublejump'),
+          qBlock(2595, 140, 'star'),
+          qBlock(3000, 125, 'life'),
+        );
+        ld.goal = goal(3490, 180);
+        ld.length = 3700;
         break;
 
       // ═══════════════════════════════════════════════════════════════
@@ -1201,7 +1228,14 @@ function PixelQuest({ onExit }) {
           enmP(2525, 170, 45, 6.0), enmP(2745, 90, 50, 5.5),
           enmP(3415, 80, 90, 5.5),
         );
-        ld.powerups.push(star(795, 213), star(1640, 220), star(3205, 130), life(3435, 115));
+        ld.powerups.push(star(795, 213), djump(1215, 220), star(1640, 220), djump(2530, 215), star(3205, 130), life(3435, 115));
+        ld.blocks.push(
+          qBlock(590, 130, 'doublejump'),
+          qBlock(1210, 215, 'star'),
+          qBlock(1845, 135, 'doublejump'),
+          qBlock(2725, 135, 'life'),
+          qBlock(3200, 130, 'doublejump'),
+        );
         ld.goal = goal(3920, 185);
         ld.length = 4100;
         break;
@@ -1223,6 +1257,8 @@ function PixelQuest({ onExit }) {
     cameraX.current = 0;
     setInvincible(false);
     setHasGun(false);
+    doubleJumpRef.current = 0;
+    setHasDoubleJump(false);
     projectiles.current = [];
     invincibilityTimer.current = 0;
     generateLevel(lvl);
@@ -1304,9 +1340,25 @@ function PixelQuest({ onExit }) {
         onGround = true; break;
       }
     }
+    // También contar bloques ❓ como suelo
+    if (!onGround) {
+      for (let blk of (world.current.blocks || [])) {
+        if (!blk.active) continue;
+        if (p.x < blk.x + blk.w && p.x + p.w > blk.x && p.y + p.h >= blk.y && p.y + p.h <= blk.y + 10) {
+          onGround = true; break;
+        }
+      }
+    }
     if (onGround) {
       p.vy = PQ_JUMP;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } else if (doubleJumpRef.current > 0) {
+      // ¡Doble salto!
+      doubleJumpRef.current -= 1;
+      p.vy = PQ_JUMP;
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light), 80);
+      if (doubleJumpRef.current === 0) setHasDoubleJump(false);
     }
   };
 
@@ -1407,6 +1459,13 @@ function PixelQuest({ onExit }) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 80);
             setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 160);
+          } else if (pu.type === 'doublejump') {
+            doubleJumpRef.current = Math.min(doubleJumpRef.current + 3, 6);
+            setHasDoubleJump(true);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 80);
+            setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 160);
+            setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 240);
           } else {
             setInvincible(true);
             setHasGun(true);
@@ -1414,6 +1473,36 @@ function PixelQuest({ onExit }) {
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 120);
             setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 240);
+          }
+        }
+      }
+
+      // Mystery blocks ❓ collision
+      for (let blk of (w.blocks || [])) {
+        if (!blk.active) continue;
+        if (p.x < blk.x + blk.w && p.x + p.w > blk.x && p.y < blk.y + blk.h && p.y + p.h > blk.y) {
+          if (p.vy < 0 && !blk.hit) {
+            // Golpe desde abajo — activar bloque
+            blk.hit = true;
+            p.y = blk.y + blk.h;
+            p.vy = 0;
+            w.powerups.push({
+              x: blk.x + blk.w / 2 - 12,
+              y: blk.y - 30,
+              w: 25, h: 25,
+              active: true,
+              type: blk.type,
+            });
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+            setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 80);
+          } else if (p.vy > 0) {
+            // Aterrizar encima del bloque
+            p.y = blk.y - p.h;
+            p.vy = 0;
+          } else if (p.vy < 0 && blk.hit) {
+            // Bloque ya golpeado — rebotar jugador
+            p.y = blk.y + blk.h;
+            p.vy = 0;
           }
         }
       }
@@ -1468,6 +1557,7 @@ function PixelQuest({ onExit }) {
         <Text style={styles.title}>WORLD {level}</Text>
         <View style={{ position: 'absolute', right: 10, top: 8, alignItems: 'flex-end', gap: 3, zIndex: 10 }}>
           <Text style={{ color: '#fff', fontSize: 13, fontWeight: 'bold' }}>❤️ {lives}</Text>
+          {hasDoubleJump && <Text style={{ color: '#0ff', fontSize: 11, fontWeight: 'bold' }}>🦅×{doubleJumpRef.current}</Text>}
           <Pressable onPress={() => { wasRunningRef.current = running; setRunning(false); setShowWorldSelect(true); }}
             style={{ backgroundColor: '#9b59b6', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 4 }}>
             <Text style={{ color: '#fff', fontSize: 9, fontWeight: 'bold' }}>🗺 MUNDOS</Text>
@@ -1493,7 +1583,14 @@ function PixelQuest({ onExit }) {
             <Text key={`e${i}`} style={{ position: 'absolute', left: e.x, top: e.y - 5, fontSize: 30 }}>👾</Text>
           ))}
           {world.current.powerups.map((pu, i) => pu.active && (
-            <Text key={`pu${i}`} style={{ position: 'absolute', left: pu.x, top: pu.y - 5, fontSize: 25 }}>{pu.type === 'life' ? '❤️' : '⭐'}</Text>
+            <Text key={`pu${i}`} style={{ position: 'absolute', left: pu.x, top: pu.y - 5, fontSize: 25 }}>
+              {pu.type === 'life' ? '❤️' : pu.type === 'doublejump' ? '🦅' : '⭐'}
+            </Text>
+          ))}
+          {(world.current.blocks || []).map((blk, i) => (
+            <Text key={`blk${i}`} style={{ position: 'absolute', left: blk.x, top: blk.y - 5, fontSize: 28 }}>
+              {blk.hit ? '📦' : '❓'}
+            </Text>
           ))}
           {world.current.goal && (
             <View style={{ position: 'absolute', left: world.current.goal.x, top: world.current.goal.y, width: world.current.goal.w, height: world.current.goal.h, backgroundColor: '#32cd32', borderRadius: 10, borderWidth: 3, borderColor: '#fff' }} />
@@ -1518,7 +1615,7 @@ function PixelQuest({ onExit }) {
       </View>
 
       {/* D-Pad — siempre renderizado para mantener altura consistente */}
-      <View style={[styles.controlBar, { paddingBottom: bottomInset + 12, height: bottomInset + 95 }, !running && { opacity: 0, pointerEvents: 'none' }]}>
+      <View style={[styles.controlBar, { paddingBottom: bottomInset + 12, height: bottomInset + 125 }, !running && { opacity: 0, pointerEvents: 'none' }]}>
         <View style={styles.dpadLeftRight}>
           <View
             onTouchStart={() => { if (running) keys.current.left = true; }}
@@ -3354,8 +3451,8 @@ const styles = StyleSheet.create({
   btnText: { color: '#000', fontSize: 20, fontWeight: '900' },
   dpadContainer: { position: 'absolute', bottom: 20, left: 20, right: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
   dpadLeftRight: { flexDirection: 'row', gap: 10 },
-  dpadBtn: { width: 72, height: 72, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 36, justifyContent: 'center', alignItems: 'center' },
-  dpadBtnJump: { width: 90, height: 90, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 45, justifyContent: 'center', alignItems: 'center' },
-  dpadText: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
-  controlBar: { backgroundColor: 'rgba(0,0,0,0.4)', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 15, height: 80 }
+  dpadBtn: { width: 90, height: 90, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 45, justifyContent: 'center', alignItems: 'center' },
+  dpadBtnJump: { width: 112, height: 112, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 56, justifyContent: 'center', alignItems: 'center' },
+  dpadText: { color: '#fff', fontSize: 30, fontWeight: 'bold' },
+  controlBar: { backgroundColor: 'rgba(0,0,0,0.4)', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 15, height: 100 }
 });

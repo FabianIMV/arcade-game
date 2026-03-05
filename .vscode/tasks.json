@@ -6,6 +6,13 @@
       "type": "shell",
       "command": "EXPO_TOKEN= npx eas-cli login -u fabianimv -p 'F1i9m9v6.-' && CI=1 npx eas-cli update --branch main --message 'Update'",
       "problemMatcher": []
+    },
+    {
+      "label": "Git Push + EAS Update",
+      "type": "shell",
+      "command": "git add -A && git commit -m 'fix: Mundo 14 puente final + doble salto + bloques ? + botones grandes' && git push origin main && EXPO_TOKEN= npx eas-cli login -u fabianimv -p 'F1i9m9v6.-' && CI=1 npx eas-cli update --branch main --message 'fix: Mundo 14 + doble salto + bloques ? + botones grandes'",
+      "problemMatcher": [],
+      "group": { "kind": "build", "isDefault": false }
     }
   ]
 }
