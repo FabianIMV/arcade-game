@@ -3337,6 +3337,622 @@ function VoidCrawler({ onExit }) {
   );
 }
 
+// ==========================================
+// 9. MONSTER DUEL  (Pokémon-style battles!)
+// ==========================================
+const MD_MONSTERS = [
+  { id:0,  name:'FLAMECAT',   emoji:'🐱', type:'fire',     hp:45, atk:15, def:8,  moves:['Arañazo','Brasa','Rugido','Placaje'],        evo:1,  evoLvl:16 },
+  { id:1,  name:'BLAZELION',  emoji:'🦁', type:'fire',     hp:70, atk:25, def:14, moves:['Tajo','Lanzallamas','Rugido','Erupción'],     evo:-1, evoLvl:0 },
+  { id:2,  name:'AQUAPUP',    emoji:'🐶', type:'water',    hp:44, atk:13, def:10, moves:['Placaje','Pistola Agua','Gruñido','Mordisco'], evo:3,  evoLvl:16 },
+  { id:3,  name:'TIDEWOLF',   emoji:'🐺', type:'water',    hp:68, atk:22, def:17, moves:['Mordisco','Surf','Aullido','Triturar'],        evo:-1, evoLvl:0 },
+  { id:4,  name:'SPROUTLING', emoji:'🌱', type:'grass',    hp:45, atk:11, def:12, moves:['Placaje','Látigo Cepa','Gruñido','Polvo Somnífero'], evo:5, evoLvl:16 },
+  { id:5,  name:'THORNWOOD',  emoji:'🌲', type:'grass',    hp:65, atk:18, def:20, moves:['Hoja Aguda','Rayo Solar','Espora','Síntesis'], evo:-1, evoLvl:0 },
+  { id:6,  name:'ZAPPYMOLE',  emoji:'🐹', type:'electric', hp:38, atk:20, def:6, moves:['Placaje','Impactueno','Agilidad','Trueno'],    evo:7,  evoLvl:18 },
+  { id:7,  name:'VOLTFANG',   emoji:'🦔', type:'electric', hp:58, atk:32, def:10, moves:['Onda Trueno','Giga Impacto','Rapidez','Voltio Cruel'], evo:-1, evoLvl:0 },
+  { id:8,  name:'FROSTBEAR',  emoji:'🐻', type:'ice',      hp:60, atk:20, def:18, moves:['Placaje','Rayo Hielo','Gruñido','Ventisca'],  evo:-1, evoLvl:0 },
+  { id:9,  name:'SHADOWFOX',  emoji:'🦊', type:'dark',     hp:42, atk:22, def:8,  moves:['Arañazo','Ja de Trampa','Arena','Pulso Umbrio'], evo:-1, evoLvl:0 },
+  { id:10, name:'AEROBIRD',   emoji:'🐦', type:'flying',   hp:38, atk:17, def:8,  moves:['Picoteo','Ventisca','Remolino','Ala de Acero'], evo:11, evoLvl:20 },
+  { id:11, name:'STORMROC',   emoji:'🦅', type:'flying',   hp:60, atk:28, def:13, moves:['As Aéreo','Huracán','Ave Audaz','Ataque Cielo'], evo:-1, evoLvl:0 },
+  { id:12, name:'INKOCTUS',   emoji:'🐙', type:'water',    hp:40, atk:16, def:11, moves:['Placaje','Tinta','Constricción','Hidrobomba'], evo:-1, evoLvl:0 },
+  { id:13, name:'BLAZESTEED', emoji:'🐴', type:'fire',     hp:60, atk:24, def:12, moves:['Pisotón','Llamarada','Agilidad','Carga Llamas'], evo:-1, evoLvl:0 },
+  { id:14, name:'STONEGUARD', emoji:'🦏', type:'rock',     hp:70, atk:16, def:25, moves:['Placaje','Lanzarrocas','Endurecer','Avalancha'], evo:-1, evoLvl:0 },
+];
+const MD_MULT = {
+  fire:{ grass:2, ice:2, water:0.5, rock:0.5, fire:0.5 },
+  water:{ fire:2, rock:2, grass:0.5, water:0.5 },
+  grass:{ water:2, rock:2, fire:0.5, grass:0.5, flying:0.5 },
+  electric:{ water:2, flying:2, grass:0.5, electric:0.5 },
+  rock:{ fire:2, flying:2, water:0.5, grass:0.5 },
+  ice:{ grass:2, flying:2, water:0.5, ice:0.5 },
+  dark:{}, flying:{ grass:2, electric:0.5, rock:0.5 },
+};
+const MD_TC = { fire:'#ff4500',water:'#1e90ff',grass:'#3cb371',electric:'#ffd700',rock:'#a0522d',ice:'#00ced1',dark:'#7b2d9b',flying:'#87ceeb' };
+
+function MonsterDuel({ onExit }) {
+  const [phase, setPhase]       = useState('starter');
+  const [team, setTeam]         = useState([]);
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [wild, setWild]         = useState(null);
+  const [wildHp, setWildHp]     = useState(0);
+  const [turn, setTurn]         = useState('player');
+  const [log, setLog]           = useState(['¡Bienvenido al mundo de los Monstruos!']);
+  const [badges, setBadges]     = useState(0);
+  const [caughtIds, setCaughtIds] = useState([]);
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+  const teamRef   = useRef([]);
+  const wildRef   = useRef(null);
+  const wildHpRef = useRef(0);
+
+  const addLog = (m) => setLog(l => [m, ...l.slice(0,4)]);
+  const mkMon  = (id, lvl) => {
+    const b = MD_MONSTERS[id], sc = 1 + (lvl - 5) * 0.1;
+    return { ...b, level:lvl, maxHp:Math.floor(b.hp*sc), currentHp:Math.floor(b.hp*sc), xp:0, xpNeeded:lvl*20 };
+  };
+  const calcDmg = (a, d) => {
+    const mult = MD_MULT[a.type]?.[d.type] ?? 1;
+    return Math.max(1, Math.floor((a.atk * 1.4 - d.def * 0.5) * mult + Math.random() * 4));
+  };
+  const shake = () => Animated.sequence([
+    Animated.timing(shakeAnim,{toValue:10,duration:60,useNativeDriver:true}),
+    Animated.timing(shakeAnim,{toValue:-10,duration:60,useNativeDriver:true}),
+    Animated.timing(shakeAnim,{toValue:5,duration:60,useNativeDriver:true}),
+    Animated.timing(shakeAnim,{toValue:0,duration:60,useNativeDriver:true}),
+  ]).start();
+
+  const chooseStarter = (id) => {
+    const m = mkMon(id, 5);
+    setTeam([m]); teamRef.current = [m];
+    setActiveIdx(0); setPhase('explore');
+    addLog(`¡${m.name} quiere ser tu compañero!`);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+  const explore = () => {
+    if (Math.random() < 0.45) {
+      const wId  = Math.floor(Math.random() * MD_MONSTERS.length);
+      const wLvl = Math.max(3, (teamRef.current[0]?.level ?? 5) + Math.floor(Math.random()*5) - 2);
+      const wm   = mkMon(wId, wLvl);
+      setWild(wm); wildRef.current = wm;
+      setWildHp(wm.maxHp); wildHpRef.current = wm.maxHp;
+      setTurn('player'); setPhase('battle');
+      addLog(`¡Un ${wm.name} salvaje apareció!`);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } else { addLog('No hay encuentros… sigue explorando.'); }
+  };
+  const gainXp = (amount) => setTeam(prev => {
+    return prev.map((m, i) => {
+      if (i !== activeIdx) return m;
+      let nm = { ...m, xp: m.xp + amount };
+      while (nm.xp >= nm.xpNeeded) {
+        nm.xp -= nm.xpNeeded; nm.level++;
+        nm.xpNeeded = nm.level * 20;
+        nm.maxHp = Math.floor(nm.hp * (1 + (nm.level-5)*0.1));
+        nm.currentHp = Math.min(nm.currentHp + 8, nm.maxHp);
+        nm.atk = (nm.atk||0) + 1; nm.def = (nm.def||0) + 1;
+        addLog(`¡${nm.name} subió al nivel ${nm.level}! ⬆️`);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        if (nm.evo !== -1 && nm.level >= nm.evoLvl) {
+          const ed = MD_MONSTERS[nm.evo];
+          nm = { ...nm, ...ed, level:nm.level, xp:nm.xp, xpNeeded:nm.xpNeeded,
+            maxHp:Math.floor(ed.hp*(1+(nm.level-5)*0.1)), currentHp:Math.floor(ed.hp*(1+(nm.level-5)*0.1)) };
+          addLog(`✨ ¡${m.name} evolucionó a ${nm.name}!`);
+        }
+      }
+      teamRef.current[i] = nm; return nm;
+    });
+  });
+  const playerAttack = (mi) => {
+    if (turn !== 'player') return;
+    const p = teamRef.current[activeIdx]; const w = wildRef.current; if (!p||!w) return;
+    const dmg = calcDmg(p, w);
+    const mult = MD_MULT[p.type]?.[w.type] ?? 1;
+    const eff  = mult > 1 ? ' ¡Muy eficaz!' : mult < 1 ? ' No muy eficaz.' : '';
+    const nhp  = Math.max(0, wildHpRef.current - dmg);
+    wildHpRef.current = nhp; setWildHp(nhp);
+    addLog(`${p.name} usa ${p.moves[mi]}! -${dmg}💥${eff}`);
+    shake(); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (nhp <= 0) { const xp = w.level*15; addLog(`¡${w.name} vencido! +${xp}XP`); setBadges(b=>b+1); gainXp(xp); setTimeout(()=>setPhase('explore'),1200); return; }
+    setTurn('enemy'); setTimeout(enemyTurn, 900);
+  };
+  const enemyTurn = () => {
+    const w = wildRef.current; const p = teamRef.current[activeIdx]; if (!w||!p) return;
+    const dmg  = calcDmg(w, p);
+    const nhp  = Math.max(0, p.currentHp - dmg);
+    addLog(`${w.name} ataca! -${dmg} a ${p.name}`);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setTeam(prev => { const n = prev.map((m,i)=>{if(i!==activeIdx)return m; const nm={...m,currentHp:nhp}; teamRef.current[i]=nm; return nm;}); return n; });
+    if (nhp <= 0) {
+      addLog(`¡${p.name} se desmayó!`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      const alive = teamRef.current.filter((m,i)=>i!==activeIdx&&m.currentHp>0);
+      setTimeout(()=>{ if(!alive.length)setPhase('gameover'); else setPhase('explore'); }, 800);
+      return;
+    }
+    setTurn('player');
+  };
+  const tryCatch = () => {
+    if (turn !== 'player') return;
+    const w = wildRef.current;
+    const rate = Math.max(0.05, (1 - wildHpRef.current/w.maxHp)*0.75 + 0.1);
+    addLog('🔴 ¡Lanzando Monstruball!'); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setTimeout(()=>{
+      if (Math.random() < rate) {
+        addLog(`¡${w.name} capturado! 🎉`);
+        setCaughtIds(c=>[...c,w.id]);
+        if (teamRef.current.length < 3) { const nm={...w,currentHp:Math.floor(w.maxHp*0.5)}; setTeam(prev=>{const n=[...prev,nm];teamRef.current=n;return n;}); }
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setTimeout(()=>setPhase('explore'), 900);
+      } else { addLog(`¡${w.name} escapó!`); setTurn('enemy'); setTimeout(enemyTurn,600); }
+    },700);
+  };
+  const hpc = (hp,max) => hp>max*0.5?'#22c55e':hp>max*0.2?'#f59e0b':'#ef4444';
+  const Bar = ({hp,max}) => (
+    <View style={{height:7,backgroundColor:'#222',borderRadius:4,overflow:'hidden',marginTop:4}}>
+      <View style={{width:`${Math.max(0,hp/max*100)}%`,height:'100%',backgroundColor:hpc(hp,max),borderRadius:4}}/>
+    </View>
+  );
+
+  if (phase==='starter') return (
+    <SafeAreaView style={[styles.container,{backgroundColor:'#0f1729'}]}>
+      <View style={styles.header}>
+        <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
+        <Text style={[styles.title,{color:'#ffd700',fontSize:18}]}>⚡ MONSTER DUEL</Text>
+      </View>
+      <ScrollView contentContainerStyle={{padding:20,alignItems:'center'}}>
+        <Text style={{color:'#fff',fontSize:22,fontWeight:'bold',marginBottom:6,textAlign:'center'}}>🌍 ¡Elige tu Starter!</Text>
+        <Text style={{color:'#aaa',fontSize:14,marginBottom:24,textAlign:'center'}}>Tu primer monstruo compañero de aventura</Text>
+        {[MD_MONSTERS[0],MD_MONSTERS[2],MD_MONSTERS[4]].map(m=>(
+          <Pressable key={m.id} onPress={()=>chooseStarter(m.id)} style={{
+            width:'92%',padding:18,borderRadius:16,marginBottom:16,
+            backgroundColor:MD_TC[m.type]+'22',borderWidth:2,borderColor:MD_TC[m.type],
+            flexDirection:'row',alignItems:'center',gap:14,
+          }}>
+            <Text style={{fontSize:54}}>{m.emoji}</Text>
+            <View style={{flex:1}}>
+              <Text style={{color:'#fff',fontSize:18,fontWeight:'bold'}}>{m.name}</Text>
+              <Text style={{color:MD_TC[m.type],fontSize:12,fontWeight:'bold',marginBottom:4}}>{m.type.toUpperCase()}</Text>
+              <Text style={{color:'#888',fontSize:11}}>HP:{m.hp}  ATK:{m.atk}  DEF:{m.def}</Text>
+              <Text style={{color:'#555',fontSize:10,marginTop:2}}>{m.moves.join(' · ')}</Text>
+            </View>
+          </Pressable>
+        ))}
+      </ScrollView>
+    </SafeAreaView>
+  );
+
+  const p = team[activeIdx];
+  return (
+    <SafeAreaView style={[styles.container,{backgroundColor:phase==='battle'?'#0d1b2a':'#0d1f0d'}]}>
+      <View style={[styles.header,{backgroundColor:'rgba(0,0,0,0.6)'}]}>
+        <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
+        <Text style={[styles.title,{color:'#ffd700',fontSize:18}]}>⚡ MONSTER DUEL</Text>
+        <Text style={{color:'#ffd700',fontSize:12}}>🏅{badges}  👾{caughtIds.length}</Text>
+      </View>
+      {phase==='battle' && wild && (
+        <View style={{padding:14,flex:1}}>
+          <View style={{backgroundColor:'rgba(255,255,255,0.06)',borderRadius:14,padding:12,marginBottom:10}}>
+            <View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'center'}}>
+              <View style={{flex:1}}>
+                <Text style={{color:'#fff',fontSize:14,fontWeight:'bold'}}>{wild.name} <Text style={{color:MD_TC[wild.type],fontSize:12}}>[{wild.type}]</Text></Text>
+                <Text style={{color:'#aaa',fontSize:11}}>Lv.{wild.level}  {wildHp}/{wild.maxHp} HP</Text>
+                <Bar hp={wildHp} max={wild.maxHp}/>
+              </View>
+              <Animated.Text style={{fontSize:60,transform:[{translateX:shakeAnim}]}}>{wild.emoji}</Animated.Text>
+            </View>
+          </View>
+          {p && (
+            <View style={{backgroundColor:'rgba(255,255,255,0.06)',borderRadius:14,padding:12,marginBottom:14}}>
+              <View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'center'}}>
+                <Text style={{fontSize:52}}>{p.emoji}</Text>
+                <View style={{alignItems:'flex-end',flex:1,marginLeft:12}}>
+                  <Text style={{color:'#fff',fontSize:14,fontWeight:'bold'}}>{p.name} <Text style={{color:'#aaa',fontSize:11}}>Lv.{p.level}</Text></Text>
+                  <Text style={{color:'#aaa',fontSize:11}}>{p.currentHp}/{p.maxHp} HP</Text>
+                  <Bar hp={p.currentHp} max={p.maxHp}/>
+                  <Text style={{color:'#444',fontSize:10,marginTop:2}}>XP {p.xp}/{p.xpNeeded}</Text>
+                </View>
+              </View>
+            </View>
+          )}
+          {turn==='player' && p && (
+            <View>
+              <View style={{flexDirection:'row',flexWrap:'wrap',gap:8,marginBottom:10}}>
+                {p.moves.map((mv,i)=>(
+                  <Pressable key={i} onPress={()=>playerAttack(i)} style={{
+                    width:'47%',padding:11,borderRadius:10,alignItems:'center',
+                    backgroundColor:MD_TC[p.type]+'33',borderWidth:1,borderColor:MD_TC[p.type],
+                  }}>
+                    <Text style={{color:'#fff',fontSize:13,fontWeight:'bold'}}>{mv}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={{flexDirection:'row',gap:8}}>
+                <Pressable onPress={tryCatch} style={{flex:1,padding:11,borderRadius:10,backgroundColor:'#991b1b',alignItems:'center'}}>
+                  <Text style={{color:'#fff',fontWeight:'bold'}}>🔴 ATRAPAR</Text>
+                </Pressable>
+                <Pressable onPress={()=>{addLog('¡Escapaste!');setPhase('explore');}} style={{flex:1,padding:11,borderRadius:10,backgroundColor:'#374151',alignItems:'center'}}>
+                  <Text style={{color:'#fff',fontWeight:'bold'}}>🏃 HUIR</Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
+          {turn==='enemy' && <Text style={{color:'#f59e0b',textAlign:'center',fontSize:15,marginTop:10}}>⚡ Turno enemigo...</Text>}
+        </View>
+      )}
+      {phase==='explore' && (
+        <View style={{flex:1,padding:16}}>
+          <Text style={{color:'#ffd700',fontWeight:'bold',fontSize:14,marginBottom:12}}>👥 TU EQUIPO ({team.length}/3)</Text>
+          {team.map((m,i)=>(
+            <Pressable key={i} onPress={()=>setActiveIdx(i)} style={{
+              flexDirection:'row',alignItems:'center',padding:12,borderRadius:12,marginBottom:8,
+              backgroundColor:i===activeIdx?MD_TC[m.type]+'22':'rgba(255,255,255,0.04)',
+              borderWidth:i===activeIdx?2:1,borderColor:i===activeIdx?MD_TC[m.type]:'#2a2a2a',
+            }}>
+              <Text style={{fontSize:36,marginRight:12}}>{m.emoji}</Text>
+              <View style={{flex:1}}>
+                <Text style={{color:'#fff',fontWeight:'bold'}}>{m.name} <Text style={{color:'#666',fontSize:11}}>Lv.{m.level}</Text></Text>
+                <Bar hp={m.currentHp} max={m.maxHp}/>
+              </View>
+              <Text style={{color:'#666',fontSize:11}}>{m.currentHp}/{m.maxHp}</Text>
+            </Pressable>
+          ))}
+          <Pressable onPress={explore} style={{marginTop:18,backgroundColor:'#15803d',padding:18,borderRadius:14,alignItems:'center'}}>
+            <Text style={{color:'#fff',fontSize:18,fontWeight:'bold'}}>🌿 EXPLORAR HIERBA</Text>
+          </Pressable>
+          <Text style={{color:'#444',fontSize:11,textAlign:'center',marginTop:8}}>Capturados: {caughtIds.length}/{MD_MONSTERS.length}  •  Victorias: {badges}</Text>
+        </View>
+      )}
+      <View style={{backgroundColor:'rgba(0,0,0,0.55)',padding:10,minHeight:55,paddingHorizontal:14}}>
+        {log.slice(0,3).map((msg,i)=>(
+          <Text key={i} style={{color:i===0?'#e2e8f0':'#444',fontSize:12}}>{msg}</Text>
+        ))}
+      </View>
+      {phase==='gameover' && (
+        <View style={styles.overlay}>
+          <Text style={[styles.overlayTitle,{color:'#ef4444'}]}>💀 TODOS CAÍDOS</Text>
+          <Text style={styles.overlaySub}>Tus monstruos se desmayaron</Text>
+          <Text style={{color:'#ffd700',fontSize:15,marginBottom:20}}>🏅{badges} victorias  •  👾{caughtIds.length} capturados</Text>
+          <Pressable style={[styles.btn,{backgroundColor:'#ffd700'}]} onPress={()=>{
+            setPhase('starter');setTeam([]);teamRef.current=[];setBadges(0);setCaughtIds([]);setLog(['¡Nueva aventura!']);
+          }}>
+            <Text style={styles.btnText}>NUEVA AVENTURA</Text>
+          </Pressable>
+        </View>
+      )}
+    </SafeAreaView>
+  );
+}
+
+// ==========================================
+// 10. GRAVITY FLIP — Corredor de gravedad
+// ==========================================
+const GF_SPD    = 5;
+const GF_GRAV   = 0.55;
+const GF_WALL   = 38;
+const GF_GAP    = 100;
+const GF_PW     = 26;
+const GF_PH     = 26;
+
+function GravityFlip({ onExit }) {
+  const [running, setRunning] = useState(false);
+  const [score,   setScore]   = useState(0);
+  const [best,    setBest]    = useState(0);
+  const [dead,    setDead]    = useState(false);
+  const [,        setTick]    = useState(0);
+
+  const pRef      = useRef({ y: GAME_HEIGHT/2 - GF_PH/2, vy:0, grav:1 });
+  const pillars   = useRef([]);
+  const camRef    = useRef(0);
+  const scoreRef  = useRef(0);
+  const frameRef  = useRef(0);
+  const bestRef   = useRef(0);
+  const stars     = useRef(Array.from({length:30},()=>({x:Math.random()*width,y:Math.random()*GAME_HEIGHT,r:Math.random()*1.5+0.5})));
+
+  useEffect(()=>{ AsyncStorage.getItem('gfBest').then(v=>{if(v){bestRef.current=+v;setBest(+v);}}).catch(()=>{}); },[]);
+
+  const flip = () => {
+    if (!running) return;
+    pRef.current.grav *= -1;
+    pRef.current.vy   = pRef.current.grav * -3;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+
+  const startGame = () => {
+    pRef.current   = { y:GAME_HEIGHT/2-GF_PH/2, vy:0, grav:1 };
+    pillars.current = [];
+    camRef.current  = 0; scoreRef.current = 0; frameRef.current = 0;
+    setScore(0); setDead(false); setRunning(true);
+  };
+
+  const die = () => {
+    deathVibrate(); setRunning(false); setDead(true);
+    if (scoreRef.current > bestRef.current) {
+      bestRef.current = scoreRef.current; setBest(scoreRef.current);
+      AsyncStorage.setItem('gfBest', String(scoreRef.current)).catch(()=>{});
+    }
+  };
+
+  useEffect(() => {
+    if (!running) return;
+    const loop = setInterval(() => {
+      const p = pRef.current;
+      frameRef.current++;
+      const spawnEvery = Math.max(55, 105 - Math.floor(scoreRef.current / 8));
+      if (frameRef.current % spawnEvery === 0) {
+        const gapY = GF_WALL + 10 + Math.floor(Math.random() * (GAME_HEIGHT - GF_WALL*2 - GF_GAP - 20));
+        pillars.current.push({ x: camRef.current + width + 40, gapY, w:26 });
+      }
+      camRef.current += GF_SPD + Math.min(2.5, scoreRef.current / 40);
+      scoreRef.current = Math.floor(camRef.current / 55);
+      setScore(scoreRef.current);
+
+      p.vy += GF_GRAV * p.grav;
+      p.vy  = Math.max(-13, Math.min(13, p.vy));
+      p.y  += p.vy;
+
+      if (p.y < GF_WALL || p.y + GF_PH > GAME_HEIGHT - GF_WALL) { die(); return; }
+
+      const px = width / 3;
+      for (const pl of pillars.current) {
+        const plx = pl.x - camRef.current;
+        if (px + GF_PW > plx && px < plx + pl.w) {
+          if (p.y < pl.gapY || p.y + GF_PH > pl.gapY + GF_GAP) { die(); return; }
+        }
+      }
+      pillars.current = pillars.current.filter(pl => pl.x > camRef.current - 60);
+      setTick(t => t+1);
+    }, 16);
+    return () => clearInterval(loop);
+  }, [running]);
+
+  return (
+    <SafeAreaView style={[styles.container,{backgroundColor:'#06010f'}]}>
+      <View style={styles.header}>
+        <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
+        <Text style={[styles.title,{fontSize:20,color:'#a855f7'}]}>🔀 GRAVITY FLIP</Text>
+        <Text style={{color:'#ffd700',fontSize:14}}>⭐{best}</Text>
+      </View>
+      <Pressable onPress={running ? flip : startGame} activeOpacity={1}
+        style={[styles.gameArea,{height:GAME_HEIGHT,flex:0,backgroundColor:'#06010f',borderColor:'#a855f7aa',overflow:'hidden',position:'relative'}]}>
+        {/* Stars */}
+        {stars.current.map((s,i)=>(
+          <View key={i} style={{position:'absolute',left:((s.x+(camRef.current*0.2))%width+width)%width,top:s.y,width:s.r*2,height:s.r*2,borderRadius:s.r,backgroundColor:'#fff6'}}/>
+        ))}
+        {/* Walls */}
+        <View style={{position:'absolute',top:0,left:0,right:0,height:GF_WALL,backgroundColor:'#7c3aed',borderBottomWidth:2,borderBottomColor:'#c084fc'}}/>
+        <View style={{position:'absolute',bottom:0,left:0,right:0,height:GF_WALL,backgroundColor:'#7c3aed',borderTopWidth:2,borderTopColor:'#c084fc'}}/>
+        {/* Pillars */}
+        {pillars.current.map((pl,i) => {
+          const plx = pl.x - camRef.current;
+          return (
+            <View key={i}>
+              <View style={{position:'absolute',left:plx,top:GF_WALL,width:pl.w,height:pl.gapY-GF_WALL,backgroundColor:'#6d28d9',borderRightWidth:2,borderLeftWidth:2,borderColor:'#c084fc66'}}/>
+              <View style={{position:'absolute',left:plx,top:pl.gapY+GF_GAP,width:pl.w,height:GAME_HEIGHT-GF_WALL-(pl.gapY+GF_GAP),backgroundColor:'#6d28d9',borderRightWidth:2,borderLeftWidth:2,borderColor:'#c084fc66'}}/>
+            </View>
+          );
+        })}
+        {/* Player */}
+        <View style={{
+          position:'absolute', left:width/3, top:pRef.current.y,
+          width:GF_PW, height:GF_PH, borderRadius:6,
+          backgroundColor: pRef.current.grav < 0 ? '#f0abfc' : '#d8b4fe',
+          transform:[{rotate: pRef.current.grav < 0 ? '180deg' : '0deg'}],
+          shadowColor:'#a855f7', shadowOpacity:1, shadowRadius:10,
+        }}/>
+        {/* Score */}
+        <Text style={{position:'absolute',top:GF_WALL+8,right:12,color:'#fff',fontSize:22,fontWeight:'bold'}}>{score}</Text>
+        {/* Overlay */}
+        {!running && (
+          <View style={styles.overlay}>
+            <Text style={[styles.overlayTitle,{color:'#a855f7'}]}>🔀 GRAVITY FLIP</Text>
+            <Text style={[styles.overlaySub,{textAlign:'center',lineHeight:22}]}>
+              {dead ? `¡Chocaste! Score: ${score}\n🏆 Mejor: ${best}` : 'Toca la pantalla para\ninvertir la gravedad.\nEvita las columnas.'}
+            </Text>
+            <Pressable style={[styles.btn,{backgroundColor:'#7c3aed',marginTop:10}]} onPress={startGame}>
+              <Text style={styles.btnText}>{dead?'OTRA VEZ':'START'}</Text>
+            </Pressable>
+          </View>
+        )}
+      </Pressable>
+      {running && <Text style={{color:'#a855f766',textAlign:'center',fontSize:12,marginTop:6}}>TAP = voltear gravedad 🔀</Text>}
+    </SafeAreaView>
+  );
+}
+
+// ==========================================
+// 11. NEON TETRIS — El clásico con neon
+// ==========================================
+const NT_COLS = 10;
+const NT_ROWS = 20;
+const NT_CELL = Math.floor((width - 120) / NT_COLS);
+const NT_PIECES = [
+  { shape:[[1,1,1,1]],            color:'#00ffff' },
+  { shape:[[1,1],[1,1]],          color:'#ffd700' },
+  { shape:[[0,1,0],[1,1,1]],      color:'#cc00ff' },
+  { shape:[[0,1,1],[1,1,0]],      color:'#00ff66' },
+  { shape:[[1,1,0],[0,1,1]],      color:'#ff0044' },
+  { shape:[[1,0],[1,0],[1,1]],    color:'#ff8800' },
+  { shape:[[0,1],[0,1],[1,1]],    color:'#2266ff' },
+];
+const ntEmpty = () => Array.from({length:NT_ROWS},()=>Array(NT_COLS).fill(null));
+const ntRotate = (shape) => {
+  const r = shape.length, c = shape[0].length;
+  return Array.from({length:c},(_,ci)=>Array.from({length:r},(_,ri)=>shape[r-1-ri][ci]));
+};
+
+function NeonTetris({ onExit }) {
+  const [, setTick]         = useState(0);
+  const [running, setRunning] = useState(false);
+  const [gameOver, setGameOver] = useState(false);
+  const gridRef   = useRef(ntEmpty());
+  const pieceRef  = useRef(null);
+  const nextRef   = useRef(null);
+  const pxRef     = useRef(3);
+  const pyRef     = useRef(0);
+  const scoreRef  = useRef(0);
+  const linesRef  = useRef(0);
+  const levelRef  = useRef(1);
+  const runRef    = useRef(false);
+  const dropCtr   = useRef(0);
+
+  const tick = () => setTick(t=>t+1);
+  const rndPiece = () => NT_PIECES[Math.floor(Math.random()*NT_PIECES.length)];
+  const canPlace = (shape, x, y) => {
+    for (let r=0;r<shape.length;r++) for(let c=0;c<shape[r].length;c++) {
+      if (!shape[r][c]) continue;
+      const nr=y+r, nc=x+c;
+      if (nc<0||nc>=NT_COLS||nr>=NT_ROWS) return false;
+      if (nr>=0 && gridRef.current[nr][nc]) return false;
+    }
+    return true;
+  };
+  const spawnPiece = () => {
+    const p = nextRef.current || rndPiece();
+    nextRef.current = rndPiece();
+    const sx = Math.floor(NT_COLS/2) - Math.floor(p.shape[0].length/2);
+    if (!canPlace(p.shape, sx, 0)) { runRef.current=false; setRunning(false); setGameOver(true); deathVibrate(); return; }
+    pieceRef.current = p; pxRef.current = sx; pyRef.current = 0; tick();
+  };
+  const lockPiece = () => {
+    const g = gridRef.current.map(r=>[...r]);
+    const {shape, color} = pieceRef.current;
+    shape.forEach((row,r)=>row.forEach((c,col)=>{ if(c&&pyRef.current+r>=0) g[pyRef.current+r][pxRef.current+col]=color; }));
+    let cleared = 0;
+    const kept = g.filter(row=>row.some(c=>!c));
+    cleared = NT_ROWS - kept.length;
+    while(kept.length < NT_ROWS) kept.unshift(Array(NT_COLS).fill(null));
+    gridRef.current = kept;
+    scoreRef.current += ([0,100,300,500,800][cleared]??800) * levelRef.current;
+    linesRef.current += cleared;
+    levelRef.current  = Math.floor(linesRef.current/10)+1;
+    if (cleared > 0) { popVibrate(); }
+    spawnPiece();
+  };
+  const startGame = () => {
+    gridRef.current = ntEmpty(); scoreRef.current=0; linesRef.current=0; levelRef.current=1;
+    dropCtr.current = 0; nextRef.current = rndPiece();
+    runRef.current = true; setGameOver(false); setRunning(true); spawnPiece();
+  };
+
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(()=>{
+      if (!runRef.current || !pieceRef.current) return;
+      dropCtr.current++;
+      const every = Math.max(2, Math.floor((550-(levelRef.current-1)*45)/16));
+      if (dropCtr.current < every) { tick(); return; }
+      dropCtr.current = 0;
+      const ny = pyRef.current + 1;
+      if (canPlace(pieceRef.current.shape, pxRef.current, ny)) { pyRef.current=ny; tick(); }
+      else lockPiece();
+    }, 16);
+    return ()=>clearInterval(id);
+  }, [running]);
+
+  const moveLeft  = () => { if(!runRef.current||!pieceRef.current)return; const nx=pxRef.current-1; if(canPlace(pieceRef.current.shape,nx,pyRef.current)){pxRef.current=nx;Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);tick();} };
+  const moveRight = () => { if(!runRef.current||!pieceRef.current)return; const nx=pxRef.current+1; if(canPlace(pieceRef.current.shape,nx,pyRef.current)){pxRef.current=nx;Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);tick();} };
+  const rotate    = () => {
+    if(!runRef.current||!pieceRef.current)return;
+    const rot = ntRotate(pieceRef.current.shape);
+    if(canPlace(rot,pxRef.current,pyRef.current)){pieceRef.current={...pieceRef.current,shape:rot};Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);tick();}
+  };
+  const hardDrop  = () => {
+    if(!runRef.current||!pieceRef.current)return;
+    let ny=pyRef.current; while(canPlace(pieceRef.current.shape,pxRef.current,ny+1))ny++;
+    pyRef.current=ny; Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); lockPiece();
+  };
+
+  const display = gridRef.current.map(r=>[...r]);
+  if (pieceRef.current && running) {
+    pieceRef.current.shape.forEach((row,r)=>row.forEach((c,col)=>{
+      const nr=pyRef.current+r, nc=pxRef.current+col;
+      if(c&&nr>=0&&nr<NT_ROWS&&nc>=0&&nc<NT_COLS) display[nr][nc]=pieceRef.current.color;
+    }));
+  }
+  // Ghost piece
+  if (pieceRef.current && running) {
+    let gy=pyRef.current; while(canPlace(pieceRef.current.shape,pxRef.current,gy+1))gy++;
+    if(gy!==pyRef.current) pieceRef.current.shape.forEach((row,r)=>row.forEach((c,col)=>{
+      const nr=gy+r, nc=pxRef.current+col;
+      if(c&&nr>=0&&nr<NT_ROWS&&nc>=0&&nc<NT_COLS&&!display[nr][nc]) display[nr][nc]='ghost';
+    }));
+  }
+
+  return (
+    <SafeAreaView style={[styles.container,{backgroundColor:'#020212'}]}>
+      <View style={styles.header}>
+        <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
+        <Text style={[styles.title,{fontSize:20,color:'#0ff'}]}>🧊 NEON TETRIS</Text>
+        <View style={{alignItems:'flex-end'}}>
+          <Text style={{color:'#0ff',fontSize:13,fontWeight:'bold'}}>{scoreRef.current}</Text>
+          <Text style={{color:'#666',fontSize:11}}>Lv.{levelRef.current} • {linesRef.current}L</Text>
+        </View>
+      </View>
+      <View style={{flexDirection:'row',justifyContent:'center',alignItems:'flex-start',flex:1,paddingTop:4}}>
+        {/* Grid */}
+        <View style={{width:NT_COLS*NT_CELL,height:NT_ROWS*NT_CELL,borderWidth:2,borderColor:'#0ff3',backgroundColor:'#020212',position:'relative',overflow:'hidden'}}>
+          {display.map((row,r)=>row.map((cell,c)=>(
+            <View key={`${r}-${c}`} style={{
+              position:'absolute',left:c*NT_CELL+1,top:r*NT_CELL+1,
+              width:NT_CELL-2,height:NT_CELL-2,borderRadius:2,
+              backgroundColor:cell==='ghost'?'#ffffff18':cell?cell:'#08081a',
+              shadowColor:cell&&cell!=='ghost'?cell:'transparent',
+              shadowOpacity:cell&&cell!=='ghost'?0.9:0,shadowRadius:4,
+            }}/>
+          )))}
+          {!running && (
+            <View style={[styles.overlay,{borderRadius:0}]}>
+              <Text style={[styles.overlayTitle,{color:'#0ff',fontSize:22}]}>{gameOver?'GAME OVER':'🧊 NEON TETRIS'}</Text>
+              <Text style={[styles.overlaySub,{fontSize:13,textAlign:'center'}]}>
+                {gameOver?`Score: ${scoreRef.current}\nLineas: ${linesRef.current}\nNivel: ${levelRef.current}`:'Clásico Tetris con efectos neon.\n¡Rompe tu record!'}
+              </Text>
+              <Pressable style={[styles.btn,{backgroundColor:'#0ff',paddingHorizontal:22,paddingVertical:12}]} onPress={startGame}>
+                <Text style={[styles.btnText,{fontSize:16}]}>{gameOver?'REINTENTAR':'START'}</Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
+        {/* Side panel */}
+        <View style={{width:80,paddingLeft:10,paddingTop:4}}>
+          <Text style={{color:'#555',fontSize:10,marginBottom:4}}>NEXT</Text>
+          {nextRef.current && (
+            <View style={{backgroundColor:'#0a0a20',padding:6,borderRadius:8,marginBottom:14,borderWidth:1,borderColor:'#0ff3'}}>
+              {nextRef.current.shape.map((row,r)=>(
+                <View key={r} style={{flexDirection:'row',justifyContent:'center'}}>
+                  {row.map((c,col)=>(
+                    <View key={col} style={{width:11,height:11,margin:1,borderRadius:2,backgroundColor:c?nextRef.current.color:'transparent'}}/>
+                  ))}
+                </View>
+              ))}
+            </View>
+          )}
+          <Text style={{color:'#0ff8',fontSize:10,marginBottom:1}}>SCORE</Text>
+          <Text style={{color:'#fff',fontSize:12,fontWeight:'bold',marginBottom:8}}>{scoreRef.current}</Text>
+          <Text style={{color:'#0ff8',fontSize:10,marginBottom:1}}>LINEAS</Text>
+          <Text style={{color:'#fff',fontSize:12,fontWeight:'bold',marginBottom:8}}>{linesRef.current}</Text>
+          <Text style={{color:'#0ff8',fontSize:10,marginBottom:1}}>NIVEL</Text>
+          <Text style={{color:'#fff',fontSize:14,fontWeight:'bold'}}>{levelRef.current}</Text>
+        </View>
+      </View>
+      {/* Controls */}
+      {running && (
+        <View style={{flexDirection:'row',justifyContent:'space-around',alignItems:'center',paddingVertical:10,paddingHorizontal:10,backgroundColor:'rgba(0,0,0,0.45)'}}>
+          <Pressable onPress={moveLeft}  style={{width:68,height:68,backgroundColor:'#0ff1',borderRadius:34,justifyContent:'center',alignItems:'center',borderWidth:1,borderColor:'#0ff4'}}>
+            <Text style={{color:'#0ff',fontSize:28,fontWeight:'bold'}}>◀</Text>
+          </Pressable>
+          <Pressable onPress={rotate}    style={{width:68,height:68,backgroundColor:'#ffa0001a',borderRadius:34,justifyContent:'center',alignItems:'center',borderWidth:1,borderColor:'#ffa0004d'}}>
+            <Text style={{color:'#ffa500',fontSize:26,fontWeight:'bold'}}>↻</Text>
+          </Pressable>
+          <Pressable onPress={hardDrop}  style={{width:68,height:68,backgroundColor:'#ff00441a',borderRadius:34,justifyContent:'center',alignItems:'center',borderWidth:1,borderColor:'#ff00444d'}}>
+            <Text style={{color:'#ff0044',fontSize:22,fontWeight:'bold'}}>▼▼</Text>
+          </Pressable>
+          <Pressable onPress={moveRight} style={{width:68,height:68,backgroundColor:'#0ff1',borderRadius:34,justifyContent:'center',alignItems:'center',borderWidth:1,borderColor:'#0ff4'}}>
+            <Text style={{color:'#0ff',fontSize:28,fontWeight:'bold'}}>▶</Text>
+          </Pressable>
+        </View>
+      )}
+    </SafeAreaView>
+  );
+}
+
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState('menu');
 
@@ -3370,6 +3986,18 @@ export default function App() {
 
   if (currentScreen === 'void') {
     return <VoidCrawler onExit={() => setCurrentScreen('menu')} />;
+  }
+
+  if (currentScreen === 'monster') {
+    return <MonsterDuel onExit={() => setCurrentScreen('menu')} />;
+  }
+
+  if (currentScreen === 'gravity') {
+    return <GravityFlip onExit={() => setCurrentScreen('menu')} />;
+  }
+
+  if (currentScreen === 'tetris') {
+    return <NeonTetris onExit={() => setCurrentScreen('menu')} />;
   }
 
   return (
@@ -3416,6 +4044,21 @@ export default function App() {
       <Pressable style={[styles.menuBtn, { backgroundColor: '#6644dd' }]} onPress={() => setCurrentScreen('void')}>
         <Text style={[styles.menuBtnTitle, { color: '#fff' }]}>☠️ VOID CRAWLER</Text>
         <Text style={[styles.menuBtnSub, { color: '#ccc' }]}>Roguelike • 5 pisos • combate por turnos</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#b45309' }]} onPress={() => setCurrentScreen('monster')}>
+        <Text style={styles.menuBtnTitle}>⚡ MONSTER DUEL</Text>
+        <Text style={styles.menuBtnSub}>Pokémon-style • Captura • Evoluciona • Batalla</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#7c3aed' }]} onPress={() => setCurrentScreen('gravity')}>
+        <Text style={styles.menuBtnTitle}>🔀 GRAVITY FLIP</Text>
+        <Text style={styles.menuBtnSub}>Invierte la gravedad • Evita los pilares</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#0e7490' }]} onPress={() => setCurrentScreen('tetris')}>
+        <Text style={styles.menuBtnTitle}>🧊 NEON TETRIS</Text>
+        <Text style={styles.menuBtnSub}>Tetris clásico con efectos neon + pieza fantasma</Text>
       </Pressable>
       </ScrollView>
     </SafeAreaView>
