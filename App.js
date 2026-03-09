@@ -3338,7 +3338,340 @@ function VoidCrawler({ onExit }) {
 }
 
 // ==========================================
-// 9. MONSTER DUEL  (Pokémon-style battles!)
+// 9. NEON TUNNEL — Three.js 3D Runner
+// ==========================================
+import { GLView } from 'expo-gl';
+import * as THREE from 'three';
+
+const NT3_TUNNEL_RADIUS = 2.4;
+const NT3_TUNNEL_SEGS   = 8;
+const NT3_LANE_COUNT    = 8;
+
+function NeonTunnel({ onExit }) {
+  const [phase, setPhase]   = useState('idle'); // idle | running | dead
+  const [score, setScore]   = useState(0);
+  const [best,  setBest]    = useState(0);
+
+  const glRef      = useRef(null);
+  const animRef    = useRef(null);
+  const sceneRef   = useRef(null);
+  const rendRef    = useRef(null);
+  const camRef     = useRef(null);
+  const ringsRef   = useRef([]);
+  const playerRef  = useRef(null);
+  const trailRef   = useRef([]);
+  const scoreRef   = useRef(0);
+  const bestRef    = useRef(0);
+  const phaseRef   = useRef('idle');
+  const frameRef   = useRef(0);
+  const laneRef    = useRef(0);    // current lane 0‥7
+  const targetAngle= useRef(0);
+  const playerAngle= useRef(0);
+  const speedRef   = useRef(0.07);
+  const cameraZ    = useRef(0);
+  const lastSpawn  = useRef(-6);
+
+  useEffect(() => {
+    AsyncStorage.getItem('ntBest').then(v=>{ if(v){ bestRef.current=+v; setBest(+v); }}).catch(()=>{});
+  }, []);
+
+  // ─── Build neon material ────────────────────────────────────────
+  const neonMat = (hex, opacity=1) => new THREE.MeshBasicMaterial({ color: hex, transparent: opacity<1, opacity, side: THREE.DoubleSide });
+
+  const buildTunnel = (scene) => {
+    // Infinite tube — repeating ring pattern
+    const group = new THREE.Group();
+    for (let i=0; i<60; i++) {
+      const ring = buildRingSegment(i * 2.0);
+      group.add(ring);
+    }
+    scene.add(group);
+    return group;
+  };
+
+  const buildRingSegment = (z) => {
+    const geo  = new THREE.TorusGeometry(NT3_TUNNEL_RADIUS, 0.045, 8, NT3_TUNNEL_SEGS);
+    const col  = new THREE.Color().setHSL((z*0.03)%1, 1, 0.55);
+    const mat  = new THREE.MeshBasicMaterial({ color: col });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.rotation.x = Math.PI / 2;
+    mesh.position.z = z;
+    return mesh;
+  };
+
+  const buildObstacle = (z, scene) => {
+    const group  = new THREE.Group();
+    const nGaps  = 3;
+    for (let s=0; s<NT3_LANE_COUNT; s++) {
+      if (s < nGaps) continue; // leave 3 lanes free
+      const angle = (s / NT3_LANE_COUNT) * Math.PI * 2;
+      const bx    = Math.cos(angle) * NT3_TUNNEL_RADIUS * 0.72;
+      const by    = Math.sin(angle) * NT3_TUNNEL_RADIUS * 0.72;
+      const geo   = new THREE.BoxGeometry(0.32, 0.32, 0.22);
+      const mat   = new THREE.MeshBasicMaterial({ color: 0xff0055 });
+      const mesh  = new THREE.Mesh(geo, mat);
+      mesh.position.set(bx, by, 0);
+      group.add(mesh);
+    }
+    group.position.z = z;
+    group.userData = { z, freeStart: Math.floor(Math.random() * NT3_LANE_COUNT) };
+    scene.add(group);
+    return group;
+  };
+
+  const buildPlayer = (scene) => {
+    const geo  = new THREE.OctahedronGeometry(0.15);
+    const mat  = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+    const mesh = new THREE.Mesh(geo, mat);
+    // Glow ring
+    const gGeo = new THREE.TorusGeometry(0.22, 0.04, 6, 12);
+    const gMat = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.45 });
+    const glow = new THREE.Mesh(gGeo, gMat);
+    mesh.add(glow);
+    scene.add(mesh);
+    return mesh;
+  };
+
+  const buildStarField = (scene) => {
+    const geo  = new THREE.BufferGeometry();
+    const verts = [];
+    for (let i=0; i<400; i++) {
+      const r = NT3_TUNNEL_RADIUS * (2 + Math.random() * 4);
+      const a = Math.random() * Math.PI * 2;
+      verts.push(Math.cos(a)*r, Math.sin(a)*r, Math.random()*180 - 10);
+    }
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+    const mat = new THREE.PointsMaterial({ color:0xffffff, size:0.06, transparent:true, opacity:0.7 });
+    scene.add(new THREE.Points(geo, mat));
+  };
+
+  const onContextCreate = (gl) => {
+    glRef.current = gl;
+    const { drawingBufferWidth: W, drawingBufferHeight: H } = gl;
+
+    const renderer = new THREE.WebGLRenderer({ context: gl, antialias: false });
+    renderer.setSize(W, H);
+    renderer.setPixelRatio(1);
+    rendRef.current = renderer;
+
+    const scene  = new THREE.Scene();
+    scene.background = new THREE.Color(0x000008);
+    scene.fog = new THREE.Fog(0x000008, 8, 30);
+    sceneRef.current = scene;
+
+    const camera = new THREE.PerspectiveCamera(75, W/H, 0.1, 60);
+    camera.position.set(0, 0, -0.5);
+    camera.lookAt(0, 0, 20);
+    camRef.current = camera;
+
+    buildTunnel(scene);
+    buildStarField(scene);
+    const player = buildPlayer(scene);
+    playerRef.current = player;
+    player.position.set(NT3_TUNNEL_RADIUS * 0.72, 0, 1.2);
+
+    // Ambient + light
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  };
+
+  const startGame = () => {
+    scoreRef.current  = 0; frameRef.current = 0;
+    laneRef.current   = 0; targetAngle.current = 0; playerAngle.current = 0;
+    speedRef.current  = 0.07; cameraZ.current = 0; lastSpawn.current = -6;
+    ringsRef.current.forEach(r => sceneRef.current?.remove(r));
+    ringsRef.current  = [];
+    trailRef.current.forEach(t => sceneRef.current?.remove(t));
+    trailRef.current  = [];
+    phaseRef.current  = 'running';
+    setPhase('running'); setScore(0);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+  };
+
+  const die = () => {
+    phaseRef.current = 'dead'; setPhase('dead');
+    deathVibrate();
+    if (scoreRef.current > bestRef.current) {
+      bestRef.current = scoreRef.current; setBest(scoreRef.current);
+      AsyncStorage.setItem('ntBest', String(scoreRef.current)).catch(()=>{});
+    }
+  };
+
+  const shiftLane = (dir) => {
+    if (phaseRef.current !== 'running') return;
+    laneRef.current = (laneRef.current + dir + NT3_LANE_COUNT) % NT3_LANE_COUNT;
+    targetAngle.current = (laneRef.current / NT3_LANE_COUNT) * Math.PI * 2;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  useEffect(() => {
+    let rafId;
+    const loop = () => {
+      rafId = requestAnimationFrame(loop);
+      const gl = glRef.current; const ren = rendRef.current;
+      const scene = sceneRef.current; const cam = camRef.current;
+      const player = playerRef.current;
+      if (!gl || !ren || !scene || !cam || !player) return;
+
+      frameRef.current++;
+      const f = frameRef.current;
+
+      if (phaseRef.current === 'running') {
+        // Speed ramp
+        speedRef.current = Math.min(0.22, 0.07 + scoreRef.current * 0.0004);
+        cameraZ.current += speedRef.current;
+        scoreRef.current = Math.floor(cameraZ.current * 2.5);
+        if (f % 10 === 0) setScore(scoreRef.current);
+
+        // Smooth lane transition
+        const da = targetAngle.current - playerAngle.current;
+        let diff = ((da + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+        playerAngle.current += diff * 0.15;
+
+        const pr = NT3_TUNNEL_RADIUS * 0.72;
+        player.position.x = Math.cos(playerAngle.current) * pr;
+        player.position.y = Math.sin(playerAngle.current) * pr;
+        player.position.z = cameraZ.current + 1.2;
+        player.rotation.z += 0.06;
+
+        // Trail sparkles
+        if (f % 4 === 0) {
+          const tGeo = new THREE.SphereGeometry(0.04, 4, 4);
+          const tMat = new THREE.MeshBasicMaterial({ color:0x00ffcc, transparent:true, opacity:0.8 });
+          const t = new THREE.Mesh(tGeo, tMat);
+          t.position.copy(player.position);
+          t.position.z -= 0.1;
+          t.userData = { life: 14 };
+          scene.add(t); trailRef.current.push(t);
+        }
+        for (let i = trailRef.current.length-1; i>=0; i--) {
+          const t = trailRef.current[i]; t.userData.life--;
+          t.material.opacity = t.userData.life / 14;
+          t.scale.setScalar(t.userData.life / 14);
+          if (t.userData.life <= 0) { scene.remove(t); trailRef.current.splice(i,1); }
+        }
+
+        // Spawn obstacles
+        const spawnZ = cameraZ.current + 28;
+        if (spawnZ - lastSpawn.current > 7) {
+          const obs = buildObstacle(spawnZ, scene);
+          // shuffle free lanes
+          const freeStart = Math.floor(Math.random() * NT3_LANE_COUNT);
+          obs.children.forEach((c, ci) => {
+            // remove some children to create gaps
+          });
+          ringsRef.current.push(obs);
+          lastSpawn.current = spawnZ;
+        }
+        // Remove passed obstacles + collision
+        for (let i = ringsRef.current.length-1; i>=0; i--) {
+          const obs = ringsRef.current[i];
+          if (obs.position.z < cameraZ.current - 2) {
+            scene.remove(obs); ringsRef.current.splice(i,1); continue;
+          }
+          // collision check ±0.5 z window
+          const dz = Math.abs(obs.position.z - player.position.z);
+          if (dz < 0.38) {
+            for (const block of obs.children) {
+              const bw = new THREE.Vector3();
+              block.getWorldPosition(bw);
+              const dist = Math.sqrt((bw.x - player.position.x)**2 + (bw.y - player.position.y)**2);
+              if (dist < 0.32) { die(); break; }
+            }
+          }
+        }
+
+        // Scroll tunnel rings
+        scene.children.forEach(child => {
+          if (child.isGroup && child.children[0]?.geometry?.type === 'TorusGeometry' && !child.userData.z) {
+            child.position.z = (cameraZ.current % 120);
+          }
+        });
+
+        // Camera follows player Z
+        cam.position.z = cameraZ.current - 0.5;
+        cam.position.x += (player.position.x * 0.1 - cam.position.x) * 0.08;
+        cam.position.y += (player.position.y * 0.1 - cam.position.y) * 0.08;
+        cam.lookAt(player.position.x * 0.3, player.position.y * 0.3, cameraZ.current + 10);
+      } else {
+        // Idle drift
+        const t = Date.now() * 0.001;
+        cam.position.x = Math.sin(t * 0.3) * 0.4;
+        cam.position.y = Math.cos(t * 0.25) * 0.3;
+        cam.lookAt(0, 0, cam.position.z + 10);
+      }
+
+      // Rotate observable rings
+      ringsRef.current.forEach(obs => { obs.rotation.z += 0.012; });
+
+      ren.render(scene, cam);
+      gl.endFrameEXP();
+    };
+    rafId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
+
+  return (
+    <SafeAreaView style={[styles.container, {backgroundColor:'#000008'}]}>
+      <View style={styles.header}>
+        <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
+        <Text style={[styles.title, {color:'#00ffcc', fontSize:18}]}>🌀 NEON TUNNEL</Text>
+        <Text style={{color:'#ffd700', fontSize:13}}>⭐{best}</Text>
+      </View>
+
+      <View style={{flex:1, position:'relative'}}>
+        <GLView style={{flex:1}} onContextCreate={onContextCreate} />
+
+        {/* Score HUD */}
+        {phase==='running' && (
+          <View style={{position:'absolute', top:8, left:0, right:0, alignItems:'center', pointerEvents:'none'}}>
+            <Text style={{color:'#00ffcc', fontSize:26, fontWeight:'bold', textShadowColor:'#00ffcc', textShadowRadius:8}}>{score}</Text>
+          </View>
+        )}
+
+        {/* Overlay */}
+        {phase !== 'running' && (
+          <View style={[styles.overlay, {backgroundColor:'rgba(0,0,10,0.82)'}]}>
+            <Text style={[styles.overlayTitle, {color:'#00ffcc', fontSize:26}]}>
+              {phase==='dead' ? '💥 CRASH!' : '🌀 NEON TUNNEL'}
+            </Text>
+            <Text style={[styles.overlaySub, {textAlign:'center', lineHeight:22, fontSize:14}]}>
+              {phase==='dead'
+                ? `Score: ${score}\n🏆 Mejor: ${best}\n\nDesliza ◀ ▶ para cambiar de carril`
+                : 'Vuela por un túnel neon infinito\n3D con Three.js ✨\n\nDesliza ◀ ▶ para esquivar'}
+            </Text>
+            <Pressable style={[styles.btn, {backgroundColor:'#00ffcc', marginTop:12}]} onPress={startGame}>
+              <Text style={[styles.btnText, {color:'#000'}]}>{phase==='dead'?'REINTENTAR':'VOLAR 🚀'}</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+
+      {/* Controls */}
+      <View style={{flexDirection:'row', backgroundColor:'rgba(0,0,10,0.7)', paddingVertical:14, paddingHorizontal:20, gap:16}}>
+        <Pressable
+          onPress={() => shiftLane(-1)}
+          style={{flex:1, height:72, backgroundColor:'#00ffcc18', borderRadius:16, justifyContent:'center', alignItems:'center', borderWidth:1, borderColor:'#00ffcc44'}}
+        >
+          <Text style={{color:'#00ffcc', fontSize:32, fontWeight:'bold'}}>◀</Text>
+        </Pressable>
+        <View style={{alignItems:'center', justifyContent:'center', width:80}}>
+          <Text style={{color:'#00ffcc44', fontSize:11}}>CARRIL</Text>
+          <Text style={{color:'#00ffcc', fontSize:18, fontWeight:'bold'}}>{laneRef.current + 1}/{NT3_LANE_COUNT}</Text>
+        </View>
+        <Pressable
+          onPress={() => shiftLane(1)}
+          style={{flex:1, height:72, backgroundColor:'#00ffcc18', borderRadius:16, justifyContent:'center', alignItems:'center', borderWidth:1, borderColor:'#00ffcc44'}}
+        >
+          <Text style={{color:'#00ffcc', fontSize:32, fontWeight:'bold'}}>▶</Text>
+        </Pressable>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+// ==========================================
+// 10. MONSTER DUEL  (Pokémon-style battles!)
+// ==========================================
 // ==========================================
 const MD_MONSTERS = [
   { id:0,  name:'FLAMECAT',   emoji:'🐱', type:'fire',     hp:45, atk:15, def:8,  moves:['Arañazo','Brasa','Rugido','Placaje'],        evo:1,  evoLvl:16 },
@@ -3988,6 +4321,10 @@ export default function App() {
     return <VoidCrawler onExit={() => setCurrentScreen('menu')} />;
   }
 
+  if (currentScreen === 'tunnel') {
+    return <NeonTunnel onExit={() => setCurrentScreen('menu')} />;
+  }
+
   if (currentScreen === 'monster') {
     return <MonsterDuel onExit={() => setCurrentScreen('menu')} />;
   }
@@ -4044,6 +4381,11 @@ export default function App() {
       <Pressable style={[styles.menuBtn, { backgroundColor: '#6644dd' }]} onPress={() => setCurrentScreen('void')}>
         <Text style={[styles.menuBtnTitle, { color: '#fff' }]}>☠️ VOID CRAWLER</Text>
         <Text style={[styles.menuBtnSub, { color: '#ccc' }]}>Roguelike • 5 pisos • combate por turnos</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#001a1a', borderWidth:2, borderColor:'#00ffcc' }]} onPress={() => setCurrentScreen('tunnel')}>
+        <Text style={[styles.menuBtnTitle, { color: '#00ffcc' }]}>🌀 NEON TUNNEL 3D</Text>
+        <Text style={[styles.menuBtnSub, { color: '#00aa88' }]}>Three.js · Vuela por un túnel neon infinito</Text>
       </Pressable>
 
       <Pressable style={[styles.menuBtn, { backgroundColor: '#b45309' }]} onPress={() => setCurrentScreen('monster')}>
