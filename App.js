@@ -4159,6 +4159,160 @@ function NeonTetris({ onExit }) {
   );
 }
 
+// ─── MEMORY MATCH ────────────────────────────────────────────────
+const MM_EMOJIS = ['🎯','🎮','🎲','🎪','🎠','🎡','🎢','🎭','🎨','🏆'];
+const MM_COLS = 4;
+const MM_CELL = Math.floor((width - 56) / MM_COLS);
+
+function MemoryMatch({ onExit }) {
+  const [cards, setCards]   = useState([]);
+  const [flipped, setFlipped] = useState([]);
+  const [matched, setMatched] = useState([]);
+  const [moves, setMoves]   = useState(0);
+  const [time, setTime]     = useState(0);
+  const [running, setRunning] = useState(false);
+  const [won, setWon]       = useState(false);
+  const [bestMoves, setBestMoves] = useState(null);
+  const timerRef = useRef(null);
+  const busyRef  = useRef(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem('mm_best').then(v => { if (v) setBestMoves(parseInt(v)); });
+  }, []);
+  useEffect(() => () => clearInterval(timerRef.current), []);
+
+  const startGame = () => {
+    const deck = [...MM_EMOJIS, ...MM_EMOJIS]
+      .sort(() => Math.random() - 0.5)
+      .map((emoji, i) => ({ id: i, emoji }));
+    setCards(deck);
+    setFlipped([]);
+    setMatched([]);
+    setMoves(0);
+    setTime(0);
+    setWon(false);
+    setRunning(true);
+    busyRef.current = false;
+    clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => setTime(t => t + 1), 1000);
+  };
+
+  const flipCard = (idx) => {
+    if (busyRef.current) return;
+    if (flipped.includes(idx) || matched.includes(idx)) return;
+    if (flipped.length === 1 && flipped[0] === idx) return;
+    const newFlipped = [...flipped, idx];
+    setFlipped(newFlipped);
+    if (newFlipped.length === 2) {
+      busyRef.current = true;
+      const newMoves = moves + 1;
+      setMoves(newMoves);
+      const [a, b] = newFlipped;
+      if (cards[a].emoji === cards[b].emoji) {
+        const newMatched = [...matched, a, b];
+        setMatched(newMatched);
+        setFlipped([]);
+        scoreVibrate();
+        busyRef.current = false;
+        if (newMatched.length === cards.length) {
+          clearInterval(timerRef.current);
+          setRunning(false);
+          setWon(true);
+          celebrateVibrate();
+          AsyncStorage.getItem('mm_best').then(v => {
+            const best = v ? parseInt(v) : null;
+            if (!best || newMoves < best) {
+              AsyncStorage.setItem('mm_best', String(newMoves));
+              setBestMoves(newMoves);
+            }
+          });
+        }
+      } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setTimeout(() => { setFlipped([]); busyRef.current = false; }, 900);
+      }
+    } else {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+  };
+
+  const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Pressable style={styles.backBtn} onPress={onExit}>
+          <Text style={styles.backText}>← Exit</Text>
+        </Pressable>
+        <Text style={[styles.title, { color: '#ff6b9d' }]}>MEMORY MATCH</Text>
+      </View>
+
+      <View style={{ flexDirection: 'row', justifyContent: 'space-around', paddingHorizontal: 20, paddingBottom: 8 }}>
+        <Text style={{ color: '#fff', fontSize: 14 }}>
+          Jugadas: <Text style={{ color: '#ff6b9d', fontWeight: 'bold' }}>{moves}</Text>
+        </Text>
+        <Text style={{ color: '#fff', fontSize: 14 }}>
+          Tiempo: <Text style={{ color: '#ff6b9d', fontWeight: 'bold' }}>{fmt(time)}</Text>
+        </Text>
+        {bestMoves !== null && (
+          <Text style={{ color: '#fff', fontSize: 14 }}>
+            Récord: <Text style={{ color: '#ffd700', fontWeight: 'bold' }}>{bestMoves}</Text>
+          </Text>
+        )}
+      </View>
+
+      {!running ? (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 }}>
+          <Text style={{ color: '#ff6b9d', fontSize: 30, fontWeight: '900', textAlign: 'center', marginBottom: 12, textShadowColor: '#ff6b9d', textShadowRadius: 10 }}>
+            {won ? '🎉 ¡GANASTE!' : '🃏 MEMORY MATCH'}
+          </Text>
+          <Text style={{ color: '#aaa', fontSize: 15, textAlign: 'center', marginBottom: 6 }}>
+            {won ? `${moves} jugadas · ${fmt(time)}` : 'Encuentra todos los pares de emojis'}
+          </Text>
+          <Text style={{ color: '#aaa', fontSize: 13, textAlign: 'center', marginBottom: 30 }}>
+            {won
+              ? (bestMoves === moves ? '🏆 ¡Nuevo récord!' : `Tu récord: ${bestMoves} jugadas`)
+              : '4×5 grilla · 10 pares · guarda tu récord'}
+          </Text>
+          <Pressable style={[styles.btn, { backgroundColor: '#ff6b9d', shadowColor: '#ff6b9d' }]} onPress={startGame}>
+            <Text style={styles.btnText}>{won ? 'OTRA VEZ' : 'JUGAR'}</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 16 }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
+            {cards.map((card, idx) => {
+              const isFlipped  = flipped.includes(idx) || matched.includes(idx);
+              const isMatched  = matched.includes(idx);
+              return (
+                <Pressable
+                  key={idx}
+                  onPress={() => flipCard(idx)}
+                  style={{
+                    width: MM_CELL, height: MM_CELL,
+                    backgroundColor: isMatched ? '#0d2b0d' : isFlipped ? '#15153a' : '#1c1c2e',
+                    borderRadius: 14,
+                    justifyContent: 'center', alignItems: 'center',
+                    borderWidth: 2,
+                    borderColor: isMatched ? '#2e7d32' : isFlipped ? '#ff6b9d' : '#2a2a3a',
+                    shadowColor: isFlipped && !isMatched ? '#ff6b9d' : isMatched ? '#2e7d32' : 'transparent',
+                    shadowOpacity: 0.9, shadowRadius: 8,
+                  }}
+                >
+                  <Text style={{ fontSize: MM_CELL * 0.42 }}>
+                    {isFlipped ? card.emoji : '❓'}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      )}
+    </SafeAreaView>
+  );
+}
+// ─────────────────────────────────────────────────────────────────
+
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState('menu');
 
@@ -4208,6 +4362,10 @@ export default function App() {
 
   if (currentScreen === 'tetris') {
     return <NeonTetris onExit={() => setCurrentScreen('menu')} />;
+  }
+
+  if (currentScreen === 'memory') {
+    return <MemoryMatch onExit={() => setCurrentScreen('menu')} />;
   }
 
   return (
@@ -4274,6 +4432,11 @@ export default function App() {
       <Pressable style={[styles.menuBtn, { backgroundColor: '#0e7490' }]} onPress={() => setCurrentScreen('tetris')}>
         <Text style={styles.menuBtnTitle}>🧊 NEON TETRIS</Text>
         <Text style={styles.menuBtnSub}>Tetris clásico con efectos neon + pieza fantasma</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#9d174d' }]} onPress={() => setCurrentScreen('memory')}>
+        <Text style={styles.menuBtnTitle}>🃏 MEMORY MATCH</Text>
+        <Text style={styles.menuBtnSub}>Encuentra los pares · guarda tu récord de jugadas</Text>
       </Pressable>
       </ScrollView>
     </SafeAreaView>
