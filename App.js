@@ -4159,155 +4159,395 @@ function NeonTetris({ onExit }) {
   );
 }
 
-// ─── MEMORY MATCH ────────────────────────────────────────────────
-const MM_EMOJIS = ['🎯','🎮','🎲','🎪','🎠','🎡','🎢','🎭','🎨','🏆'];
-const MM_COLS = 4;
-const MM_CELL = Math.floor((width - 56) / MM_COLS);
+// ─── NEON WARRIOR - Action Side-Scrolling Platformer ─────────────
+const NW_GH   = Math.min(height - 260, 500);
+const NW_GW   = width;
+const NW_WW   = Math.floor(width * 3.5);
+const NW_GRAV = 0.55;
+const NW_JUMP = -13;
+const NW_SPD  = 3.5;
+const NW_PW   = 36;
+const NW_PH   = 40;
+const NW_EW   = 36;
+const NW_EH   = 36;
+const NW_GND  = NW_GH - 48;
 
-function MemoryMatch({ onExit }) {
-  const [cards, setCards]   = useState([]);
-  const [flipped, setFlipped] = useState([]);
-  const [matched, setMatched] = useState([]);
-  const [moves, setMoves]   = useState(0);
-  const [time, setTime]     = useState(0);
-  const [running, setRunning] = useState(false);
-  const [won, setWon]       = useState(false);
-  const [bestMoves, setBestMoves] = useState(null);
-  const timerRef = useRef(null);
-  const busyRef  = useRef(false);
+function nwGetLevel(n) {
+  const g = NW_GND, w = NW_WW;
+  const LVLS = [
+    {
+      plats:[
+        {x:0,y:g,w,h:50},
+        {x:140,y:g-130,w:100,h:16},{x:320,y:g-190,w:90,h:16},
+        {x:520,y:g-140,w:110,h:16},{x:740,y:g-200,w:100,h:16},
+        {x:960,y:g-150,w:120,h:16},{x:1180,y:g-210,w:90,h:16},
+      ],
+      enemies:[
+        {id:0,x:370,y:g-NW_EH,vx:1.2,vy:0,hp:1,maxHp:1,type:'w',alive:true,bx:200,ex:600},
+        {id:1,x:800,y:g-NW_EH,vx:-1.2,vy:0,hp:1,maxHp:1,type:'w',alive:true,bx:620,ex:1000},
+        {id:2,x:600,y:g-150,vx:0,vy:1.5,hp:1,maxHp:1,type:'f',alive:true,by:g-250,ey:g-70},
+      ],
+      coins:[
+        {id:0,x:170,y:g-165,col:false},{id:1,x:350,y:g-225,col:false},
+        {id:2,x:560,y:g-175,col:false},{id:3,x:770,y:g-235,col:false},
+        {id:4,x:1000,y:g-185,col:false},{id:5,x:1210,y:g-245,col:false},
+      ],
+      pups:[{id:0,x:540,y:g-178,t:'⭐',col:false},{id:1,x:980,y:g-90,t:'❤️',col:false}],
+    },
+    {
+      plats:[
+        {x:0,y:g,w:180,h:50},{x:260,y:g,w:180,h:50},{x:520,y:g,w:200,h:50},
+        {x:800,y:g,w:180,h:50},{x:1060,y:g,w:w-1060,h:50},
+        {x:120,y:g-150,w:90,h:16},{x:320,y:g-220,w:80,h:16},
+        {x:500,y:g-160,w:90,h:16},{x:690,y:g-230,w:80,h:16},
+        {x:880,y:g-170,w:90,h:16},{x:1080,y:g-240,w:85,h:16},
+      ],
+      enemies:[
+        {id:0,x:290,y:g-NW_EH,vx:1.5,vy:0,hp:1,maxHp:1,type:'w',alive:true,bx:260,ex:440},
+        {id:1,x:570,y:g-NW_EH,vx:-1.5,vy:0,hp:1,maxHp:1,type:'w',alive:true,bx:520,ex:720},
+        {id:2,x:830,y:g-NW_EH,vx:1.5,vy:0,hp:1,maxHp:1,type:'w',alive:true,bx:800,ex:980},
+        {id:3,x:400,y:g-120,vx:0,vy:2,hp:1,maxHp:1,type:'f',alive:true,by:g-270,ey:g-60},
+        {id:4,x:790,y:g-110,vx:0,vy:2,hp:1,maxHp:1,type:'f',alive:true,by:g-260,ey:g-60},
+        {id:5,x:1160,y:g-NW_EH,vx:2,vy:0,hp:3,maxHp:3,type:'h',alive:true,bx:1060,ex:1450},
+      ],
+      coins:[
+        {id:0,x:140,y:g-190,col:false},{id:1,x:335,y:g-260,col:false},
+        {id:2,x:520,y:g-200,col:false},{id:3,x:710,y:g-270,col:false},
+        {id:4,x:900,y:g-210,col:false},{id:5,x:1100,y:g-280,col:false},
+        {id:6,x:1200,y:g-100,col:false},
+      ],
+      pups:[
+        {id:0,x:330,y:g-260,t:'⭐',col:false},
+        {id:1,x:890,y:g-210,t:'🛡️',col:false},
+        {id:2,x:1090,y:g-90,t:'❤️',col:false},
+      ],
+    },
+    {
+      plats:[
+        {x:0,y:g,w:130,h:50},{x:210,y:g,w:110,h:50},{x:410,y:g,w:110,h:50},
+        {x:610,y:g,w:110,h:50},{x:810,y:g,w:110,h:50},{x:1010,y:g,w:110,h:50},
+        {x:1200,y:g,w:w-1200,h:50},
+        {x:100,y:g-140,w:75,h:16},{x:285,y:g-210,w:75,h:16},
+        {x:460,y:g-270,w:75,h:16},{x:645,y:g-180,w:75,h:16},
+        {x:820,y:g-250,w:75,h:16},{x:1010,y:g-300,w:75,h:16},
+        {x:1210,y:g-180,w:75,h:16},
+      ],
+      enemies:[
+        {id:0,x:240,y:g-NW_EH,vx:1.8,vy:0,hp:1,maxHp:1,type:'w',alive:true,bx:210,ex:320},
+        {id:1,x:440,y:g-NW_EH,vx:-1.8,vy:0,hp:1,maxHp:1,type:'w',alive:true,bx:410,ex:520},
+        {id:2,x:640,y:g-NW_EH,vx:1.8,vy:0,hp:1,maxHp:1,type:'w',alive:true,bx:610,ex:720},
+        {id:3,x:840,y:g-NW_EH,vx:-1.8,vy:0,hp:1,maxHp:1,type:'w',alive:true,bx:810,ex:920},
+        {id:4,x:340,y:g-100,vx:0,vy:2.2,hp:1,maxHp:1,type:'f',alive:true,by:g-290,ey:g-60},
+        {id:5,x:660,y:g-110,vx:0,vy:2.2,hp:1,maxHp:1,type:'f',alive:true,by:g-290,ey:g-60},
+        {id:6,x:980,y:g-100,vx:0,vy:2.2,hp:1,maxHp:1,type:'f',alive:true,by:g-290,ey:g-60},
+        {id:7,x:1260,y:g-NW_EH,vx:2.5,vy:0,hp:5,maxHp:5,type:'h',alive:true,bx:1200,ex:1550},
+      ],
+      coins:[
+        {id:0,x:115,y:g-180,col:false},{id:1,x:300,y:g-250,col:false},
+        {id:2,x:478,y:g-310,col:false},{id:3,x:660,y:g-220,col:false},
+        {id:4,x:838,y:g-290,col:false},{id:5,x:1028,y:g-340,col:false},
+        {id:6,x:1228,y:g-220,col:false},{id:7,x:1310,y:g-90,col:false},
+      ],
+      pups:[
+        {id:0,x:300,y:g-250,t:'⭐',col:false},
+        {id:1,x:660,y:g-220,t:'🛡️',col:false},
+        {id:2,x:1028,y:g-90,t:'❤️',col:false},
+        {id:3,x:1028,y:g-340,t:'⭐',col:false},
+      ],
+    },
+  ];
+  return JSON.parse(JSON.stringify(LVLS[Math.min(n - 1, LVLS.length - 1)]));
+}
 
-  useEffect(() => {
-    AsyncStorage.getItem('mm_best').then(v => { if (v) setBestMoves(parseInt(v)); });
-  }, []);
-  useEffect(() => () => clearInterval(timerRef.current), []);
+function NeonWarrior({ onExit }) {
+  const [, setTick] = useState(0);
+  const [phase, setPhase] = useState('menu');
+  const pRef     = useRef(null);
+  const camRef   = useRef(0);
+  const enRef    = useRef([]);
+  const blRef    = useRef([]);
+  const coRef    = useRef([]);
+  const puRef    = useRef([]);
+  const ptRef    = useRef([]);
+  const scoreRef = useRef(0);
+  const levelRef = useRef(1);
+  const loopRef  = useRef(null);
+  const keysRef  = useRef({ left: false, right: false });
+  const blCoolRef = useRef(0);
+  const invRef   = useRef(0);
+  const shieldRef = useRef(false);
+
+  const initLevel = (lvl) => {
+    const d = nwGetLevel(lvl);
+    ptRef.current = d.plats;
+    enRef.current = d.enemies;
+    blRef.current = [];
+    coRef.current = d.coins;
+    puRef.current = d.pups;
+    pRef.current = { x: 50, y: NW_GND - NW_PH, vx: 0, vy: 0, jumps: 0, hp: 3, facing: 1 };
+    camRef.current = 0;
+    invRef.current = 0;
+    shieldRef.current = false;
+    blCoolRef.current = 0;
+  };
 
   const startGame = () => {
-    const deck = [...MM_EMOJIS, ...MM_EMOJIS]
-      .sort(() => Math.random() - 0.5)
-      .map((emoji, i) => ({ id: i, emoji }));
-    setCards(deck);
-    setFlipped([]);
-    setMatched([]);
-    setMoves(0);
-    setTime(0);
-    setWon(false);
-    setRunning(true);
-    busyRef.current = false;
-    clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => setTime(t => t + 1), 1000);
+    levelRef.current = 1;
+    scoreRef.current = 0;
+    initLevel(1);
+    setPhase('play');
   };
 
-  const flipCard = (idx) => {
-    if (busyRef.current) return;
-    if (flipped.includes(idx) || matched.includes(idx)) return;
-    if (flipped.length === 1 && flipped[0] === idx) return;
-    const newFlipped = [...flipped, idx];
-    setFlipped(newFlipped);
-    if (newFlipped.length === 2) {
-      busyRef.current = true;
-      const newMoves = moves + 1;
-      setMoves(newMoves);
-      const [a, b] = newFlipped;
-      if (cards[a].emoji === cards[b].emoji) {
-        const newMatched = [...matched, a, b];
-        setMatched(newMatched);
-        setFlipped([]);
-        scoreVibrate();
-        busyRef.current = false;
-        if (newMatched.length === cards.length) {
-          clearInterval(timerRef.current);
-          setRunning(false);
-          setWon(true);
-          celebrateVibrate();
-          AsyncStorage.getItem('mm_best').then(v => {
-            const best = v ? parseInt(v) : null;
-            if (!best || newMoves < best) {
-              AsyncStorage.setItem('mm_best', String(newMoves));
-              setBestMoves(newMoves);
-            }
-          });
+  const nextLevel = () => {
+    const next = levelRef.current + 1;
+    if (next > 3) { setPhase('win'); celebrateVibrate(); }
+    else { levelRef.current = next; initLevel(next); setPhase('play'); }
+  };
+
+  useEffect(() => {
+    if (phase !== 'play') { clearInterval(loopRef.current); return; }
+    loopRef.current = setInterval(() => {
+      const p = pRef.current;
+      const plats = ptRef.current;
+      if (!p) return;
+      // Movement
+      if (keysRef.current.left)       { p.vx = -NW_SPD; p.facing = -1; }
+      else if (keysRef.current.right) { p.vx =  NW_SPD; p.facing =  1; }
+      else p.vx = 0;
+      // Gravity
+      p.vy = Math.min(p.vy + NW_GRAV, 14);
+      p.x  = Math.max(0, Math.min(NW_WW - NW_PW, p.x + p.vx));
+      const prevBottom = p.y + NW_PH;
+      p.y += p.vy;
+      const currBottom = p.y + NW_PH;
+      // Platform collision (top only)
+      let onGround = false;
+      for (const pt of plats) {
+        if (p.x + NW_PW > pt.x + 2 && p.x + 2 < pt.x + pt.w) {
+          if (prevBottom <= pt.y + 2 && currBottom >= pt.y && p.vy >= 0) {
+            p.y = pt.y - NW_PH; p.vy = 0; onGround = true; break;
+          }
         }
-      } else {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        setTimeout(() => { setFlipped([]); busyRef.current = false; }, 900);
       }
-    } else {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+      if (onGround) p.jumps = 0;
+      if (p.y > NW_GH + 60) p.hp = 0;
+      // Camera
+      camRef.current = Math.max(0, Math.min(NW_WW - NW_GW, p.x - NW_GW * 0.35));
+      if (invRef.current > 0)   invRef.current--;
+      if (blCoolRef.current > 0) blCoolRef.current--;
+      // Enemies
+      enRef.current.forEach(e => {
+        if (!e.alive) return;
+        if (e.type === 'w' || e.type === 'h') {
+          e.x += e.vx;
+          if (e.x <= e.bx || e.x + NW_EW >= e.ex) e.vx *= -1;
+        } else {
+          e.y += e.vy;
+          if (e.y <= e.by || e.y + NW_EH >= e.ey) e.vy *= -1;
+        }
+        if (invRef.current > 0) return;
+        if (p.x + NW_PW > e.x + 4 && p.x + 4 < e.x + NW_EW &&
+            p.y + NW_PH > e.y + 4 && p.y + 4 < e.y + NW_EH) {
+          if (p.vy > 2 && p.y + NW_PH < e.y + NW_EH * 0.55) {
+            e.hp--; if (e.hp <= 0) { e.alive = false; scoreRef.current += 50; }
+            else Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+            p.vy = NW_JUMP * 0.65; scoreVibrate();
+          } else {
+            if (shieldRef.current) { shieldRef.current = false; Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); }
+            else { p.hp = Math.max(0, p.hp - 1); deathVibrate(); }
+            invRef.current = 90;
+          }
+        }
+      });
+      // Bullets
+      blRef.current = blRef.current.filter(b => {
+        b.x += b.vx;
+        if (b.x < 0 || b.x > NW_WW) return false;
+        for (const e of enRef.current) {
+          if (!e.alive) continue;
+          if (b.x + 10 > e.x && b.x < e.x + NW_EW && b.y + 5 > e.y && b.y < e.y + NW_EH) {
+            e.hp--; if (e.hp <= 0) { e.alive = false; scoreRef.current += 50; scoreVibrate(); }
+            else Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            return false;
+          }
+        }
+        return true;
+      });
+      // Coins
+      coRef.current.forEach(c => {
+        if (c.col) return;
+        if (p.x + NW_PW > c.x && p.x < c.x + 22 && p.y + NW_PH > c.y && p.y < c.y + 22) {
+          c.col = true; scoreRef.current += 10; popVibrate();
+        }
+      });
+      // Power-ups
+      puRef.current.forEach(pu => {
+        if (pu.col) return;
+        if (p.x + NW_PW > pu.x && p.x < pu.x + 26 && p.y + NW_PH > pu.y && p.y < pu.y + 26) {
+          pu.col = true;
+          if (pu.t === '❤️') p.hp = Math.min(p.hp + 1, 5);
+          else if (pu.t === '🛡️') shieldRef.current = true;
+          else if (pu.t === '⭐') p.jumps = 0;
+          scoreRef.current += 20; celebrateVibrate();
+        }
+      });
+      if (p.hp <= 0) { clearInterval(loopRef.current); setPhase('dead'); return; }
+      if (p.x >= NW_WW - NW_PW - 20) {
+        clearInterval(loopRef.current); scoreRef.current += 200; setPhase('levelclear'); celebrateVibrate(); return;
+      }
+      setTick(t => t + 1);
+    }, 16);
+    return () => clearInterval(loopRef.current);
+  }, [phase]);
+
+  const jump = () => {
+    const p = pRef.current;
+    if (p && p.jumps < 2) { p.vy = NW_JUMP; p.jumps++; Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); }
+  };
+  const shoot = () => {
+    const p = pRef.current;
+    if (!p || blCoolRef.current > 0) return;
+    blRef.current.push({ x: p.facing > 0 ? p.x + NW_PW : p.x - 10, y: p.y + NW_PH * 0.45, vx: 7 * p.facing });
+    blCoolRef.current = 12; Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
-  const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-
-  return (
+  if (phase === 'menu') return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Pressable style={styles.backBtn} onPress={onExit}>
-          <Text style={styles.backText}>← Exit</Text>
+        <Pressable style={styles.backBtn} onPress={onExit}><Text style={styles.backText}>← Exit</Text></Pressable>
+        <Text style={[styles.title, { color: '#f0f' }]}>NEON WARRIOR</Text>
+      </View>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 }}>
+        <Text style={{ fontSize: 64, marginBottom: 16 }}>🥷</Text>
+        <Text style={{ color: '#f0f', fontSize: 28, fontWeight: '900', marginBottom: 10, textShadowColor: '#f0f', textShadowRadius: 10 }}>NEON WARRIOR</Text>
+        <Text style={{ color: '#aaa', fontSize: 14, textAlign: 'center', marginBottom: 8 }}>Plataformas · Salto Doble · Enemigos · Poderes</Text>
+        <Text style={{ color: '#555', fontSize: 12, textAlign: 'center', marginBottom: 32 }}>{'◀▶ Mover  ⬆ Saltar x2  💥 Disparar\n👾 Pisa enemigos desde arriba o dispárales\n⭐ recarga saltos · 🛡️ escudo · ❤️ vida extra'}</Text>
+        <Pressable style={[styles.btn, { backgroundColor: '#f0f', shadowColor: '#f0f' }]} onPress={startGame}>
+          <Text style={styles.btnText}>JUGAR</Text>
         </Pressable>
-        <Text style={[styles.title, { color: '#ff6b9d' }]}>MEMORY MATCH</Text>
       </View>
+    </SafeAreaView>
+  );
 
-      <View style={{ flexDirection: 'row', justifyContent: 'space-around', paddingHorizontal: 20, paddingBottom: 8 }}>
-        <Text style={{ color: '#fff', fontSize: 14 }}>
-          Jugadas: <Text style={{ color: '#ff6b9d', fontWeight: 'bold' }}>{moves}</Text>
-        </Text>
-        <Text style={{ color: '#fff', fontSize: 14 }}>
-          Tiempo: <Text style={{ color: '#ff6b9d', fontWeight: 'bold' }}>{fmt(time)}</Text>
-        </Text>
-        {bestMoves !== null && (
-          <Text style={{ color: '#fff', fontSize: 14 }}>
-            Récord: <Text style={{ color: '#ffd700', fontWeight: 'bold' }}>{bestMoves}</Text>
-          </Text>
-        )}
+  if (phase === 'levelclear') return (
+    <SafeAreaView style={styles.container}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 }}>
+        <Text style={{ color: '#0ff', fontSize: 32, fontWeight: '900', textAlign: 'center', marginBottom: 10 }}>✨ NIVEL {levelRef.current} COMPLETO</Text>
+        <Text style={{ color: '#ffd700', fontSize: 20, marginBottom: 30 }}>Score: {scoreRef.current}</Text>
+        <Pressable style={[styles.btn, { backgroundColor: '#0ff', shadowColor: '#0ff' }]} onPress={nextLevel}>
+          <Text style={styles.btnText}>{levelRef.current >= 3 ? 'VER FINAL' : `NIVEL ${levelRef.current + 1} →`}</Text>
+        </Pressable>
       </View>
+    </SafeAreaView>
+  );
 
-      {!running ? (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 30 }}>
-          <Text style={{ color: '#ff6b9d', fontSize: 30, fontWeight: '900', textAlign: 'center', marginBottom: 12, textShadowColor: '#ff6b9d', textShadowRadius: 10 }}>
-            {won ? '🎉 ¡GANASTE!' : '🃏 MEMORY MATCH'}
-          </Text>
-          <Text style={{ color: '#aaa', fontSize: 15, textAlign: 'center', marginBottom: 6 }}>
-            {won ? `${moves} jugadas · ${fmt(time)}` : 'Encuentra todos los pares de emojis'}
-          </Text>
-          <Text style={{ color: '#aaa', fontSize: 13, textAlign: 'center', marginBottom: 30 }}>
-            {won
-              ? (bestMoves === moves ? '🏆 ¡Nuevo récord!' : `Tu récord: ${bestMoves} jugadas`)
-              : '4×5 grilla · 10 pares · guarda tu récord'}
-          </Text>
-          <Pressable style={[styles.btn, { backgroundColor: '#ff6b9d', shadowColor: '#ff6b9d' }]} onPress={startGame}>
-            <Text style={styles.btnText}>{won ? 'OTRA VEZ' : 'JUGAR'}</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 16 }}>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
-            {cards.map((card, idx) => {
-              const isFlipped  = flipped.includes(idx) || matched.includes(idx);
-              const isMatched  = matched.includes(idx);
-              return (
-                <Pressable
-                  key={idx}
-                  onPress={() => flipCard(idx)}
-                  style={{
-                    width: MM_CELL, height: MM_CELL,
-                    backgroundColor: isMatched ? '#0d2b0d' : isFlipped ? '#15153a' : '#1c1c2e',
-                    borderRadius: 14,
-                    justifyContent: 'center', alignItems: 'center',
-                    borderWidth: 2,
-                    borderColor: isMatched ? '#2e7d32' : isFlipped ? '#ff6b9d' : '#2a2a3a',
-                    shadowColor: isFlipped && !isMatched ? '#ff6b9d' : isMatched ? '#2e7d32' : 'transparent',
-                    shadowOpacity: 0.9, shadowRadius: 8,
-                  }}
-                >
-                  <Text style={{ fontSize: MM_CELL * 0.42 }}>
-                    {isFlipped ? card.emoji : '❓'}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+  if (phase === 'dead') return (
+    <SafeAreaView style={styles.container}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 }}>
+        <Text style={{ color: '#f00', fontSize: 32, fontWeight: '900', textAlign: 'center', marginBottom: 10 }}>💀 GAME OVER</Text>
+        <Text style={{ color: '#aaa', fontSize: 18, marginBottom: 30 }}>Score: {scoreRef.current}</Text>
+        <Pressable style={[styles.btn, { backgroundColor: '#f0f', shadowColor: '#f0f', marginBottom: 16 }]} onPress={startGame}>
+          <Text style={styles.btnText}>REINTENTAR</Text>
+        </Pressable>
+        <Pressable onPress={onExit}><Text style={{ color: '#555', fontSize: 14 }}>Salir al Menú</Text></Pressable>
+      </View>
+    </SafeAreaView>
+  );
+
+  if (phase === 'win') return (
+    <SafeAreaView style={styles.container}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 }}>
+        <Text style={{ color: '#ffd700', fontSize: 36, fontWeight: '900', textAlign: 'center', marginBottom: 10 }}>🏆 ¡GANASTE!</Text>
+        <Text style={{ color: '#fff', fontSize: 20, marginBottom: 6 }}>Score final: {scoreRef.current}</Text>
+        <Text style={{ color: '#aaa', fontSize: 13, textAlign: 'center', marginBottom: 30 }}>¡3 niveles completados!</Text>
+        <Pressable style={[styles.btn, { backgroundColor: '#ffd700', shadowColor: '#ffd700', marginBottom: 16 }]} onPress={startGame}>
+          <Text style={[styles.btnText, { color: '#000' }]}>JUGAR OTRA VEZ</Text>
+        </Pressable>
+        <Pressable onPress={onExit}><Text style={{ color: '#555', fontSize: 14 }}>Salir al Menú</Text></Pressable>
+      </View>
+    </SafeAreaView>
+  );
+
+  // ── play ──────────────────────────────────────────────────────
+  const p   = pRef.current;
+  const cam = camRef.current;
+  const hearts = p ? '❤️'.repeat(Math.max(0, p.hp)) : '';
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* HUD */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 4, paddingBottom: 6 }}>
+        <Pressable onPress={() => { clearInterval(loopRef.current); onExit(); }}>
+          <Text style={{ color: '#666', fontSize: 13 }}>← Salir</Text>
+        </Pressable>
+        <Text style={{ color: '#f0f', fontSize: 13, fontWeight: 'bold' }}>LVL {levelRef.current}/3</Text>
+        <Text style={{ fontSize: 13 }}>{hearts}{shieldRef.current ? '🛡️' : ''}</Text>
+        <Text style={{ color: '#ffd700', fontSize: 13, fontWeight: 'bold' }}>⭐{scoreRef.current}</Text>
+      </View>
+      {/* Game canvas */}
+      {p && (
+        <View style={{ width: NW_GW, height: NW_GH, backgroundColor: '#03031a', overflow: 'hidden' }}>
+          {Array.from({ length: 7 }).map((_, i) => (
+            <View key={i} style={{ position: 'absolute', left: 0, right: 0, top: ((i + 1) / 8) * NW_GH, height: 1, backgroundColor: '#0ff07' }} />
+          ))}
+          <Text style={{ position: 'absolute', left: NW_WW - 90 - cam, top: NW_GND - 52, fontSize: 38 }}>🌀</Text>
+          {ptRef.current.map((pt, i) => (
+            <View key={i} style={{
+              position: 'absolute', left: pt.x - cam, top: pt.y, width: pt.w, height: pt.h,
+              backgroundColor: i === 0 ? '#050f05' : '#071428',
+              borderTopWidth: 3, borderTopColor: i === 0 ? '#0f0' : '#05f',
+              borderLeftWidth: i > 0 ? 1 : 0, borderRightWidth: i > 0 ? 1 : 0,
+              borderLeftColor: '#05f4', borderRightColor: '#05f4',
+            }} />
+          ))}
+          {coRef.current.filter(c => !c.col).map(c => (
+            <Text key={c.id} style={{ position: 'absolute', left: c.x - cam, top: c.y, fontSize: 18 }}>🪙</Text>
+          ))}
+          {puRef.current.filter(pu => !pu.col).map(pu => (
+            <Text key={pu.id} style={{ position: 'absolute', left: pu.x - cam, top: pu.y, fontSize: 22 }}>{pu.t}</Text>
+          ))}
+          {enRef.current.filter(e => e.alive).map(e => (
+            <View key={e.id} style={{ position: 'absolute', left: e.x - cam, top: e.y }}>
+              <Text style={{ fontSize: 28 }}>{e.type === 'f' ? '🛸' : e.type === 'h' ? '👹' : '👾'}</Text>
+              {e.maxHp > 1 && (
+                <View style={{ width: NW_EW, height: 4, backgroundColor: '#300', borderRadius: 2 }}>
+                  <View style={{ width: NW_EW * (e.hp / e.maxHp), height: 4, backgroundColor: '#f00', borderRadius: 2 }} />
+                </View>
+              )}
+            </View>
+          ))}
+          {blRef.current.map((b, i) => (
+            <View key={i} style={{ position: 'absolute', left: b.x - cam, top: b.y, width: 12, height: 6, backgroundColor: '#ff0', borderRadius: 3, shadowColor: '#ff0', shadowOpacity: 1, shadowRadius: 4 }} />
+          ))}
+          <Text style={{
+            position: 'absolute', left: p.x - cam, top: p.y, fontSize: 30,
+            opacity: invRef.current > 0 && Math.floor(invRef.current / 6) % 2 === 0 ? 0.2 : 1,
+            transform: [{ scaleX: p.facing }],
+          }}>🥷</Text>
         </View>
       )}
+      {/* Controls */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 10, backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          <Pressable onPressIn={() => keysRef.current.left = true} onPressOut={() => keysRef.current.left = false}
+            style={{ width: 68, height: 68, backgroundColor: '#f0f1', borderRadius: 34, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#f0f4' }}>
+            <Text style={{ color: '#f0f', fontSize: 28, fontWeight: 'bold' }}>◀</Text>
+          </Pressable>
+          <Pressable onPressIn={() => keysRef.current.right = true} onPressOut={() => keysRef.current.right = false}
+            style={{ width: 68, height: 68, backgroundColor: '#f0f1', borderRadius: 34, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#f0f4' }}>
+            <Text style={{ color: '#f0f', fontSize: 28, fontWeight: 'bold' }}>▶</Text>
+          </Pressable>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          <Pressable onPress={shoot}
+            style={{ width: 68, height: 68, backgroundColor: '#ff01', borderRadius: 34, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#ff04' }}>
+            <Text style={{ color: '#ff0', fontSize: 26 }}>💥</Text>
+          </Pressable>
+          <Pressable onPress={jump}
+            style={{ width: 68, height: 68, backgroundColor: '#0ff1', borderRadius: 34, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#0ff4' }}>
+            <Text style={{ color: '#0ff', fontSize: 26, fontWeight: 'bold' }}>⬆</Text>
+          </Pressable>
+        </View>
+      </View>
     </SafeAreaView>
   );
 }
@@ -4364,8 +4604,8 @@ export default function App() {
     return <NeonTetris onExit={() => setCurrentScreen('menu')} />;
   }
 
-  if (currentScreen === 'memory') {
-    return <MemoryMatch onExit={() => setCurrentScreen('menu')} />;
+  if (currentScreen === 'warrior') {
+    return <NeonWarrior onExit={() => setCurrentScreen('menu')} />;
   }
 
   return (
@@ -4434,9 +4674,9 @@ export default function App() {
         <Text style={styles.menuBtnSub}>Tetris clásico con efectos neon + pieza fantasma</Text>
       </Pressable>
 
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#9d174d' }]} onPress={() => setCurrentScreen('memory')}>
-        <Text style={styles.menuBtnTitle}>🃏 MEMORY MATCH</Text>
-        <Text style={styles.menuBtnSub}>Encuentra los pares · guarda tu récord de jugadas</Text>
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#6d00cc', borderWidth: 2, borderColor: '#f0f' }]} onPress={() => setCurrentScreen('warrior')}>
+        <Text style={[styles.menuBtnTitle, { color: '#fff' }]}>🥷 NEON WARRIOR</Text>
+        <Text style={[styles.menuBtnSub, { color: '#ddd' }]}>Plataformas · Salto doble · Mata enemigos · 3 niveles</Text>
       </Pressable>
       </ScrollView>
     </SafeAreaView>
