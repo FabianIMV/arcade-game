@@ -4852,6 +4852,281 @@ function PixelCraft({ onExit }) {
 }
 // ─────────────────────────────────────────────────────────────────
 
+// ══════════════════════════════════════════════════════════════════
+// WALL JUMPER — sube saltando entre paredes, esquiva las púas
+// ══════════════════════════════════════════════════════════════════
+const WJ_W = width;
+const WJ_H = Math.min(height - 220, 580);
+const WJ_PLAYER_R = 18;
+const WJ_WALL_W = 44;
+const WJ_GAP_H = 120;         // alto del hueco en la pared
+const WJ_SCROLL_SPEED_INIT = 2.2;
+const WJ_JUMP_VX = 9;         // velocidad horizontal al saltar
+const WJ_GRAVITY = 0.55;
+const WJ_BOUNCE_VY = -11;     // rebote al tocar pared
+const WJ_OBSTACLE_INTERVAL = 260; // px entre obstáculos
+
+function WallJumper({ onExit }) {
+  const stateRef = useRef({
+    phase: 'idle', // idle | playing | dead
+    px: WJ_W / 2,
+    py: WJ_H * 0.4,
+    vx: WJ_JUMP_VX,
+    vy: 0,
+    scrollY: 0,
+    score: 0,
+    speed: WJ_SCROLL_SPEED_INIT,
+    obstacles: [],   // { y, gapY, side }  side=0→left wall spike, 1→right
+    nextObstY: WJ_H * 0.5,
+    frame: 0,
+  });
+  const [render, setRender] = useState(0);
+  const rafRef = useRef(null);
+  const [bestScore, setBestScore] = useState(0);
+
+  useEffect(() => {
+    AsyncStorage.getItem('wj_best').then(v => { if (v) setBestScore(parseInt(v)); });
+    return () => cancelAnimationFrame(rafRef.current);
+  }, []);
+
+  const initState = () => {
+    const s = stateRef.current;
+    s.phase = 'playing';
+    s.px = WJ_W / 2;
+    s.py = WJ_H * 0.35;
+    s.vx = WJ_JUMP_VX;
+    s.vy = 0;
+    s.scrollY = 0;
+    s.score = 0;
+    s.speed = WJ_SCROLL_SPEED_INIT;
+    s.obstacles = [];
+    s.nextObstY = -WJ_H * 0.5;
+    s.frame = 0;
+  };
+
+  const startGame = () => {
+    initState();
+    cancelAnimationFrame(rafRef.current);
+    loop();
+  };
+
+  const loop = () => {
+    rafRef.current = requestAnimationFrame(() => {
+      const s = stateRef.current;
+      if (s.phase !== 'playing') return;
+
+      s.frame++;
+      s.speed = WJ_SCROLL_SPEED_INIT + s.score * 0.012;
+
+      // Gravity
+      s.vy += WJ_GRAVITY;
+      s.py += s.vy;
+      s.px += s.vx;
+
+      // Wall bounce
+      if (s.px - WJ_PLAYER_R <= WJ_WALL_W) {
+        s.px = WJ_WALL_W + WJ_PLAYER_R;
+        s.vx = WJ_JUMP_VX;
+        s.vy = WJ_BOUNCE_VY;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+      if (s.px + WJ_PLAYER_R >= WJ_W - WJ_WALL_W) {
+        s.px = WJ_W - WJ_WALL_W - WJ_PLAYER_R;
+        s.vx = -WJ_JUMP_VX;
+        s.vy = WJ_BOUNCE_VY;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+
+      // Scroll
+      s.scrollY += s.speed;
+      s.score = Math.floor(s.scrollY / 10);
+
+      // Generate obstacles
+      if (-s.scrollY < s.nextObstY + WJ_OBSTACLE_INTERVAL) {
+        // alternate sides or random
+        const side = s.obstacles.length % 2;
+        const gapY = WJ_GAP_H * 0.2 + Math.random() * (WJ_H - WJ_GAP_H * 1.4);
+        s.obstacles.push({ y: s.nextObstY - WJ_OBSTACLE_INTERVAL, gapY, side });
+        s.nextObstY -= WJ_OBSTACLE_INTERVAL;
+      }
+
+      // Remove off-screen obstacles
+      s.obstacles = s.obstacles.filter(o => o.y + s.scrollY < WJ_H + 40);
+
+      // Collision with obstacles (spikes on walls)
+      const spikeW = WJ_WALL_W;
+      const spikeH = 30;
+      for (const o of s.obstacles) {
+        const screenY = o.y + s.scrollY;
+        // Top spike block
+        const topH = o.gapY;
+        const botH = WJ_H - o.gapY - WJ_GAP_H;
+        const wallX = o.side === 0 ? 0 : WJ_W - spikeW;
+
+        // Check top part
+        if (
+          s.px + WJ_PLAYER_R > wallX &&
+          s.px - WJ_PLAYER_R < wallX + spikeW &&
+          s.py + WJ_PLAYER_R > screenY &&
+          s.py - WJ_PLAYER_R < screenY + topH
+        ) { die(s); return; }
+
+        // Check bottom part
+        if (
+          s.px + WJ_PLAYER_R > wallX &&
+          s.px - WJ_PLAYER_R < wallX + spikeW &&
+          s.py + WJ_PLAYER_R > screenY + o.gapY + WJ_GAP_H &&
+          s.py - WJ_PLAYER_R < screenY + o.gapY + WJ_GAP_H + botH
+        ) { die(s); return; }
+      }
+
+      // Fall off bottom
+      if (s.py > WJ_H + 40) { die(s); return; }
+
+      setRender(r => r + 1);
+      loop();
+    });
+  };
+
+  const die = (s) => {
+    s.phase = 'dead';
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    if (s.score > bestScore) {
+      setBestScore(s.score);
+      AsyncStorage.setItem('wj_best', String(s.score));
+    }
+    setRender(r => r + 1);
+  };
+
+  const handleTap = (side) => {
+    const s = stateRef.current;
+    if (s.phase === 'idle' || s.phase === 'dead') { startGame(); return; }
+    // Tap gives a boost toward the opposite wall
+    if (side === 'left') {
+      s.vx = -Math.abs(s.vx);
+      s.vy = WJ_BOUNCE_VY * 0.7;
+    } else {
+      s.vx = Math.abs(s.vx);
+      s.vy = WJ_BOUNCE_VY * 0.7;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const s = stateRef.current;
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#000820' }}>
+      {/* Header */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 }}>
+        <Pressable onPress={onExit} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          style={{ position: 'absolute', left: 16, zIndex: 10 }}>
+          <Text style={{ color: '#ff6600', fontSize: 16, fontWeight: 'bold' }}>← SALIR</Text>
+        </Pressable>
+        <Text style={{ flex: 1, textAlign: 'center', color: '#ff6600', fontSize: 20, fontWeight: '900', letterSpacing: 2 }}>🧗 WALL JUMPER</Text>
+      </View>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-around', paddingBottom: 4 }}>
+        <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>Altura: {s.score}</Text>
+        <Text style={{ color: '#ffaa44', fontSize: 16 }}>Récord: {bestScore}</Text>
+      </View>
+
+      {/* Game area */}
+      <View style={{ width: WJ_W, height: WJ_H, overflow: 'hidden', position: 'relative', backgroundColor: '#000d30' }}>
+
+        {/* Left wall */}
+        <View style={{ position: 'absolute', left: 0, top: 0, width: WJ_WALL_W, height: WJ_H, backgroundColor: '#1a0a00', borderRightWidth: 3, borderRightColor: '#ff6600' }} />
+        {/* Right wall */}
+        <View style={{ position: 'absolute', right: 0, top: 0, width: WJ_WALL_W, height: WJ_H, backgroundColor: '#1a0a00', borderLeftWidth: 3, borderLeftColor: '#ff6600' }} />
+
+        {/* Obstacles */}
+        {s.obstacles.map((o, i) => {
+          const screenY = o.y + s.scrollY;
+          const wallX = o.side === 0 ? 0 : WJ_W - WJ_WALL_W;
+          const topH = o.gapY;
+          const botH = WJ_H - o.gapY - WJ_GAP_H;
+          return (
+            <React.Fragment key={i}>
+              {topH > 0 && screenY < WJ_H && screenY + topH > 0 && (
+                <View style={{ position: 'absolute', left: wallX, top: screenY, width: WJ_WALL_W, height: topH, backgroundColor: '#550000', borderWidth: 1, borderColor: '#ff2200' }}>
+                  <Text style={{ color: '#ff2200', fontSize: 18, textAlign: 'center', marginTop: topH - 22 }}>▼</Text>
+                </View>
+              )}
+              {botH > 0 && screenY + o.gapY + WJ_GAP_H < WJ_H && (
+                <View style={{ position: 'absolute', left: wallX, top: screenY + o.gapY + WJ_GAP_H, width: WJ_WALL_W, height: botH, backgroundColor: '#550000', borderWidth: 1, borderColor: '#ff2200' }}>
+                  <Text style={{ color: '#ff2200', fontSize: 18, textAlign: 'center' }}>▲</Text>
+                </View>
+              )}
+            </React.Fragment>
+          );
+        })}
+
+        {/* Player */}
+        {s.phase !== 'idle' && (
+          <View style={{
+            position: 'absolute',
+            left: s.px - WJ_PLAYER_R,
+            top: s.py - WJ_PLAYER_R,
+            width: WJ_PLAYER_R * 2,
+            height: WJ_PLAYER_R * 2,
+            borderRadius: WJ_PLAYER_R,
+            backgroundColor: '#ff6600',
+            shadowColor: '#ff6600',
+            shadowOpacity: 1,
+            shadowRadius: 10,
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}>
+            <Text style={{ fontSize: 18 }}>{s.vx > 0 ? '➡' : '⬅'}</Text>
+          </View>
+        )}
+
+        {/* Tap zones */}
+        <View style={{ position: 'absolute', left: 0, top: 0, width: WJ_W / 2, height: WJ_H }}
+          onTouchStart={() => handleTap('left')} />
+        <View style={{ position: 'absolute', left: WJ_W / 2, top: 0, width: WJ_W / 2, height: WJ_H }}
+          onTouchStart={() => handleTap('right')} />
+
+        {/* Idle overlay */}
+        {s.phase === 'idle' && (
+          <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={{ fontSize: 50 }}>🧗</Text>
+            <Text style={{ color: '#ff6600', fontSize: 28, fontWeight: '900', marginTop: 10 }}>WALL JUMPER</Text>
+            <Text style={{ color: '#fff', fontSize: 16, marginTop: 10, textAlign: 'center', paddingHorizontal: 30 }}>
+              La bola rebota entre las paredes sola.{'\n'}Toca ◀ o ▶ para darle impulso y esquivar las púas rojas.
+            </Text>
+            <Text style={{ color: '#ffaa44', fontSize: 20, marginTop: 30, fontWeight: 'bold' }}>Toca para empezar</Text>
+          </View>
+        )}
+
+        {/* Dead overlay */}
+        {s.phase === 'dead' && (
+          <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={{ fontSize: 50 }}>💥</Text>
+            <Text style={{ color: '#ff2200', fontSize: 30, fontWeight: '900', marginTop: 10 }}>GAME OVER</Text>
+            <Text style={{ color: '#fff', fontSize: 20, marginTop: 8 }}>Altura: {s.score}</Text>
+            {s.score >= bestScore && bestScore > 0 && (
+              <Text style={{ color: '#ffd700', fontSize: 16, marginTop: 4 }}>¡Nuevo récord!</Text>
+            )}
+            <Text style={{ color: '#ffaa44', fontSize: 18, marginTop: 24, fontWeight: 'bold' }}>Toca para reintentar</Text>
+          </View>
+        )}
+      </View>
+
+      {/* Controls hint */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 8 }}>
+        <Pressable onPress={() => handleTap('left')} hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
+          style={{ width: (WJ_W - 50) / 2, paddingVertical: 14, backgroundColor: '#1a0a00', borderRadius: 12, borderWidth: 2, borderColor: '#ff6600', alignItems: 'center' }}>
+          <Text style={{ color: '#ff6600', fontSize: 26, fontWeight: 'bold' }}>◀</Text>
+        </Pressable>
+        <Pressable onPress={() => handleTap('right')} hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
+          style={{ width: (WJ_W - 50) / 2, paddingVertical: 14, backgroundColor: '#1a0a00', borderRadius: 12, borderWidth: 2, borderColor: '#ff6600', alignItems: 'center' }}>
+          <Text style={{ color: '#ff6600', fontSize: 26, fontWeight: 'bold' }}>▶</Text>
+        </Pressable>
+      </View>
+    </SafeAreaView>
+  );
+}
+// ─────────────────────────────────────────────────────────────────
+
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState('menu');
 
@@ -4909,6 +5184,10 @@ export default function App() {
 
   if (currentScreen === 'craft') {
     return <PixelCraft onExit={() => setCurrentScreen('menu')} />;
+  }
+
+  if (currentScreen === 'walljumper') {
+    return <WallJumper onExit={() => setCurrentScreen('menu')} />;
   }
 
   return (
@@ -4985,6 +5264,11 @@ export default function App() {
       <Pressable style={[styles.menuBtn, { backgroundColor: '#3d2008', borderWidth: 2, borderColor: '#7a4420' }]} onPress={() => setCurrentScreen('craft')}>
         <Text style={[styles.menuBtnTitle, { color: '#c8a060' }]}>⛏️ PIXEL CRAFT</Text>
         <Text style={[styles.menuBtnSub, { color: '#a07840' }]}>Mundo 2D · Mina bloques · Construye · Día y noche</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#1a0a00', borderWidth: 2, borderColor: '#ff6600' }]} onPress={() => setCurrentScreen('walljumper')}>
+        <Text style={[styles.menuBtnTitle, { color: '#ff6600' }]}>🧗 WALL JUMPER</Text>
+        <Text style={[styles.menuBtnSub, { color: '#cc4400' }]}>Rebota entre paredes · Esquiva las púas · Sube alto</Text>
       </Pressable>
       </ScrollView>
     </SafeAreaView>
