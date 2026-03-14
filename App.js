@@ -1719,6 +1719,7 @@ function PingPong({ onExit }) {
     playerX.current = width / 2 - PP_PADDLE_W / 2;
     aiX.current = width / 2 - PP_PADDLE_W / 2;
     resetBall(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setGameState('playing');
   };
 
@@ -1798,7 +1799,7 @@ function PingPong({ onExit }) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
+        <Pressable onPress={onExit} style={styles.backBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}><Text style={styles.backText}>← BACK</Text></Pressable>
         <Text style={[styles.title, { color: '#fff' }]}>PING PONG 🏓</Text>
         <View style={[styles.stats, { justifyContent: 'center', gap: 8 }]}>
           <Text style={[styles.statText, { color: '#f55', fontSize: 20 }]}>{scoreAI}</Text>
@@ -1863,7 +1864,7 @@ function PingPong({ onExit }) {
                 ? `¡Primero en llegar a ${PP_MAX_SCORE} gana! Arrastra tu paleta 🟡.`
                 : won ? '¡Increíble! Venciste a la IA.' : '¡Sigue intentándolo!'}
             </Text>
-            <Pressable style={styles.btn} onPress={startGame}>
+            <Pressable style={styles.btn} onPress={startGame} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
               <Text style={styles.btnText}>{gameState === 'gameover' ? 'REVANCHA' : 'JUGAR'}</Text>
             </Pressable>
           </View>
@@ -2064,7 +2065,7 @@ function Breakout({ onExit }) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
+        <Pressable onPress={onExit} style={styles.backBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}><Text style={styles.backText}>← BACK</Text></Pressable>
         <Text style={[styles.title, { color: '#ff6600' }]}>BREAKOUT 🧱</Text>
         <View style={styles.stats}>
           <Text style={styles.statText}>LVL {level}</Text>
@@ -2128,7 +2129,7 @@ function Breakout({ onExit }) {
             <Text style={styles.overlaySub}>
               {gameState === 'idle' ? 'Arrastra para mover la paleta. ¡Rompe todos los ladrillos!' : '¡Gracias por jugar!'}
             </Text>
-            <Pressable style={styles.btn} onPress={startGame}>
+            <Pressable style={styles.btn} onPress={startGame} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
               <Text style={styles.btnText}>{gameState === 'gameover' ? 'RETRY' : 'START'}</Text>
             </Pressable>
           </View>
@@ -2299,7 +2300,6 @@ function GalacticHunt({ onExit }) {
     showCrosshair(cx, cy);
     addSplatter(cx, cy);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 80);
     if (ammoRef.current <= 0) endRound();
   };
 
@@ -2337,7 +2337,7 @@ function GalacticHunt({ onExit }) {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: '#070720' }]}>
       <View style={[styles.header, { backgroundColor: 'rgba(0,0,20,0.85)', paddingTop: 6, paddingBottom: 6 }]}>
-        <Pressable onPress={() => { cleanup(); onExit(); }} style={styles.backBtn}>
+        <Pressable onPress={() => { cleanup(); onExit(); }} style={styles.backBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
           <Text style={styles.backText}>← BACK</Text>
         </Pressable>
         <Text style={[styles.title, { color: '#a78bfa' }]}>GALACTIC HUNT</Text>
@@ -2419,6 +2419,7 @@ function GalacticHunt({ onExit }) {
               justifyContent: 'center',
               alignItems: 'center',
             }}
+            hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
           >
             <Text style={{ fontSize: target.size * 0.76, lineHeight: target.size }}>{target.emoji}</Text>
           </Pressable>
@@ -2432,10 +2433,10 @@ function GalacticHunt({ onExit }) {
             <Text style={[styles.overlaySub, { fontSize: 14, color: '#c4b5fd', marginBottom: 2 }]}>🦆 Duck = 10 pts  •  🛸 UFO = 20 pts</Text>
             <Text style={[styles.overlaySub, { fontSize: 14, color: '#c4b5fd', marginBottom: 2 }]}>💎 Gem = 50 pts</Text>
             <Text style={[styles.overlaySub, { fontSize: 13, color: '#94a3b8', marginBottom: 28 }]}>10 shots  •  30 seconds  •  3 rounds</Text>
-            <Pressable style={[styles.btn, { backgroundColor: '#7c3aed' }]} onPress={startRound}>
+            <Pressable style={[styles.btn, { backgroundColor: '#7c3aed' }]} onPress={startRound} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
               <Text style={[styles.btnText, { color: '#fff' }]}>START GAME</Text>
             </Pressable>
-            <Pressable style={[styles.btn, { backgroundColor: '#374151', marginTop: 14 }]} onPress={() => { cleanup(); onExit(); }}>
+            <Pressable style={[styles.btn, { backgroundColor: '#374151', marginTop: 14 }]} onPress={() => { cleanup(); onExit(); }} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
               <Text style={[styles.btnText, { color: '#fff' }]}>BACK TO MENU</Text>
             </Pressable>
           </View>
@@ -2450,18 +2451,18 @@ function GalacticHunt({ onExit }) {
               {round < 3 ? `Round ${round + 1} of 3 up next!` : 'All rounds complete!'}
             </Text>
             {round < 3 ? (
-              <Pressable style={[styles.btn, { backgroundColor: '#7c3aed' }]} onPress={nextRound}>
+              <Pressable style={[styles.btn, { backgroundColor: '#7c3aed' }]} onPress={nextRound} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
                 <Text style={[styles.btnText, { color: '#fff' }]}>NEXT ROUND ▶</Text>
               </Pressable>
             ) : (
               <Pressable style={[styles.btn, { backgroundColor: '#7c3aed' }]} onPress={() => {
                 gameStateRef.current = 'gameOver';
                 setGameState('gameOver');
-              }}>
+              }} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
                 <Text style={[styles.btnText, { color: '#fff' }]}>SEE RESULTS</Text>
               </Pressable>
             )}
-            <Pressable style={[styles.btn, { backgroundColor: '#374151', marginTop: 14 }]} onPress={() => { cleanup(); onExit(); }}>
+            <Pressable style={[styles.btn, { backgroundColor: '#374151', marginTop: 14 }]} onPress={() => { cleanup(); onExit(); }} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
               <Text style={[styles.btnText, { color: '#fff' }]}>QUIT</Text>
             </Pressable>
           </View>
@@ -2473,10 +2474,10 @@ function GalacticHunt({ onExit }) {
             <Text style={[styles.overlayTitle, { color: '#f472b6', fontSize: 34 }]}>GAME OVER</Text>
             <Text style={[styles.overlaySub, { fontSize: 24, color: '#fbbf24', marginBottom: 4 }]}>Final Score</Text>
             <Text style={{ fontSize: 56, fontWeight: '900', color: '#fff', marginBottom: 28 }}>{score}</Text>
-            <Pressable style={[styles.btn, { backgroundColor: '#7c3aed' }]} onPress={resetGame}>
+            <Pressable style={[styles.btn, { backgroundColor: '#7c3aed' }]} onPress={resetGame} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
               <Text style={[styles.btnText, { color: '#fff' }]}>PLAY AGAIN</Text>
             </Pressable>
-            <Pressable style={[styles.btn, { backgroundColor: '#374151', marginTop: 14 }]} onPress={() => { cleanup(); onExit(); }}>
+            <Pressable style={[styles.btn, { backgroundColor: '#374151', marginTop: 14 }]} onPress={() => { cleanup(); onExit(); }} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
               <Text style={[styles.btnText, { color: '#fff' }]}>BACK TO MENU</Text>
             </Pressable>
           </View>
@@ -2826,7 +2827,7 @@ function SnakePower({ onExit }) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={onExit} style={styles.backBtn}>
+        <Pressable onPress={onExit} style={styles.backBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
           <Text style={styles.backText}>←</Text>
         </Pressable>
         <Text style={styles.title}>🐍 SNAKE POWER</Text>
@@ -2867,7 +2868,7 @@ function SnakePower({ onExit }) {
                 Récord: {highScore}
               </Text>
             )}
-            <Pressable style={styles.btn} onPress={startGame}>
+            <Pressable style={styles.btn} onPress={startGame} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
               <Text style={styles.btnText}>
                 {gamePhase === 'idle' ? 'START' : 'RETRY'}
               </Text>
@@ -3252,7 +3253,7 @@ function VoidCrawler({ onExit }) {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
       {/* HUD */}
       <View style={[styles.header, { backgroundColor: 'rgba(0,0,0,0.55)', paddingVertical: 10 }]}>
-        <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
+        <Pressable onPress={onExit} style={styles.backBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}><Text style={styles.backText}>← BACK</Text></Pressable>
         <View style={{ alignItems: 'center' }}>
           <Text style={[styles.title, { color: theme.accent, fontSize: 20 }]}>☠️ VOID CRAWLER</Text>
           <Text style={{ color: '#888', fontSize: 11 }}>{theme.name}  •  Floor {p.floor}/5</Text>
@@ -3327,7 +3328,7 @@ function VoidCrawler({ onExit }) {
           <Text style={{ color: '#444', fontSize: 12, textAlign: 'center', marginBottom: 20 }}>
             {phase === 'idle' ? '😤 Hero  🚪 Stairs down  💀👺👹😈🐉 Enemies  ⚔️🛡️❤️💊💎 Items' : ''}
           </Text>
-          <Pressable style={[styles.btn, { backgroundColor: theme.accent }]} onPress={startGame}>
+          <Pressable style={[styles.btn, { backgroundColor: theme.accent }]} onPress={startGame} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
             <Text style={[styles.btnText, { color: '#000' }]}>
               {phase === 'idle' ? 'ENTER THE VOID' : 'DESCEND AGAIN'}
             </Text>
@@ -3441,7 +3442,7 @@ function NeonTunnel({ onExit }) {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: '#000010' }]}>
       <View style={styles.header}>
-        <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
+        <Pressable onPress={onExit} style={styles.backBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}><Text style={styles.backText}>← BACK</Text></Pressable>
         <Text style={[styles.title, { color: '#00ffcc', fontSize: 18 }]}>🌀 NEON TUNNEL</Text>
         <Text style={{ color: '#ffd700', fontSize: 14, fontWeight: 'bold' }}>⭐ {bestRef.current}</Text>
       </View>
@@ -3516,7 +3517,7 @@ function NeonTunnel({ onExit }) {
                 ? `Score: ${scoreRef.current}\n🏆 Mejor: ${bestRef.current}\n\n◀ ▶ para cambiar de carril`
                 : 'Vuela por el túnel neon\nEsquiva los bloques rojos\n3 carriles libres por anillo\n◀ ▶ para moverte'}
             </Text>
-            <Pressable style={[styles.btn, { backgroundColor: '#00ffcc', marginTop: 12 }]} onPress={startGame}>
+            <Pressable style={[styles.btn, { backgroundColor: '#00ffcc', marginTop: 12 }]} onPress={startGame} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
               <Text style={[styles.btnText, { color: '#000' }]}>{phase === 'dead' ? 'REINTENTAR' : '🚀 VOLAR'}</Text>
             </Pressable>
           </View>
@@ -3525,18 +3526,18 @@ function NeonTunnel({ onExit }) {
 
       {/* Controls */}
       <View style={{ flexDirection: 'row', backgroundColor: 'rgba(0,0,16,0.8)', paddingVertical: 14, paddingHorizontal: 20, gap: 16 }}>
-        <Pressable onPress={() => shiftLane(-1)}
+        <View onTouchStart={() => shiftLane(-1)} onTouchEnd={() => {}} onTouchCancel={() => {}}
           style={{ flex: 1, height: 72, backgroundColor: '#00ffcc18', borderRadius: 16, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#00ffcc44' }}>
           <Text style={{ color: '#00ffcc', fontSize: 32, fontWeight: 'bold' }}>◀</Text>
-        </Pressable>
+        </View>
         <View style={{ alignItems: 'center', justifyContent: 'center', width: 80 }}>
           <Text style={{ color: '#00ffcc66', fontSize: 11 }}>CARRIL</Text>
           <Text style={{ color: '#00ffcc', fontSize: 16, fontWeight: 'bold' }}>{laneRef.current + 1}/{NT_LANES}</Text>
         </View>
-        <Pressable onPress={() => shiftLane(1)}
+        <View onTouchStart={() => shiftLane(1)} onTouchEnd={() => {}} onTouchCancel={() => {}}
           style={{ flex: 1, height: 72, backgroundColor: '#00ffcc18', borderRadius: 16, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#00ffcc44' }}>
           <Text style={{ color: '#00ffcc', fontSize: 32, fontWeight: 'bold' }}>▶</Text>
-        </Pressable>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -3913,7 +3914,7 @@ function GravityFlip({ onExit }) {
   return (
     <SafeAreaView style={[styles.container,{backgroundColor:'#06010f'}]}>
       <View style={styles.header}>
-        <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
+        <Pressable onPress={onExit} style={styles.backBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}><Text style={styles.backText}>← BACK</Text></Pressable>
         <Text style={[styles.title,{fontSize:20,color:'#a855f7'}]}>🔀 GRAVITY FLIP</Text>
         <Text style={{color:'#ffd700',fontSize:14}}>⭐{best}</Text>
       </View>
@@ -3953,7 +3954,7 @@ function GravityFlip({ onExit }) {
             <Text style={[styles.overlaySub,{textAlign:'center',lineHeight:22}]}>
               {dead ? `¡Chocaste! Score: ${score}\n🏆 Mejor: ${best}` : 'Toca la pantalla para\ninvertir la gravedad.\nEvita las columnas.'}
             </Text>
-            <Pressable style={[styles.btn,{backgroundColor:'#7c3aed',marginTop:10}]} onPress={startGame}>
+            <Pressable style={[styles.btn,{backgroundColor:'#7c3aed',marginTop:10}]} onPress={startGame} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
               <Text style={styles.btnText}>{dead?'OTRA VEZ':'START'}</Text>
             </Pressable>
           </View>
@@ -4145,10 +4146,10 @@ function NeonTetris({ onExit }) {
           <Pressable onPress={moveLeft}  style={{width:68,height:68,backgroundColor:'#0ff1',borderRadius:34,justifyContent:'center',alignItems:'center',borderWidth:1,borderColor:'#0ff4'}}>
             <Text style={{color:'#0ff',fontSize:28,fontWeight:'bold'}}>◀</Text>
           </Pressable>
-          <Pressable onPress={rotate}    style={{width:68,height:68,backgroundColor:'#ffa0001a',borderRadius:34,justifyContent:'center',alignItems:'center',borderWidth:1,borderColor:'#ffa0004d'}}>
+          <Pressable onPress={rotate} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}    style={{width:68,height:68,backgroundColor:'#ffa0001a',borderRadius:34,justifyContent:'center',alignItems:'center',borderWidth:1,borderColor:'#ffa0004d'}}>
             <Text style={{color:'#ffa500',fontSize:26,fontWeight:'bold'}}>↻</Text>
           </Pressable>
-          <Pressable onPress={hardDrop}  style={{width:68,height:68,backgroundColor:'#ff00441a',borderRadius:34,justifyContent:'center',alignItems:'center',borderWidth:1,borderColor:'#ff00444d'}}>
+          <Pressable onPress={hardDrop} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}   style={{width:68,height:68,backgroundColor:'#ff00441a',borderRadius:34,justifyContent:'center',alignItems:'center',borderWidth:1,borderColor:'#ff00444d'}}>
             <Text style={{color:'#ff0044',fontSize:22,fontWeight:'bold'}}>▼▼</Text>
           </Pressable>
           <Pressable onPress={moveRight} style={{width:68,height:68,backgroundColor:'#0ff1',borderRadius:34,justifyContent:'center',alignItems:'center',borderWidth:1,borderColor:'#0ff4'}}>
@@ -4529,21 +4530,21 @@ function NeonWarrior({ onExit }) {
       {/* Controls */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 10, backgroundColor: 'rgba(0,0,0,0.5)' }}>
         <View style={{ flexDirection: 'row', gap: 12 }}>
-          <Pressable onPressIn={() => keysRef.current.left = true} onPressOut={() => keysRef.current.left = false}
+          <View onTouchStart={() => keysRef.current.left = true} onTouchEnd={() => keysRef.current.left = false} onTouchCancel={() => keysRef.current.left = false}
             style={{ width: 68, height: 68, backgroundColor: '#f0f1', borderRadius: 34, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#f0f4' }}>
             <Text style={{ color: '#f0f', fontSize: 28, fontWeight: 'bold' }}>◀</Text>
-          </Pressable>
-          <Pressable onPressIn={() => keysRef.current.right = true} onPressOut={() => keysRef.current.right = false}
+          </View>
+          <View onTouchStart={() => keysRef.current.right = true} onTouchEnd={() => keysRef.current.right = false} onTouchCancel={() => keysRef.current.right = false}
             style={{ width: 68, height: 68, backgroundColor: '#f0f1', borderRadius: 34, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#f0f4' }}>
             <Text style={{ color: '#f0f', fontSize: 28, fontWeight: 'bold' }}>▶</Text>
-          </Pressable>
+          </View>
         </View>
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <Pressable onPress={shoot}
             style={{ width: 68, height: 68, backgroundColor: '#ff01', borderRadius: 34, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#ff04' }}>
             <Text style={{ color: '#ff0', fontSize: 26 }}>💥</Text>
           </Pressable>
-          <Pressable onPress={jump}
+          <Pressable onPress={jump} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
             style={{ width: 68, height: 68, backgroundColor: '#0ff1', borderRadius: 34, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#0ff4' }}>
             <Text style={{ color: '#0ff', fontSize: 26, fontWeight: 'bold' }}>⬆</Text>
           </Pressable>
@@ -4832,16 +4833,16 @@ function PixelCraft({ onExit }) {
       {/* Controls */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 10, backgroundColor: 'rgba(0,0,0,0.65)' }}>
         <View style={{ flexDirection: 'row', gap: 12 }}>
-          <Pressable onPressIn={() => keysRef.current.left = true} onPressOut={() => keysRef.current.left = false}
+          <View onTouchStart={() => keysRef.current.left = true} onTouchEnd={() => keysRef.current.left = false} onTouchCancel={() => keysRef.current.left = false}
             style={{ width: 64, height: 64, backgroundColor: '#2a1f0a', borderRadius: 32, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#6a4a1a' }}>
             <Text style={{ color: '#c8a060', fontSize: 26, fontWeight: 'bold' }}>◀</Text>
-          </Pressable>
-          <Pressable onPressIn={() => keysRef.current.right = true} onPressOut={() => keysRef.current.right = false}
+          </View>
+          <View onTouchStart={() => keysRef.current.right = true} onTouchEnd={() => keysRef.current.right = false} onTouchCancel={() => keysRef.current.right = false}
             style={{ width: 64, height: 64, backgroundColor: '#2a1f0a', borderRadius: 32, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#6a4a1a' }}>
             <Text style={{ color: '#c8a060', fontSize: 26, fontWeight: 'bold' }}>▶</Text>
-          </Pressable>
+          </View>
         </View>
-        <Pressable onPress={jump}
+        <Pressable onPress={jump} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
           style={{ width: 70, height: 70, backgroundColor: '#0d2a04', borderRadius: 35, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#3a6a1a' }}>
           <Text style={{ color: '#7ec840', fontSize: 28, fontWeight: 'bold' }}>⬆</Text>
         </Pressable>
