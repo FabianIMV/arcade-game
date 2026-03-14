@@ -2868,7 +2868,7 @@ function SnakePower({ onExit }) {
                 Récord: {highScore}
               </Text>
             )}
-            <Pressable style={styles.btn} onPress={startGame}>
+            <Pressable style={styles.btn} onPress={startGame} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
               <Text style={styles.btnText}>
                 {gamePhase === 'idle' ? 'START' : 'RETRY'}
               </Text>
@@ -3328,7 +3328,7 @@ function VoidCrawler({ onExit }) {
           <Text style={{ color: '#444', fontSize: 12, textAlign: 'center', marginBottom: 20 }}>
             {phase === 'idle' ? '😤 Hero  🚪 Stairs down  💀👺👹😈🐉 Enemies  ⚔️🛡️❤️💊💎 Items' : ''}
           </Text>
-          <Pressable style={[styles.btn, { backgroundColor: theme.accent }]} onPress={startGame}>
+          <Pressable style={[styles.btn, { backgroundColor: theme.accent }]} onPress={startGame} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
             <Text style={[styles.btnText, { color: '#000' }]}>
               {phase === 'idle' ? 'ENTER THE VOID' : 'DESCEND AGAIN'}
             </Text>
