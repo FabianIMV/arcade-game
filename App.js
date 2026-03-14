@@ -4551,6 +4551,303 @@ function NeonWarrior({ onExit }) {
     </SafeAreaView>
   );
 }
+// ─── PIXEL CRAFT - 2D Minecraft/Terraria ─────────────────────────
+const PCB   = Math.floor(Math.min(width / 12, 34));   // block px
+const PC_GH = Math.min(height - 230, 450);             // game area h
+const PC_VW = Math.ceil(width / PCB) + 3;              // visible cols
+const PC_VH = Math.ceil(PC_GH / PCB) + 3;             // visible rows
+const PC_WW = 90;  // world width  (blocks)
+const PC_WH = 52;  // world height (blocks)
+
+// [bgColor, borderColor, tapsToBreak(0=indestructible), itemDrop, label]
+const PCT = [
+  null,
+  ['#2e8c2e','#1a5c1a', 1,  2, 'Grass'],    // 1
+  ['#7a4420','#5a3010', 2,  2, 'Dirt'],     // 2
+  ['#787878','#545454', 5,  3, 'Stone'],    // 3
+  ['#1a1a1a','#0a0a0a', 0,  0, 'Bedrock'],  // 4
+  ['#505050','#383838', 6,  5, 'Coal'],     // 5
+  ['#b09870','#887050', 8,  6, 'Iron'],     // 6
+  ['#d4a820','#a07810',10,  7, 'Gold'],     // 7
+  ['#20bcd4','#0090a8',14,  8, 'Diamond'],  // 8
+  ['#6b4520','#4a2e10', 4,  9, 'Wood'],     // 9
+  ['#2d7a2d','#1d5a1d', 1,  0, 'Leaves'],  // 10
+  ['#5080d0','#3060b0', 1,  0, 'Water'],   // 11 (deco only)
+];
+const PC_ORE_COLOR = { 5:'#111111', 6:'#c8a840', 7:'#ffd020', 8:'#00e8ff' };
+const PC_BLOCK_NAMES = PCT.map(b => b ? b[4] : '');
+
+function pcGenWorld() {
+  const W = PC_WW, H = PC_WH;
+  const rows = Array.from({ length: H }, () => new Array(W).fill(0));
+  // Height map with layered sines for natural terrain
+  const hmap = Array.from({ length: W }, (_, x) => Math.floor(
+    H * 0.33
+    + Math.sin(x * 0.11) * 4
+    + Math.sin(x * 0.065) * 7
+    + Math.cos(x * 0.19) * 2
+    + Math.sin(x * 0.31 + 1.2) * 1.5
+  ));
+  for (let x = 0; x < W; x++) {
+    const sy = hmap[x];
+    for (let y = 0; y < H; y++) {
+      if (y < sy) continue;
+      if (y === sy) { rows[y][x] = 1; continue; }
+      const d = y - sy;
+      if (d < 5) { rows[y][x] = 2; continue; }
+      if (y >= H - 2) { rows[y][x] = 4; continue; }
+      const r = Math.random();
+      if (d > 22 && r < 0.022) { rows[y][x] = 8; continue; }
+      if (d > 14 && r < 0.045) { rows[y][x] = 7; continue; }
+      if (d > 7  && r < 0.085) { rows[y][x] = 6; continue; }
+      if (d > 3  && r < 0.12)  { rows[y][x] = 5; continue; }
+      rows[y][x] = 3;
+    }
+    // Trees on surface
+    if (hmap[x] > 2 && hmap[x] < H - 10 && Math.random() < 0.1) {
+      const sh = 3 + Math.floor(Math.random() * 2);
+      for (let ty = hmap[x] - sh; ty < hmap[x]; ty++) if (ty >= 0) rows[ty][x] = 9;
+      for (let ly = hmap[x] - sh - 2; ly <= hmap[x] - sh; ly++) {
+        if (ly < 0) continue;
+        for (let lx = Math.max(0, x - 2); lx <= Math.min(W - 1, x + 2); lx++)
+          if (rows[ly][lx] === 0) rows[ly][lx] = 10;
+      }
+    }
+  }
+  return { rows, hmap };
+}
+
+function PixelCraft({ onExit }) {
+  const [, setTick] = useState(0);
+  const worldRef  = useRef(null);
+  const pRef      = useRef({ x: 10, y: 5, vx: 0, vy: 0, onGround: false });
+  const camRef    = useRef({ x: 0, y: 0 });
+  const invRef    = useRef({});
+  const modeRef   = useRef('mine');
+  const selRef    = useRef(0);
+  const mineRef   = useRef(null);
+  const keysRef   = useRef({ left: false, right: false });
+  const loopRef   = useRef(null);
+  const minedRef  = useRef(0);
+
+  useEffect(() => {
+    const { rows, hmap } = pcGenWorld();
+    worldRef.current = rows;
+    const sx = 8, sy = hmap[8] - 2;
+    pRef.current = { x: sx + 0.3, y: sy, vx: 0, vy: 0, onGround: false };
+    camRef.current = { x: sx - PC_VW / 2, y: sy - PC_VH / 2 };
+    setTick(t => t + 1);
+
+    loopRef.current = setInterval(() => {
+      const p = pRef.current;
+      const world = worldRef.current;
+      if (!p || !world) return;
+
+      if (keysRef.current.left)        p.vx = -0.14;
+      else if (keysRef.current.right)  p.vx =  0.14;
+      else                             p.vx =  0;
+
+      p.vy = Math.min(p.vy + 0.028, 0.45);
+
+      const solid = (bx, by) => {
+        if (bx < 0 || bx >= PC_WW) return true;
+        if (by < 0) return false;
+        if (by >= PC_WH) return true;
+        return world[by][bx] > 0;
+      };
+
+      // Move X
+      const nx = p.x + p.vx;
+      const hitX = p.vx < 0
+        ? solid(Math.floor(nx), Math.floor(p.y)) || solid(Math.floor(nx), Math.floor(p.y + 0.85))
+        : solid(Math.floor(nx + 0.9), Math.floor(p.y)) || solid(Math.floor(nx + 0.9), Math.floor(p.y + 0.85));
+      if (!hitX) p.x = Math.max(0.1, Math.min(PC_WW - 1.1, nx));
+
+      // Move Y
+      const ny = p.y + p.vy;
+      p.onGround = false;
+      if (p.vy >= 0) {
+        const hitB = solid(Math.floor(p.x), Math.floor(ny + 0.95)) || solid(Math.floor(p.x + 0.85), Math.floor(ny + 0.95));
+        if (hitB) { p.y = Math.floor(ny + 0.95) - 0.96; p.vy = 0; p.onGround = true; }
+        else p.y = ny;
+      } else {
+        const hitT = solid(Math.floor(p.x), Math.floor(ny)) || solid(Math.floor(p.x + 0.85), Math.floor(ny));
+        if (hitT) { p.y = Math.floor(ny) + 1.0; p.vy = 0; }
+        else p.y = ny;
+      }
+      p.y = Math.max(0, Math.min(PC_WH - 2, p.y));
+
+      // Camera (smooth follow)
+      const tx = p.x - PC_VW / 2 + 0.5, ty = p.y - PC_VH / 2 + 0.5;
+      camRef.current.x += (tx - camRef.current.x) * 0.15;
+      camRef.current.y += (ty - camRef.current.y) * 0.15;
+      camRef.current.x = Math.max(0, Math.min(PC_WW - PC_VW, camRef.current.x));
+      camRef.current.y = Math.max(0, Math.min(PC_WH - PC_VH, camRef.current.y));
+
+      setTick(t => t + 1);
+    }, 33);
+    return () => clearInterval(loopRef.current);
+  }, []);
+
+  const jump = () => {
+    const p = pRef.current;
+    if (p?.onGround) { p.vy = -0.40; p.onGround = false; Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); }
+  };
+
+  const handlePress = (evt) => {
+    const world = worldRef.current;
+    if (!world) return;
+    const lx = evt.nativeEvent.locationX, ly = evt.nativeEvent.locationY;
+    const wx = Math.floor(camRef.current.x + lx / PCB);
+    const wy = Math.floor(camRef.current.y + ly / PCB);
+    if (wy < 0 || wy >= PC_WH || wx < 0 || wx >= PC_WW) return;
+    const bt = world[wy][wx];
+
+    if (modeRef.current === 'mine') {
+      if (bt === 0) return;
+      const bdef = PCT[bt];
+      if (!bdef || bdef[2] === 0) { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); return; }
+      const key = `${wx},${wy}`;
+      const taps = (mineRef.current?.key === key ? mineRef.current.taps : 0) + 1;
+      if (taps >= bdef[2]) {
+        world[wy][wx] = 0;
+        const drop = bdef[3];
+        if (drop > 0) invRef.current[drop] = (invRef.current[drop] || 0) + 1;
+        minedRef.current++;
+        mineRef.current = null;
+        scoreVibrate();
+      } else {
+        mineRef.current = { key, wx, wy, taps, needed: bdef[2] };
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      }
+    } else {
+      if (bt !== 0) return;
+      const sel = selRef.current;
+      if (!sel || !invRef.current[sel]) return;
+      world[wy][wx] = sel;
+      invRef.current[sel]--;
+      if (!invRef.current[sel]) delete invRef.current[sel];
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setTick(t => t + 1);
+  };
+
+  const p = pRef.current;
+  const cam = camRef.current;
+  const world = worldRef.current;
+
+  // Sky: day/night cycle
+  const tod = (Date.now() / 18000) % 1;
+  const sun = Math.max(0, Math.sin(tod * Math.PI));
+  const skyC = `rgb(${Math.floor(8 + sun * 100)},${Math.floor(16 + sun * 148)},${Math.floor(32 + sun * 178)})`;
+
+  const renderBlocks = () => {
+    if (!world || !p) return null;
+    const views = [];
+    const sx = Math.floor(cam.x), sy = Math.floor(cam.y);
+    const ox = -(cam.x - sx) * PCB, oy = -(cam.y - sy) * PCB;
+    for (let dy = 0; dy < PC_VH; dy++) {
+      for (let dx = 0; dx < PC_VW; dx++) {
+        const wx = sx + dx, wy = sy + dy;
+        if (wy < 0 || wy >= PC_WH || wx < 0 || wx >= PC_WW) continue;
+        const bt = world[wy][wx];
+        if (bt === 0) continue;
+        const bdef = PCT[bt];
+        if (!bdef) continue;
+        const plx = Math.round(ox + dx * PCB), ply = Math.round(oy + dy * PCB);
+        const isMining = mineRef.current?.wx === wx && mineRef.current?.wy === wy;
+        views.push(
+          <View key={`${wx},${wy}`} style={{
+            position: 'absolute', left: plx, top: ply, width: PCB, height: PCB,
+            backgroundColor: bdef[0], borderWidth: 1, borderColor: bdef[1],
+          }}>
+            {PC_ORE_COLOR[bt] && (
+              <View style={{ position: 'absolute', top: 4, left: 4, right: 4, bottom: 4, borderRadius: 3, borderWidth: 2, borderColor: PC_ORE_COLOR[bt] }} />
+            )}
+            {isMining && (
+              <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 5, backgroundColor: '#0004' }}>
+                <View style={{ height: 5, backgroundColor: '#fff9', width: `${(mineRef.current.taps / mineRef.current.needed) * 100}%` }} />
+              </View>
+            )}
+          </View>
+        );
+      }
+    }
+    // Player
+    const plx = Math.round((p.x - cam.x) * PCB);
+    const ply = Math.round((p.y - cam.y) * PCB);
+    views.push(<Text key="__player" style={{ position: 'absolute', left: plx - 2, top: ply - 2, fontSize: PCB + 2, lineHeight: PCB + 4, zIndex: 99 }}>🧑</Text>);
+    return views;
+  };
+
+  const invItems = Object.entries(invRef.current).filter(([, v]) => v > 0);
+  const isPlace = modeRef.current === 'place';
+
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 6 }}>
+        <Pressable onPress={() => { clearInterval(loopRef.current); onExit(); }}>
+          <Text style={{ color: '#666', fontSize: 13 }}>← Salir</Text>
+        </Pressable>
+        <Text style={{ color: '#c8a060', fontSize: 13, fontWeight: 'bold' }}>⛏️ {minedRef.current} bloques</Text>
+        <Pressable
+          onPress={() => { modeRef.current = isPlace ? 'mine' : 'place'; setTick(t => t + 1); }}
+          style={{ backgroundColor: isPlace ? '#0a3a0a' : '#3a200a', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: isPlace ? '#2d8a2d' : '#8B5E3C' }}
+        >
+          <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>{isPlace ? '🧱 Colocar' : '⛏️ Minar'}</Text>
+        </Pressable>
+      </View>
+
+      {/* Game canvas */}
+      <View style={{ width, height: PC_GH, backgroundColor: skyC, overflow: 'hidden' }}>
+        {renderBlocks()}
+        <Pressable onPress={handlePress} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} />
+      </View>
+
+      {/* Inventory bar */}
+      <View style={{ height: 54, backgroundColor: '#111', borderTopWidth: 2, borderTopColor: '#2a2a2a' }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 8, paddingVertical: 6, gap: 6 }}>
+          {invItems.length === 0
+            ? <Text style={{ color: '#444', fontSize: 12, alignSelf: 'center', paddingHorizontal: 12 }}>Toca bloques para minarlos</Text>
+            : invItems.map(([k, v]) => {
+              const bt = parseInt(k);
+              const bdef = PCT[bt];
+              if (!bdef) return null;
+              const isSel = selRef.current === bt && isPlace;
+              return (
+                <Pressable key={k}
+                  onPress={() => { selRef.current = bt; modeRef.current = 'place'; setTick(t => t + 1); }}
+                  style={{ width: 42, height: 42, backgroundColor: bdef[0], borderRadius: 6, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 2, borderWidth: 2, borderColor: isSel ? '#fff' : '#0006' }}
+                >
+                  <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold', textShadowColor: '#000', textShadowRadius: 3 }}>{v}</Text>
+                </Pressable>
+              );
+            })
+          }
+        </ScrollView>
+      </View>
+
+      {/* Controls */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 10, backgroundColor: 'rgba(0,0,0,0.65)' }}>
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          <Pressable onPressIn={() => keysRef.current.left = true} onPressOut={() => keysRef.current.left = false}
+            style={{ width: 64, height: 64, backgroundColor: '#2a1f0a', borderRadius: 32, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#6a4a1a' }}>
+            <Text style={{ color: '#c8a060', fontSize: 26, fontWeight: 'bold' }}>◀</Text>
+          </Pressable>
+          <Pressable onPressIn={() => keysRef.current.right = true} onPressOut={() => keysRef.current.right = false}
+            style={{ width: 64, height: 64, backgroundColor: '#2a1f0a', borderRadius: 32, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#6a4a1a' }}>
+            <Text style={{ color: '#c8a060', fontSize: 26, fontWeight: 'bold' }}>▶</Text>
+          </Pressable>
+        </View>
+        <Pressable onPress={jump}
+          style={{ width: 70, height: 70, backgroundColor: '#0d2a04', borderRadius: 35, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#3a6a1a' }}>
+          <Text style={{ color: '#7ec840', fontSize: 28, fontWeight: 'bold' }}>⬆</Text>
+        </Pressable>
+      </View>
+    </SafeAreaView>
+  );
+}
 // ─────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -4606,6 +4903,10 @@ export default function App() {
 
   if (currentScreen === 'warrior') {
     return <NeonWarrior onExit={() => setCurrentScreen('menu')} />;
+  }
+
+  if (currentScreen === 'craft') {
+    return <PixelCraft onExit={() => setCurrentScreen('menu')} />;
   }
 
   return (
@@ -4677,6 +4978,11 @@ export default function App() {
       <Pressable style={[styles.menuBtn, { backgroundColor: '#6d00cc', borderWidth: 2, borderColor: '#f0f' }]} onPress={() => setCurrentScreen('warrior')}>
         <Text style={[styles.menuBtnTitle, { color: '#fff' }]}>🥷 NEON WARRIOR</Text>
         <Text style={[styles.menuBtnSub, { color: '#ddd' }]}>Plataformas · Salto doble · Mata enemigos · 3 niveles</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#3d2008', borderWidth: 2, borderColor: '#7a4420' }]} onPress={() => setCurrentScreen('craft')}>
+        <Text style={[styles.menuBtnTitle, { color: '#c8a060' }]}>⛏️ PIXEL CRAFT</Text>
+        <Text style={[styles.menuBtnSub, { color: '#a07840' }]}>Mundo 2D · Mina bloques · Construye · Día y noche</Text>
       </Pressable>
       </ScrollView>
     </SafeAreaView>
