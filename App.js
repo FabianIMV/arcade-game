@@ -2827,7 +2827,7 @@ function SnakePower({ onExit }) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={onExit} style={styles.backBtn}>
+        <Pressable onPress={onExit} style={styles.backBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
           <Text style={styles.backText}>←</Text>
         </Pressable>
         <Text style={styles.title}>🐍 SNAKE POWER</Text>
@@ -3517,7 +3517,7 @@ function NeonTunnel({ onExit }) {
                 ? `Score: ${scoreRef.current}\n🏆 Mejor: ${bestRef.current}\n\n◀ ▶ para cambiar de carril`
                 : 'Vuela por el túnel neon\nEsquiva los bloques rojos\n3 carriles libres por anillo\n◀ ▶ para moverte'}
             </Text>
-            <Pressable style={[styles.btn, { backgroundColor: '#00ffcc', marginTop: 12 }]} onPress={startGame}>
+            <Pressable style={[styles.btn, { backgroundColor: '#00ffcc', marginTop: 12 }]} onPress={startGame} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
               <Text style={[styles.btnText, { color: '#000' }]}>{phase === 'dead' ? 'REINTENTAR' : '🚀 VOLAR'}</Text>
             </Pressable>
           </View>
@@ -3954,7 +3954,7 @@ function GravityFlip({ onExit }) {
             <Text style={[styles.overlaySub,{textAlign:'center',lineHeight:22}]}>
               {dead ? `¡Chocaste! Score: ${score}\n🏆 Mejor: ${best}` : 'Toca la pantalla para\ninvertir la gravedad.\nEvita las columnas.'}
             </Text>
-            <Pressable style={[styles.btn,{backgroundColor:'#7c3aed',marginTop:10}]} onPress={startGame}>
+            <Pressable style={[styles.btn,{backgroundColor:'#7c3aed',marginTop:10}]} onPress={startGame} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
               <Text style={styles.btnText}>{dead?'OTRA VEZ':'START'}</Text>
             </Pressable>
           </View>
