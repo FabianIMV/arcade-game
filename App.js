@@ -3914,7 +3914,7 @@ function GravityFlip({ onExit }) {
   return (
     <SafeAreaView style={[styles.container,{backgroundColor:'#06010f'}]}>
       <View style={styles.header}>
-        <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
+        <Pressable onPress={onExit} style={styles.backBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}><Text style={styles.backText}>← BACK</Text></Pressable>
         <Text style={[styles.title,{fontSize:20,color:'#a855f7'}]}>🔀 GRAVITY FLIP</Text>
         <Text style={{color:'#ffd700',fontSize:14}}>⭐{best}</Text>
       </View>
