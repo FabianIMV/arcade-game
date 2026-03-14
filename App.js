@@ -3253,7 +3253,7 @@ function VoidCrawler({ onExit }) {
     <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
       {/* HUD */}
       <View style={[styles.header, { backgroundColor: 'rgba(0,0,0,0.55)', paddingVertical: 10 }]}>
-        <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
+        <Pressable onPress={onExit} style={styles.backBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}><Text style={styles.backText}>← BACK</Text></Pressable>
         <View style={{ alignItems: 'center' }}>
           <Text style={[styles.title, { color: theme.accent, fontSize: 20 }]}>☠️ VOID CRAWLER</Text>
           <Text style={{ color: '#888', fontSize: 11 }}>{theme.name}  •  Floor {p.floor}/5</Text>
@@ -3442,7 +3442,7 @@ function NeonTunnel({ onExit }) {
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: '#000010' }]}>
       <View style={styles.header}>
-        <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
+        <Pressable onPress={onExit} style={styles.backBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}><Text style={styles.backText}>← BACK</Text></Pressable>
         <Text style={[styles.title, { color: '#00ffcc', fontSize: 18 }]}>🌀 NEON TUNNEL</Text>
         <Text style={{ color: '#ffd700', fontSize: 14, fontWeight: 'bold' }}>⭐ {bestRef.current}</Text>
       </View>
