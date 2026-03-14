@@ -4939,6 +4939,14 @@ function WallJumper({ onExit }) {
 
       // Scroll
       s.scrollY += s.speed;
+
+      // Camera follow: keep player in upper 35% of screen so it never goes off top
+      const CAM_TARGET = WJ_H * 0.35;
+      if (s.py < CAM_TARGET) {
+        s.scrollY += CAM_TARGET - s.py;
+        s.py = CAM_TARGET;
+      }
+
       s.score = Math.floor(s.scrollY / 10);
 
       // Generate obstacles
