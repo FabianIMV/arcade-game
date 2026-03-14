@@ -5222,6 +5222,14 @@ export default function App() {
     return <WordScramble onExit={() => setCurrentScreen('menu')} />;
   }
 
+  if (currentScreen === 'crossyroad') {
+    return <CR2_CrossyRoad onExit={() => setCurrentScreen('menu')} />;
+  }
+
+  if (currentScreen === 'bubbleshooter') {
+    return <BubbleShooter onExit={() => setCurrentScreen('menu')} />;
+  }
+
   return (
     <SafeAreaView style={styles.menuContainer}>
       <ScrollView contentContainerStyle={styles.menuScroll} showsVerticalScrollIndicator={false}>
@@ -5331,6 +5339,16 @@ export default function App() {
       <Pressable style={[styles.menuBtn, { backgroundColor: '#0f0f1e', borderWidth: 2, borderColor: '#a855f7' }]} onPress={() => setCurrentScreen('wordscramble')}>
         <Text style={[styles.menuBtnTitle, { color: '#a855f7' }]}>🔤 PALABRAS</Text>
         <Text style={[styles.menuBtnSub, { color: '#7733aa' }]}>Ordena letras revueltas · 20 palabras en español</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#0a1a0a', borderWidth: 2, borderColor: '#2ecc71' }]} onPress={() => setCurrentScreen('crossyroad')}>
+        <Text style={[styles.menuBtnTitle, { color: '#2ecc71' }]}>🐸 CROSSY ROAD</Text>
+        <Text style={[styles.menuBtnSub, { color: '#1a8a4a' }]}>Cruza el tráfico · Esquiva coches y camiones</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#0a0a1a', borderWidth: 2, borderColor: '#e74c3c' }]} onPress={() => setCurrentScreen('bubbleshooter')}>
+        <Text style={[styles.menuBtnTitle, { color: '#e74c3c' }]}>🫧 BUBBLE SHOOTER</Text>
+        <Text style={[styles.menuBtnSub, { color: '#aa2222' }]}>Dispara burbujas · Une 3+ del mismo color</Text>
       </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -6129,6 +6147,712 @@ function WordScramble({ onExit }) {
         </View>
         <Pressable style={{ alignSelf:'center', paddingHorizontal:24, paddingVertical:10, borderRadius:20, borderWidth:1, borderColor:'#444' }} onPress={() => skipWord(wordList, wordIndex, score)}><Text style={{ color:'#888', fontSize:14 }}>Saltar (-5 pts)</Text></Pressable>
       </View>}
+    </SafeAreaView>
+  );
+}
+// ── CROSSY ROAD ──────────────────────────────────────────────────
+
+const CR2_COLS = 9;
+const CR2_ROWS = 11;
+const CR2_CELL = Math.floor((width - 16) / CR2_COLS);
+const CR2_FROG_ROW_START = CR2_ROWS - 1;
+const CR2_TRAFFIC_ROWS = 8;
+const CR2_VEHICLES_CAR = ['🚗', '🚕', '🚙'];
+const CR2_VEHICLES_TRUCK = ['🚛', '🚚', '🚌', '🚎'];
+const CR2_BASE_SPEEDS = [1.2, 1.5, 1.0, 1.8, 1.3, 1.6, 1.1, 1.4];
+const CR2_DIRECTIONS = [1, -1, 1, -1, 1, -1, 1, -1];
+
+function cr2_makeRows(speedMult) {
+  return Array.from({ length: CR2_TRAFFIC_ROWS }, (_, i) => {
+    const dir = CR2_DIRECTIONS[i];
+    const speed = CR2_BASE_SPEEDS[i] * speedMult;
+    const count = 2 + Math.floor(Math.random() * 3);
+    const isTruck = i % 3 === 2;
+    const emoji = isTruck
+      ? CR2_VEHICLES_TRUCK[Math.floor(Math.random() * CR2_VEHICLES_TRUCK.length)]
+      : CR2_VEHICLES_CAR[Math.floor(Math.random() * CR2_VEHICLES_CAR.length)];
+    const cellW = isTruck ? 2 : 1;
+    const vehicles = Array.from({ length: count }, (__, j) => ({
+      id: j,
+      col: (j * Math.floor(CR2_COLS / count) + Math.floor(Math.random() * 2)) % CR2_COLS,
+      emoji,
+      cellW,
+    }));
+    return { dir, speed, vehicles, isTruck };
+  });
+}
+
+function CR2_CrossyRoad({ onExit }) {
+  const [frogPos, setFrogPos] = useState({ row: CR2_FROG_ROW_START, col: Math.floor(CR2_COLS / 2) });
+  const [score, setScore] = useState(0);
+  const [best, setBest] = useState(0);
+  const [dead, setDead] = useState(false);
+  const [rows, setRows] = useState(() => cr2_makeRows(1));
+  const [speedMult, setSpeedMult] = useState(1);
+  const vehiclePositions = useRef(
+    Array.from({ length: CR2_TRAFFIC_ROWS }, (_, i) => {
+      const r = cr2_makeRows(1)[i];
+      return r.vehicles.map(v => v.col);
+    })
+  );
+  const animRef = useRef(null);
+  const lastTime = useRef(null);
+  const frogRef = useRef({ row: CR2_FROG_ROW_START, col: Math.floor(CR2_COLS / 2) });
+  const deadRef = useRef(false);
+  const rowsRef = useRef(rows);
+  const speedRef = useRef(1);
+  const scoreRef = useRef(0);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    AsyncStorage.getItem('cr2_best').then(v => { if (v) setBest(parseInt(v)); });
+  }, []);
+
+  useEffect(() => { rowsRef.current = rows; }, [rows]);
+  useEffect(() => { speedRef.current = speedMult; }, [speedMult]);
+
+  const checkCollision = (fRow, fCol) => {
+    if (fRow === 0 || fRow === CR2_ROWS - 1) return false;
+    const trafficRowIndex = fRow - 1;
+    if (trafficRowIndex < 0 || trafficRowIndex >= CR2_TRAFFIC_ROWS) return false;
+    const rowData = rowsRef.current[trafficRowIndex];
+    const positions = vehiclePositions.current[trafficRowIndex];
+    for (let vi = 0; vi < positions.length; vi++) {
+      const col = positions[vi];
+      const cellW = rowData.vehicles[vi].cellW;
+      const normalizedCol = ((col % CR2_COLS) + CR2_COLS) % CR2_COLS;
+      for (let c = 0; c < cellW; c++) {
+        if (((normalizedCol + c) % CR2_COLS) === fCol) return true;
+      }
+    }
+    return false;
+  };
+
+  useEffect(() => {
+    deadRef.current = dead;
+  }, [dead]);
+
+  useEffect(() => {
+    const loop = (timestamp) => {
+      if (deadRef.current) { animRef.current = null; return; }
+      if (!lastTime.current) lastTime.current = timestamp;
+      const delta = (timestamp - lastTime.current) / 16;
+      lastTime.current = timestamp;
+
+      const currentRows = rowsRef.current;
+      const sm = speedRef.current;
+      for (let i = 0; i < CR2_TRAFFIC_ROWS; i++) {
+        const row = currentRows[i];
+        const positions = vehiclePositions.current[i];
+        for (let vi = 0; vi < positions.length; vi++) {
+          positions[vi] = positions[vi] + row.dir * row.speed * sm * delta * 0.05;
+        }
+      }
+
+      const fp = frogRef.current;
+      if (checkCollision(fp.row, fp.col)) {
+        deadRef.current = true;
+        setDead(true);
+        deathVibrate();
+        return;
+      }
+
+      setTick(t => t + 1);
+      animRef.current = requestAnimationFrame(loop);
+    };
+    animRef.current = requestAnimationFrame(loop);
+    return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
+  }, []);
+
+  const move = (dr, dc) => {
+    if (dead) return;
+    setFrogPos(prev => {
+      const nr = Math.max(0, Math.min(CR2_ROWS - 1, prev.row + dr));
+      const nc = Math.max(0, Math.min(CR2_COLS - 1, prev.col + dc));
+      frogRef.current = { row: nr, col: nc };
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+      if (nr === 0) {
+        const ns = scoreRef.current + 1;
+        scoreRef.current = ns;
+        setScore(ns);
+        celebrateVibrate();
+        setBest(prev2 => {
+          const nb = Math.max(prev2, ns);
+          AsyncStorage.setItem('cr2_best', String(nb));
+          return nb;
+        });
+        const nm = 1 + ns * 0.12;
+        speedRef.current = nm;
+        setSpeedMult(nm);
+        const newRows = cr2_makeRows(nm);
+        rowsRef.current = newRows;
+        setRows(newRows);
+        vehiclePositions.current = newRows.map(r => r.vehicles.map(v => v.col));
+        const startPos = { row: CR2_FROG_ROW_START, col: Math.floor(CR2_COLS / 2) };
+        frogRef.current = startPos;
+        return startPos;
+      }
+
+      if (checkCollision(nr, nc)) {
+        deadRef.current = true;
+        setDead(true);
+        deathVibrate();
+      }
+      return { row: nr, col: nc };
+    });
+  };
+
+  const restart = () => {
+    const startPos = { row: CR2_FROG_ROW_START, col: Math.floor(CR2_COLS / 2) };
+    frogRef.current = startPos;
+    deadRef.current = false;
+    scoreRef.current = 0;
+    speedRef.current = 1;
+    const newRows = cr2_makeRows(1);
+    rowsRef.current = newRows;
+    vehiclePositions.current = newRows.map(r => r.vehicles.map(v => v.col));
+    setFrogPos(startPos);
+    setDead(false);
+    setScore(0);
+    setSpeedMult(1);
+    setRows(newRows);
+    lastTime.current = null;
+    animRef.current = requestAnimationFrame(function loop(ts) {
+      if (deadRef.current) { animRef.current = null; return; }
+      if (!lastTime.current) lastTime.current = ts;
+      const delta = (ts - lastTime.current) / 16;
+      lastTime.current = ts;
+      const currentRows = rowsRef.current;
+      const sm = speedRef.current;
+      for (let i = 0; i < CR2_TRAFFIC_ROWS; i++) {
+        const row = currentRows[i];
+        const positions = vehiclePositions.current[i];
+        for (let vi = 0; vi < positions.length; vi++) {
+          positions[vi] = positions[vi] + row.dir * row.speed * sm * delta * 0.05;
+        }
+      }
+      const fp = frogRef.current;
+      if (checkCollision(fp.row, fp.col)) {
+        deadRef.current = true;
+        setDead(true);
+        deathVibrate();
+        return;
+      }
+      setTick(t => t + 1);
+      animRef.current = requestAnimationFrame(loop);
+    });
+  };
+
+  const boardH = CR2_CELL * CR2_ROWS;
+
+  const renderGrid = () => {
+    const cells = [];
+    for (let r = 0; r < CR2_ROWS; r++) {
+      const isGrass = r === 0 || r === CR2_ROWS - 1;
+      const bgColor = isGrass ? '#2d6a2d' : (r % 2 === 0 ? '#555' : '#444');
+      cells.push(
+        <View key={r} style={{ flexDirection: 'row', height: CR2_CELL, backgroundColor: bgColor }}>
+          {Array.from({ length: CR2_COLS }, (_, c) => (
+            <View key={c} style={{ width: CR2_CELL, height: CR2_CELL, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.05)' }} />
+          ))}
+        </View>
+      );
+    }
+    return cells;
+  };
+
+  const renderVehicles = () => {
+    const els = [];
+    for (let i = 0; i < CR2_TRAFFIC_ROWS; i++) {
+      const rowData = rows[i];
+      const positions = vehiclePositions.current[i];
+      const rowIndex = i + 1;
+      for (let vi = 0; vi < positions.length; vi++) {
+        const rawCol = positions[vi];
+        const col = ((rawCol % CR2_COLS) + CR2_COLS) % CR2_COLS;
+        const x = col * CR2_CELL;
+        const y = rowIndex * CR2_CELL;
+        const w = rowData.vehicles[vi].cellW * CR2_CELL;
+        els.push(
+          <View key={`v-${i}-${vi}`} style={{
+            position: 'absolute', left: x, top: y,
+            width: w, height: CR2_CELL,
+            justifyContent: 'center', alignItems: 'center',
+          }}>
+            <Text style={{ fontSize: CR2_CELL * 0.65 }}>{rowData.vehicles[vi].emoji}</Text>
+          </View>
+        );
+        if (col + rowData.vehicles[vi].cellW > CR2_COLS) {
+          const overflowX = (col - CR2_COLS) * CR2_CELL;
+          els.push(
+            <View key={`v-${i}-${vi}-ov`} style={{
+              position: 'absolute', left: overflowX, top: y,
+              width: w, height: CR2_CELL,
+              justifyContent: 'center', alignItems: 'center',
+            }}>
+              <Text style={{ fontSize: CR2_CELL * 0.65 }}>{rowData.vehicles[vi].emoji}</Text>
+            </View>
+          );
+        }
+      }
+    }
+    return els;
+  };
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#1a1a2e' }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 }}>
+        <Pressable onPress={onExit} style={{ padding: 8 }}>
+          <Text style={{ color: '#aaa', fontSize: 15 }}>✕ Salir</Text>
+        </Pressable>
+        <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>🐸 Rana Veloz</Text>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={{ color: '#FFD700', fontSize: 16, fontWeight: 'bold' }}>Pts: {score}</Text>
+          <Text style={{ color: '#aaa', fontSize: 12 }}>Mejor: {best}</Text>
+        </View>
+      </View>
+
+      <View style={{ alignItems: 'center', marginTop: 4 }}>
+        <View style={{ width: CR2_CELL * CR2_COLS, height: boardH, position: 'relative', overflow: 'hidden' }}>
+          {renderGrid()}
+          {renderVehicles()}
+          <View style={{
+            position: 'absolute',
+            left: frogPos.col * CR2_CELL,
+            top: frogPos.row * CR2_CELL,
+            width: CR2_CELL, height: CR2_CELL,
+            justifyContent: 'center', alignItems: 'center',
+            zIndex: 10,
+          }}>
+            <Text style={{ fontSize: CR2_CELL * 0.7 }}>🐸</Text>
+          </View>
+          {dead && (
+            <View style={{
+              position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.72)',
+              justifyContent: 'center', alignItems: 'center',
+            }}>
+              <Text style={{ fontSize: 36, marginBottom: 8 }}>💀</Text>
+              <Text style={{ color: '#fff', fontSize: 22, fontWeight: 'bold', marginBottom: 4 }}>¡Aplastado!</Text>
+              <Text style={{ color: '#FFD700', fontSize: 16, marginBottom: 16 }}>Puntos: {score}  |  Mejor: {best}</Text>
+              <Pressable onPress={restart} style={{ backgroundColor: '#4CAF50', paddingHorizontal: 32, paddingVertical: 12, borderRadius: 12 }}>
+                <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Reintentar</Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
+      </View>
+
+      <View style={{ alignItems: 'center', marginTop: 12 }}>
+        <Pressable onPress={() => move(-1, 0)} style={{ backgroundColor: '#2196F3', width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center', marginBottom: 6 }}>
+          <Text style={{ color: '#fff', fontSize: 28 }}>▲</Text>
+        </Pressable>
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          <Pressable onPress={() => move(0, -1)} style={{ backgroundColor: '#2196F3', width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={{ color: '#fff', fontSize: 28 }}>◀</Text>
+          </Pressable>
+          <Pressable onPress={() => move(1, 0)} style={{ backgroundColor: '#2196F3', width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={{ color: '#fff', fontSize: 28 }}>▼</Text>
+          </Pressable>
+          <Pressable onPress={() => move(0, 1)} style={{ backgroundColor: '#2196F3', width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={{ color: '#fff', fontSize: 28 }}>▶</Text>
+          </Pressable>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+// ── BUBBLE SHOOTER ────────────────────────────────────────────────
+
+const BS_COLS = 10;
+const BS_BUBBLE_R = Math.floor((width - 16) / BS_COLS / 2);
+const BS_BUBBLE_D = BS_BUBBLE_R * 2;
+const BS_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#e91e63'];
+const BS_SHOOTER_Y = GAME_HEIGHT - 80;
+const BS_MAX_ROWS_VISIBLE = Math.floor((GAME_HEIGHT - 120) / BS_BUBBLE_D);
+
+function bs_randomColor() {
+  return BS_COLORS[Math.floor(Math.random() * BS_COLORS.length)];
+}
+
+function bs_makeRow(rowIndex, colorPool) {
+  return Array.from({ length: BS_COLS }, (_, c) => ({
+    id: `${rowIndex}-${c}`,
+    color: colorPool[Math.floor(Math.random() * colorPool.length)],
+    row: rowIndex,
+    col: c,
+    alive: true,
+  }));
+}
+
+function bs_initGrid() {
+  const pool = BS_COLORS.slice(0, 6);
+  return Array.from({ length: 5 }, (_, i) => bs_makeRow(i, pool));
+}
+
+function BubbleShooter({ onExit }) {
+  const [grid, setGrid] = useState(() => bs_initGrid());
+  const [currentColor, setCurrentColor] = useState(bs_randomColor);
+  const [nextColor, setNextColor] = useState(bs_randomColor);
+  const [score, setScore] = useState(0);
+  const [best, setBest] = useState(0);
+  const [gameOver, setGameOver] = useState(false);
+  const [shotsFired, setShotsFired] = useState(0);
+  const [projectile, setProjectile] = useState(null);
+  const [aimDots, setAimDots] = useState([]);
+  const projRef = useRef(null);
+  const animRef = useRef(null);
+  const gridRef = useRef(grid);
+  const scoreRef = useRef(0);
+  const shotsFiredRef = useRef(0);
+  const currentColorRef = useRef(currentColor);
+  const nextColorRef = useRef(nextColor);
+  const gameOverRef = useRef(false);
+  const boardWidth = BS_COLS * BS_BUBBLE_D;
+  const boardLeft = (width - boardWidth) / 2;
+
+  useEffect(() => { gridRef.current = grid; }, [grid]);
+  useEffect(() => { currentColorRef.current = currentColor; }, [currentColor]);
+  useEffect(() => { nextColorRef.current = nextColor; }, [nextColor]);
+  useEffect(() => { gameOverRef.current = gameOver; }, [gameOver]);
+
+  useEffect(() => {
+    AsyncStorage.getItem('bs_best').then(v => { if (v) setBest(parseInt(v)); });
+  }, []);
+
+  const getColorsInGrid = (g) => {
+    const used = new Set();
+    g.forEach(row => row.forEach(b => { if (b.alive) used.add(b.color); }));
+    return used.size > 0 ? [...used] : BS_COLORS.slice(0, 4);
+  };
+
+  const bs_computeAim = (tx, ty) => {
+    const shooterX = boardLeft + boardWidth / 2;
+    const shooterY = BS_SHOOTER_Y;
+    let dx = tx - shooterX;
+    let dy = ty - shooterY;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len === 0) return [];
+    dx /= len; dy /= len;
+    if (dy > -0.1) dy = -0.1;
+    const dots = [];
+    let x = shooterX, y = shooterY;
+    let vx = dx, vy = dy;
+    for (let i = 0; i < 20; i++) {
+      x += vx * 18;
+      y += vy * 18;
+      if (x - BS_BUBBLE_R < boardLeft) { x = boardLeft + BS_BUBBLE_R; vx = Math.abs(vx); }
+      if (x + BS_BUBBLE_R > boardLeft + boardWidth) { x = boardLeft + boardWidth - BS_BUBBLE_R; vx = -Math.abs(vx); }
+      if (y < 0) break;
+      dots.push({ x, y });
+    }
+    return dots;
+  };
+
+  const findConnectedSameColor = (g, startRow, startCol, color) => {
+    const visited = new Set();
+    const queue = [`${startRow},${startCol}`];
+    const result = [];
+    while (queue.length > 0) {
+      const key = queue.shift();
+      if (visited.has(key)) continue;
+      visited.add(key);
+      const [r, c] = key.split(',').map(Number);
+      const row = g[r];
+      if (!row) continue;
+      const b = row[c];
+      if (!b || !b.alive || b.color !== color) continue;
+      result.push({ r, c });
+      const neighbors = [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]];
+      neighbors.forEach(([nr, nc]) => {
+        if (nr >= 0 && nc >= 0 && nc < BS_COLS) queue.push(`${nr},${nc}`);
+      });
+    }
+    return result;
+  };
+
+  const findDetached = (g) => {
+    const connected = new Set();
+    const queue = [];
+    g[0] && g[0].forEach((b, c) => { if (b && b.alive) { queue.push(`0,${c}`); connected.add(`0,${c}`); } });
+    while (queue.length > 0) {
+      const key = queue.shift();
+      const [r, c] = key.split(',').map(Number);
+      const neighbors = [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]];
+      neighbors.forEach(([nr, nc]) => {
+        const nkey = `${nr},${nc}`;
+        if (!connected.has(nkey) && nr >= 0 && nr < g.length && nc >= 0 && nc < BS_COLS) {
+          const row = g[nr];
+          if (row && row[nc] && row[nc].alive) {
+            connected.add(nkey);
+            queue.push(nkey);
+          }
+        }
+      });
+    }
+    const detached = [];
+    g.forEach((row, r) => {
+      row.forEach((b, c) => {
+        if (b && b.alive && !connected.has(`${r},${c}`)) detached.push({ r, c });
+      });
+    });
+    return detached;
+  };
+
+  const landBubble = (bx, by, color) => {
+    const g = gridRef.current.map(row => row.map(b => ({ ...b })));
+    const col = Math.round((bx - boardLeft) / BS_BUBBLE_D - 0.5);
+    const row = Math.round(by / BS_BUBBLE_D - 0.5);
+    const clampedCol = Math.max(0, Math.min(BS_COLS - 1, col));
+    const clampedRow = Math.max(0, row);
+
+    while (g.length <= clampedRow) {
+      g.push(Array.from({ length: BS_COLS }, (_, c2) => ({ id: `${g.length}-${c2}`, color: '', row: g.length, col: c2, alive: false })));
+    }
+    g[clampedRow][clampedCol] = { id: `${clampedRow}-${clampedCol}-new`, color, row: clampedRow, col: clampedCol, alive: true };
+
+    const matched = findConnectedSameColor(g, clampedRow, clampedCol, color);
+    let pts = 0;
+    if (matched.length >= 3) {
+      matched.forEach(({ r, c }) => { g[r][c] = { ...g[r][c], alive: false }; });
+      pts += matched.length * 10;
+      popVibrate();
+      const detached = findDetached(g);
+      if (detached.length > 0) {
+        detached.forEach(({ r, c }) => { g[r][c] = { ...g[r][c], alive: false }; });
+        pts += detached.length * 15;
+      }
+    }
+
+    const newShotsFired = shotsFiredRef.current + 1;
+    shotsFiredRef.current = newShotsFired;
+    let finalGrid = g;
+    if (newShotsFired % 8 === 0) {
+      const pool = getColorsInGrid(g);
+      const newRow = bs_makeRow(0, pool);
+      finalGrid = [newRow, ...g].map((rw, ri) =>
+        rw.map(b => ({ ...b, row: ri }))
+      );
+    }
+    finalGrid = finalGrid.filter(rw => rw.some(b => b.alive) || rw[0].row < 3);
+    while (finalGrid.length < 3) {
+      const pool = getColorsInGrid(finalGrid);
+      finalGrid.push(bs_makeRow(finalGrid.length, pool));
+    }
+
+    const isOver = finalGrid.some((rw, ri) => ri >= BS_MAX_ROWS_VISIBLE && rw.some(b => b.alive));
+    if (isOver) {
+      gameOverRef.current = true;
+      setGameOver(true);
+      deathVibrate();
+    }
+
+    if (pts > 0) {
+      scoreRef.current += pts;
+      setScore(scoreRef.current);
+      setBest(prev => {
+        const nb = Math.max(prev, scoreRef.current);
+        AsyncStorage.setItem('bs_best', String(nb));
+        return nb;
+      });
+    }
+
+    const pool2 = getColorsInGrid(finalGrid);
+    const nc = nextColorRef.current;
+    const nn = pool2[Math.floor(Math.random() * pool2.length)];
+    currentColorRef.current = nc;
+    nextColorRef.current = nn;
+    setCurrentColor(nc);
+    setNextColor(nn);
+    setShotsFired(newShotsFired);
+    setGrid(finalGrid);
+    setProjectile(null);
+    projRef.current = null;
+  };
+
+  const shoot = (tx, ty) => {
+    if (gameOverRef.current || projRef.current) return;
+    const shooterX = boardLeft + boardWidth / 2;
+    const shooterY = BS_SHOOTER_Y;
+    let dx = tx - shooterX;
+    let dy = ty - shooterY;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len === 0 || dy > -10) return;
+    dx /= len; dy /= len;
+    if (dy > -0.15) dy = -0.15;
+    const speed = 10;
+    const proj = { x: shooterX, y: shooterY, vx: dx * speed, vy: dy * speed, color: currentColorRef.current };
+    projRef.current = proj;
+    setProjectile({ ...proj });
+    setAimDots([]);
+
+    const step = () => {
+      if (!projRef.current) return;
+      const p = projRef.current;
+      let nx = p.x + p.vx;
+      let ny = p.y + p.vy;
+      let nvx = p.vx;
+
+      if (nx - BS_BUBBLE_R < boardLeft) { nx = boardLeft + BS_BUBBLE_R; nvx = Math.abs(nvx); }
+      if (nx + BS_BUBBLE_R > boardLeft + boardWidth) { nx = boardLeft + boardWidth - BS_BUBBLE_R; nvx = -Math.abs(nvx); }
+
+      if (ny - BS_BUBBLE_R <= 0) {
+        landBubble(nx, 0, p.color);
+        return;
+      }
+
+      const g = gridRef.current;
+      let landed = false;
+      for (let r = 0; r < g.length && !landed; r++) {
+        for (let c = 0; c < BS_COLS && !landed; c++) {
+          const b = g[r][c];
+          if (!b || !b.alive) continue;
+          const bx2 = boardLeft + c * BS_BUBBLE_D + BS_BUBBLE_R;
+          const by2 = r * BS_BUBBLE_D + BS_BUBBLE_R;
+          const dist = Math.sqrt((nx - bx2) ** 2 + (ny - by2) ** 2);
+          if (dist < BS_BUBBLE_D * 0.95) {
+            landBubble(nx, ny, p.color);
+            landed = true;
+          }
+        }
+      }
+      if (!landed) {
+        const updated = { ...p, x: nx, y: ny, vx: nvx };
+        projRef.current = updated;
+        setProjectile({ ...updated });
+        animRef.current = requestAnimationFrame(step);
+      }
+    };
+    animRef.current = requestAnimationFrame(step);
+  };
+
+  const restart = () => {
+    const newGrid = bs_initGrid();
+    gridRef.current = newGrid;
+    scoreRef.current = 0;
+    shotsFiredRef.current = 0;
+    gameOverRef.current = false;
+    projRef.current = null;
+    const c = bs_randomColor();
+    const n = bs_randomColor();
+    currentColorRef.current = c;
+    nextColorRef.current = n;
+    setGrid(newGrid);
+    setScore(0);
+    setShotsFired(0);
+    setGameOver(false);
+    setProjectile(null);
+    setAimDots([]);
+    setCurrentColor(c);
+    setNextColor(n);
+  };
+
+  const handlePress = (e) => {
+    const { locationX, locationY } = e.nativeEvent;
+    shoot(locationX, locationY);
+  };
+
+  const handleMove = (e) => {
+    if (projRef.current || gameOverRef.current) return;
+    const { locationX, locationY } = e.nativeEvent;
+    setAimDots(bs_computeAim(locationX, locationY));
+  };
+
+  const renderGrid = () => {
+    const els = [];
+    grid.forEach((row, r) => {
+      row.forEach((b, c) => {
+        if (!b || !b.alive) return;
+        const x = boardLeft + c * BS_BUBBLE_D;
+        const y = r * BS_BUBBLE_D;
+        if (y > GAME_HEIGHT - 80) return;
+        els.push(
+          <View key={b.id} style={{
+            position: 'absolute', left: x, top: y,
+            width: BS_BUBBLE_D, height: BS_BUBBLE_D,
+            justifyContent: 'center', alignItems: 'center',
+          }}>
+            <View style={{ width: BS_BUBBLE_D - 3, height: BS_BUBBLE_D - 3, borderRadius: BS_BUBBLE_R, backgroundColor: b.color, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' }} />
+          </View>
+        );
+      });
+    });
+    return els;
+  };
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#0d0d1a' }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 }}>
+        <Pressable onPress={onExit} style={{ padding: 8 }}>
+          <Text style={{ color: '#aaa', fontSize: 15 }}>✕ Salir</Text>
+        </Pressable>
+        <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Burbuja</Text>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={{ color: '#FFD700', fontSize: 16, fontWeight: 'bold' }}>Pts: {score}</Text>
+          <Text style={{ color: '#aaa', fontSize: 12 }}>Mejor: {best}</Text>
+        </View>
+      </View>
+
+      <View
+        style={{ flex: 1, position: 'relative' }}
+        onStartShouldSetResponder={() => true}
+        onResponderGrant={handlePress}
+        onResponderMove={handleMove}
+      >
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+          {renderGrid()}
+
+          {aimDots.map((d, i) => (
+            <View key={i} style={{
+              position: 'absolute',
+              left: d.x - 4, top: d.y - 4,
+              width: 8, height: 8, borderRadius: 4,
+              backgroundColor: `${currentColor}88`,
+            }} />
+          ))}
+
+          {projectile && (
+            <View style={{
+              position: 'absolute',
+              left: projectile.x - BS_BUBBLE_R,
+              top: projectile.y - BS_BUBBLE_R,
+              width: BS_BUBBLE_D, height: BS_BUBBLE_D,
+              borderRadius: BS_BUBBLE_R,
+              backgroundColor: projectile.color,
+              borderWidth: 2, borderColor: 'rgba(255,255,255,0.5)',
+            }} />
+          )}
+
+          <View style={{
+            position: 'absolute', bottom: 8, left: 0, right: 0,
+            flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', gap: 24,
+          }}>
+            <View style={{ alignItems: 'center' }}>
+              <Text style={{ color: '#aaa', fontSize: 11, marginBottom: 4 }}>Siguiente</Text>
+              <View style={{ width: BS_BUBBLE_D + 4, height: BS_BUBBLE_D + 4, borderRadius: BS_BUBBLE_R + 2, backgroundColor: nextColor, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' }} />
+            </View>
+            <View style={{ alignItems: 'center' }}>
+              <Text style={{ color: '#fff', fontSize: 11, marginBottom: 4 }}>Actual</Text>
+              <View style={{ width: BS_BUBBLE_D + 12, height: BS_BUBBLE_D + 12, borderRadius: BS_BUBBLE_R + 6, backgroundColor: currentColor, borderWidth: 3, borderColor: 'rgba(255,255,255,0.6)' }} />
+            </View>
+          </View>
+        </View>
+
+        {gameOver && (
+          <View style={{
+            position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)',
+            justifyContent: 'center', alignItems: 'center',
+          }}>
+            <Text style={{ fontSize: 40, marginBottom: 8 }}>💥</Text>
+            <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold', marginBottom: 4 }}>¡Juego Terminado!</Text>
+            <Text style={{ color: '#FFD700', fontSize: 16, marginBottom: 20 }}>Puntos: {score}  |  Mejor: {best}</Text>
+            <Pressable onPress={restart} style={{ backgroundColor: '#9b59b6', paddingHorizontal: 32, paddingVertical: 12, borderRadius: 12 }}>
+              <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Jugar de Nuevo</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
     </SafeAreaView>
   );
 }
