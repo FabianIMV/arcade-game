@@ -257,6 +257,7 @@ function NeonGalaxy({ onExit }) {
               if (Math.random() < 0.1) {
                 powerUps.current.push({ id: now + Math.random(), x: e.x, y: e.y, type: 'shield' });
               }
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
               popVibrate();
               enemyDestroyed = true;
               break;
@@ -306,7 +307,7 @@ function NeonGalaxy({ onExit }) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
+        <Pressable onPress={onExit} style={styles.backBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}><Text style={styles.backText}>← BACK</Text></Pressable>
         <Text style={styles.title}>NEON GALAXY</Text>
         <View style={styles.stats}>
           <Text style={styles.statText}>SCORE: {score}</Text>
@@ -371,7 +372,7 @@ function NeonGalaxy({ onExit }) {
                 ? 'Collect 🛡️ for extra lives. Kill fast for 2× combo!'
                 : 'Drag to move. Auto-fire enabled. Collect 🛡️ shields!'}
             </Text>
-            <Pressable style={styles.btn} onPress={startGame}>
+            <Pressable style={styles.btn} onPress={startGame} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
               <Text style={styles.btnText}>{gameOver ? 'RETRY' : 'START'}</Text>
             </Pressable>
           </View>
@@ -579,7 +580,7 @@ function CyberRun({ onExit }) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
+        <Pressable onPress={onExit} style={styles.backBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}><Text style={styles.backText}>← BACK</Text></Pressable>
         <Text style={styles.title}>CYBER RUN</Text>
         <View style={styles.stats}>
           <Text style={styles.statText}>SCORE: {score}</Text>
@@ -664,7 +665,7 @@ function CyberRun({ onExit }) {
                 BEST: {highScore.current}
               </Text>
             )}
-            <Pressable style={styles.btn} onPress={startGame}>
+            <Pressable style={styles.btn} onPress={startGame} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
               <Text style={styles.btnText}>{gameOver ? 'RETRY' : 'START'}</Text>
             </Pressable>
           </View>
@@ -1977,9 +1978,9 @@ function Breakout({ onExit }) {
       b.y += b.vy;
 
       // Wall bounce
-      if (b.x <= 0) { b.x = 0; b.vx = Math.abs(b.vx); }
-      if (b.x + BK_BALL_R * 2 >= width) { b.x = width - BK_BALL_R * 2; b.vx = -Math.abs(b.vx); }
-      if (b.y <= 0) { b.y = 0; b.vy = Math.abs(b.vy); }
+      if (b.x <= 0) { b.x = 0; b.vx = Math.abs(b.vx); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }
+      if (b.x + BK_BALL_R * 2 >= width) { b.x = width - BK_BALL_R * 2; b.vx = -Math.abs(b.vx); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }
+      if (b.y <= 0) { b.y = 0; b.vy = Math.abs(b.vy); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }
 
       // Paddle collision
       const pY = GAME_HEIGHT - BK_PADDLE_H - 42;
