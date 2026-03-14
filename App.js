@@ -2879,21 +2879,21 @@ function SnakePower({ onExit }) {
       <View style={snkStyles.controls}>
         <View style={snkStyles.ctrlRow}>
           <View style={snkStyles.ctrlGap} />
-          <Pressable style={snkStyles.ctrlBtn} onPress={() => changeDir(DIR_UP)}>
+          <View style={snkStyles.ctrlBtn} onTouchStart={() => changeDir(DIR_UP)}>
             <Text style={snkStyles.ctrlTxt}>▲</Text>
-          </Pressable>
+          </View>
           <View style={snkStyles.ctrlGap} />
         </View>
         <View style={snkStyles.ctrlRow}>
-          <Pressable style={snkStyles.ctrlBtn} onPress={() => changeDir(DIR_LEFT)}>
+          <View style={snkStyles.ctrlBtn} onTouchStart={() => changeDir(DIR_LEFT)}>
             <Text style={snkStyles.ctrlTxt}>◀</Text>
-          </Pressable>
-          <Pressable style={snkStyles.ctrlBtn} onPress={() => changeDir(DIR_DOWN)}>
+          </View>
+          <View style={snkStyles.ctrlBtn} onTouchStart={() => changeDir(DIR_DOWN)}>
             <Text style={snkStyles.ctrlTxt}>▼</Text>
-          </Pressable>
-          <Pressable style={snkStyles.ctrlBtn} onPress={() => changeDir(DIR_RIGHT)}>
+          </View>
+          <View style={snkStyles.ctrlBtn} onTouchStart={() => changeDir(DIR_RIGHT)}>
             <Text style={snkStyles.ctrlTxt}>▶</Text>
-          </Pressable>
+          </View>
         </View>
       </View>
     </SafeAreaView>
@@ -3237,7 +3237,7 @@ function VoidCrawler({ onExit }) {
   };
 
   const dpadBtn = (label, onPress) => (
-    <Pressable onPress={onPress} style={{
+    <View onTouchStart={onPress} style={{
       width: 75, height: 75,
       backgroundColor: 'rgba(255,255,255,0.10)',
       borderRadius: 14,
@@ -3245,7 +3245,7 @@ function VoidCrawler({ onExit }) {
       borderWidth: 1, borderColor: theme.accent + '60',
     }}>
       <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold' }}>{label}</Text>
-    </Pressable>
+    </View>
   );
 
   return (
