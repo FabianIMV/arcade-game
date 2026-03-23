@@ -1205,7 +1205,7 @@ function PixelQuest({ onExit }) {
       // WORLD 15 ── EL OLIMPO  (nivel final absoluto)
       // Plataformas 70px, gaps 120-125px, 12 enemies 5.0-6.0.
       // ═══════════════════════════════════════════════════════════════
-      default:
+      case 15:
         ld.platforms.push(
           gnd(0,   140),
           gnd(3800, 500),
@@ -1240,6 +1240,480 @@ function PixelQuest({ onExit }) {
         ld.goal = goal(3920, 185);
         ld.length = 4100;
         break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 16 ── PUENTE ROTO  (plataformas alternas cortas 65px)
+      // ═══════════════════════════════════════════════════════════════
+      case 16:
+        ld.platforms.push(
+          gnd(0, 180),
+          gnd(3900, 500),
+          plat(210, 90, 65),  plat(400, 170, 65),  plat(600, 90, 65),
+          plat(800, 175, 65), plat(1005, 95, 65),  plat(1210, 180, 65),
+          plat(1415, 95, 65), plat(1625, 180, 65), plat(1835, 95, 65),
+          plat(2050, 175, 65),plat(2265, 95, 65),  plat(2480, 175, 65),
+          plat(2695, 90, 65), plat(2905, 175, 65), plat(3115, 90, 70),
+          plat(3340, 80, 200),
+        );
+        ld.enemies.push(
+          enm(100, 80, 5.5),
+          enmP(230, 90, 40, 5.5), enmP(620, 90, 40, 6.0),
+          enmP(1025, 95, 40, 6.0), enmP(1435, 95, 40, 6.5),
+          enmP(1855, 95, 40, 6.5), enmP(2285, 95, 40, 6.5),
+          enmP(2715, 90, 40, 6.5), enmP(3360, 80, 90, 6.0),
+        );
+        ld.powerups.push(star(810, 220), djump(1420, 225), star(2060, 220), djump(2910, 220), life(3365, 115));
+        ld.blocks.push(
+          qBlock(610, 135, 'doublejump'), qBlock(1215, 225, 'star'),
+          qBlock(1840, 140, 'life'), qBlock(2700, 135, 'doublejump'),
+        );
+        ld.goal = goal(4010, 185);
+        ld.length = 4200;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 17 ── TÚNEL OSCURO  (techo bajo + piso, ritmo constante)
+      // ═══════════════════════════════════════════════════════════════
+      case 17:
+        ld.platforms.push(
+          gnd(0, 190),
+          gnd(4000, 500),
+          plat(220, 95, 70),  plat(430, 175, 65),  plat(640, 90, 70),
+          plat(850, 180, 65), plat(1065, 90, 70),  plat(1280, 180, 65),
+          plat(1495, 90, 70), plat(1710, 175, 65), plat(1930, 90, 70),
+          plat(2150, 175, 65),plat(2370, 90, 70),  plat(2595, 175, 65),
+          plat(2815, 90, 70), plat(3040, 175, 65), plat(3265, 90, 75),
+          plat(3490, 80, 220),
+        );
+        ld.enemies.push(
+          enm(100, 80, 6.0),
+          enmP(240, 95, 45, 6.0),  enmP(660, 90, 45, 6.5),
+          enmP(1085, 90, 40, 6.5), enmP(1515, 90, 40, 7.0),
+          enmP(1950, 90, 40, 7.0), enmP(2390, 90, 40, 7.0),
+          enmP(2835, 90, 40, 7.0), enmP(3510, 80, 90, 6.5),
+        );
+        ld.powerups.push(star(860, 225), djump(1500, 135), star(2155, 220), djump(3045, 220), life(3515, 115));
+        ld.blocks.push(
+          qBlock(650, 135, 'star'), qBlock(1290, 225, 'doublejump'),
+          qBlock(1940, 135, 'life'), qBlock(2820, 135, 'star'),
+        );
+        ld.goal = goal(4120, 185);
+        ld.length = 4300;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 18 ── AVALANCHA  (gaps 130px, plataformas 65-70px)
+      // ═══════════════════════════════════════════════════════════════
+      case 18:
+        ld.platforms.push(
+          gnd(0, 170),
+          gnd(4100, 500),
+          plat(210, 85, 70),  plat(415, 165, 65),  plat(615, 85, 70),
+          plat(820, 170, 65), plat(1025, 85, 70),  plat(1235, 170, 65),
+          plat(1445, 85, 70), plat(1655, 165, 65), plat(1870, 85, 70),
+          plat(2085, 165, 65),plat(2300, 85, 70),  plat(2515, 165, 65),
+          plat(2730, 85, 70), plat(2945, 165, 70), plat(3165, 85, 80),
+          plat(3390, 80, 230),
+        );
+        ld.enemies.push(
+          enm(100, 75, 6.5),
+          enmP(230, 85, 40, 6.5), enmP(635, 85, 40, 7.0),
+          enmP(1045, 85, 40, 7.0), enmP(1465, 85, 40, 7.5),
+          enmP(1890, 85, 40, 7.5), enmP(2320, 85, 40, 7.5),
+          enmP(2750, 85, 40, 7.5), enmP(3410, 80, 95, 7.0),
+        );
+        ld.powerups.push(star(830, 215), djump(1450, 130), star(2095, 210), djump(2950, 210), life(3415, 115));
+        ld.blocks.push(
+          qBlock(625, 130, 'doublejump'), qBlock(1240, 215, 'star'),
+          qBlock(1875, 130, 'life'), qBlock(2735, 130, 'doublejump'),
+        );
+        ld.goal = goal(4230, 180);
+        ld.length = 4400;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 19 ── ESCALADA EXTREMA  (subida pura, gaps 110px)
+      // ═══════════════════════════════════════════════════════════════
+      case 19:
+        ld.platforms.push(
+          gnd(0, 160),
+          gnd(4200, 500),
+          plat(200, 80, 70),  plat(395, 155, 65),  plat(590, 240, 65),
+          plat(780, 155, 65), plat(975, 80, 70),   plat(1175, 200, 65),
+          plat(1375, 120, 65),plat(1575, 220, 65), plat(1775, 130, 70),
+          plat(1985, 200, 65),plat(2195, 110, 70), plat(2415, 195, 65),
+          plat(2630, 105, 70),plat(2850, 185, 65), plat(3075, 95, 75),
+          plat(3300, 80, 230),
+        );
+        ld.enemies.push(
+          enm(100, 70, 6.5),
+          enmP(215, 80, 40, 7.0),  enmP(605, 240, 40, 7.0),
+          enmP(995, 80, 40, 7.5),  enmP(1390, 120, 40, 7.5),
+          enmP(1790, 130, 40, 8.0),enmP(2210, 110, 40, 8.0),
+          enmP(2645, 105, 40, 8.0),enmP(3315, 80, 95, 7.5),
+        );
+        ld.powerups.push(star(790, 200), djump(1380, 165), star(1985, 245), djump(2855, 230), life(3320, 115));
+        ld.blocks.push(
+          qBlock(600, 285, 'doublejump'), qBlock(1185, 245, 'star'),
+          qBlock(1785, 175, 'life'), qBlock(2635, 150, 'doublejump'),
+        );
+        ld.goal = goal(4320, 180);
+        ld.length = 4500;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 20 ── INFIERNO DE FUEGO  (enemies 8.0, plataformas 60px)
+      // ═══════════════════════════════════════════════════════════════
+      case 20:
+        ld.platforms.push(
+          gnd(0, 160),
+          gnd(4300, 500),
+          plat(210, 90, 62),  plat(415, 170, 60),  plat(620, 90, 62),
+          plat(825, 175, 60), plat(1035, 90, 62),  plat(1250, 175, 60),
+          plat(1465, 90, 62), plat(1680, 170, 60), plat(1895, 90, 62),
+          plat(2115, 170, 60),plat(2335, 90, 62),  plat(2555, 170, 60),
+          plat(2775, 90, 62), plat(2995, 170, 62), plat(3220, 90, 68),
+          plat(3445, 80, 240),
+        );
+        ld.enemies.push(
+          enm(100, 70, 7.0),
+          enmP(228, 90, 37, 7.5),  enmP(638, 90, 37, 8.0),
+          enmP(1053, 90, 37, 8.0), enmP(1483, 90, 37, 8.5),
+          enmP(1913, 90, 37, 8.5), enmP(2353, 90, 37, 8.5),
+          enmP(2793, 90, 37, 8.5), enmP(3465, 80, 95, 8.0),
+        );
+        ld.powerups.push(star(835, 220), djump(1470, 135), star(2125, 215), djump(3005, 215), life(3470, 115));
+        ld.blocks.push(
+          qBlock(630, 135, 'doublejump'), qBlock(1260, 220, 'star'),
+          qBlock(1905, 135, 'life'), qBlock(2785, 135, 'doublejump'),
+        );
+        ld.goal = goal(4420, 180);
+        ld.length = 4600;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 21 ── ESPIRAL  (plataformas en zigzag amplio, gaps 115px)
+      // ═══════════════════════════════════════════════════════════════
+      case 21:
+        ld.platforms.push(
+          gnd(0, 155),
+          gnd(4400, 500),
+          plat(200, 80, 60),  plat(380, 200, 60),  plat(560, 85, 60),
+          plat(745, 210, 60), plat(935, 90, 60),   plat(1130, 215, 60),
+          plat(1330, 95, 60), plat(1535, 215, 60), plat(1740, 95, 60),
+          plat(1950, 210, 60),plat(2165, 90, 60),  plat(2375, 205, 60),
+          plat(2590, 85, 60), plat(2800, 200, 60), plat(3025, 85, 65),
+          plat(3260, 80, 250),
+        );
+        ld.enemies.push(
+          enm(100, 65, 7.5),
+          enmP(218, 80, 35, 7.5),  enmP(578, 85, 35, 8.0),
+          enmP(953, 90, 35, 8.0),  enmP(1348, 95, 35, 8.5),
+          enmP(1758, 95, 35, 8.5), enmP(2183, 90, 35, 9.0),
+          enmP(2608, 85, 35, 9.0), enmP(3280, 80, 90, 8.5),
+        );
+        ld.powerups.push(star(755, 255), djump(1335, 140), star(1955, 255), djump(2805, 245), life(3285, 115));
+        ld.blocks.push(
+          qBlock(570, 130, 'doublejump'), qBlock(1140, 260, 'star'),
+          qBlock(1750, 140, 'life'), qBlock(2595, 130, 'doublejump'),
+        );
+        ld.goal = goal(4510, 178);
+        ld.length = 4700;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 22 ── MURO INFINITO  (pendiente continua de subida)
+      // ═══════════════════════════════════════════════════════════════
+      case 22:
+        ld.platforms.push(
+          gnd(0, 150),
+          gnd(4500, 500),
+          plat(205, 85, 60),  plat(400, 160, 58),  plat(600, 235, 58),
+          plat(795, 160, 58), plat(995, 90, 60),   plat(1200, 185, 58),
+          plat(1405, 260, 58),plat(1610, 185, 58), plat(1820, 100, 60),
+          plat(2035, 195, 58),plat(2250, 270, 58), plat(2465, 195, 58),
+          plat(2680, 100, 60),plat(2895, 190, 58), plat(3120, 90, 65),
+          plat(3355, 80, 255),
+        );
+        ld.enemies.push(
+          enm(100, 60, 8.0),
+          enmP(222, 85, 35, 8.0),  enmP(617, 235, 35, 8.5),
+          enmP(1013, 90, 35, 8.5), enmP(1422, 260, 35, 9.0),
+          enmP(1838, 100, 35, 9.0),enmP(2268, 270, 35, 9.0),
+          enmP(2698, 100, 35, 9.0),enmP(3375, 80, 90, 8.5),
+        );
+        ld.powerups.push(star(805, 205), djump(1410, 305), star(2045, 240), djump(2905, 235), life(3380, 115));
+        ld.blocks.push(
+          qBlock(610, 280, 'doublejump'), qBlock(1210, 230, 'star'),
+          qBlock(1830, 145, 'life'), qBlock(2690, 145, 'doublejump'),
+        );
+        ld.goal = goal(4610, 175);
+        ld.length = 4800;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 23 ── RAIN OF DEATH  (muchos enemigos, plataformas 58px)
+      // ═══════════════════════════════════════════════════════════════
+      case 23:
+        ld.platforms.push(
+          gnd(0, 145),
+          gnd(4600, 500),
+          plat(210, 90, 58),  plat(415, 170, 56),  plat(625, 90, 58),
+          plat(840, 175, 56), plat(1055, 90, 58),  plat(1275, 175, 56),
+          plat(1495, 90, 58), plat(1715, 170, 56), plat(1935, 90, 58),
+          plat(2160, 170, 56),plat(2385, 90, 58),  plat(2610, 170, 56),
+          plat(2835, 90, 58), plat(3060, 170, 60), plat(3290, 90, 65),
+          plat(3520, 80, 255),
+        );
+        ld.enemies.push(
+          enm(100, 55, 8.5),
+          enmP(227, 90, 33, 8.5),  enmP(642, 90, 33, 9.0),
+          enmP(1072, 90, 33, 9.0), enmP(1512, 90, 33, 9.5),
+          enmP(1952, 90, 33, 9.5), enmP(2402, 90, 33, 9.5),
+          enmP(2852, 90, 33, 9.5), enmP(3308, 90, 33, 9.0),
+          enmP(3540, 80, 90, 9.0),
+        );
+        ld.powerups.push(star(850, 220), djump(1500, 135), star(2170, 215), djump(3070, 215), life(3545, 115));
+        ld.blocks.push(
+          qBlock(635, 135, 'doublejump'), qBlock(1285, 220, 'star'),
+          qBlock(1945, 135, 'life'), qBlock(2845, 135, 'doublejump'),
+        );
+        ld.goal = goal(4710, 175);
+        ld.length = 4900;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 24 ── CAÍDA LIBRE  (plataformas super angostas 55px)
+      // ═══════════════════════════════════════════════════════════════
+      case 24:
+        ld.platforms.push(
+          gnd(0, 140),
+          gnd(4700, 500),
+          plat(215, 90, 56),  plat(430, 170, 55),  plat(645, 90, 56),
+          plat(860, 175, 55), plat(1075, 90, 56),  plat(1295, 175, 55),
+          plat(1515, 90, 56), plat(1735, 170, 55), plat(1955, 90, 56),
+          plat(2180, 170, 55),plat(2405, 90, 56),  plat(2630, 170, 55),
+          plat(2855, 90, 56), plat(3080, 170, 58), plat(3310, 90, 63),
+          plat(3545, 80, 260),
+        );
+        ld.enemies.push(
+          enm(100, 50, 9.0),
+          enmP(232, 90, 31, 9.0),  enmP(662, 90, 31, 9.5),
+          enmP(1092, 90, 31, 9.5), enmP(1532, 90, 31, 10.0),
+          enmP(1972, 90, 31, 10.0),enmP(2422, 90, 31, 10.0),
+          enmP(2872, 90, 31, 10.0),enmP(3565, 80, 90, 9.5),
+        );
+        ld.powerups.push(star(870, 220), djump(1520, 135), star(2190, 215), djump(3090, 215), life(3570, 115));
+        ld.blocks.push(
+          qBlock(655, 135, 'doublejump'), qBlock(1305, 220, 'star'),
+          qBlock(1965, 135, 'life'), qBlock(2865, 135, 'doublejump'),
+        );
+        ld.goal = goal(4810, 172);
+        ld.length = 5000;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 25 ── EL UMBRAL  (punto medio de la expansión, 10+ enemies)
+      // ═══════════════════════════════════════════════════════════════
+      case 25:
+        ld.platforms.push(
+          gnd(0, 135),
+          gnd(4800, 500),
+          plat(220, 90, 55),  plat(445, 175, 55),  plat(665, 90, 55),
+          plat(890, 175, 55), plat(1115, 90, 55),  plat(1345, 175, 55),
+          plat(1575, 90, 55), plat(1805, 175, 55), plat(2035, 90, 55),
+          plat(2270, 175, 55),plat(2505, 90, 55),  plat(2740, 175, 55),
+          plat(2975, 90, 55), plat(3210, 170, 60), plat(3450, 90, 65),
+          plat(3685, 80, 265),
+        );
+        ld.enemies.push(
+          enm(100, 50, 9.5),
+          enmP(238, 90, 30, 9.5),  enmP(682, 90, 30, 10.0),
+          enmP(1132, 90, 30, 10.0),enmP(1592, 90, 30, 10.5),
+          enmP(2052, 90, 30, 10.5),enmP(2522, 90, 30, 10.5),
+          enmP(2992, 90, 30, 10.5),enmP(3470, 90, 30, 10.0),
+          enmP(3705, 80, 90, 10.0),
+        );
+        ld.powerups.push(
+          star(900, 220), djump(1350, 220), star(2045, 135),
+          djump(2745, 220), star(3220, 215), life(3710, 115),
+        );
+        ld.blocks.push(
+          qBlock(675, 135, 'doublejump'), qBlock(1355, 220, 'star'),
+          qBlock(2045, 135, 'life'), qBlock(2985, 135, 'doublejump'),
+          qBlock(3460, 135, 'star'),
+        );
+        ld.goal = goal(4920, 170);
+        ld.length = 5100;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 26 ── TORMENTA ELÉCTRICA  (plataformas 53px, gaps 130px)
+      // ═══════════════════════════════════════════════════════════════
+      case 26:
+        ld.platforms.push(
+          gnd(0, 130),
+          gnd(4900, 500),
+          plat(220, 90, 54),  plat(455, 175, 52),  plat(685, 90, 54),
+          plat(920, 175, 52), plat(1155, 90, 54),  plat(1395, 175, 52),
+          plat(1635, 90, 54), plat(1875, 175, 52), plat(2115, 90, 54),
+          plat(2360, 175, 52),plat(2605, 90, 54),  plat(2850, 175, 52),
+          plat(3095, 90, 54), plat(3345, 170, 58), plat(3590, 90, 63),
+          plat(3835, 80, 265),
+        );
+        ld.enemies.push(
+          enm(100, 45, 10.0),
+          enmP(237, 90, 29, 10.0), enmP(702, 90, 29, 10.5),
+          enmP(1172, 90, 29, 10.5),enmP(1652, 90, 29, 11.0),
+          enmP(2132, 90, 29, 11.0),enmP(2622, 90, 29, 11.0),
+          enmP(3112, 90, 29, 11.0),enmP(3855, 80, 90, 10.5),
+        );
+        ld.powerups.push(star(930, 220), djump(1640, 135), star(2370, 220), djump(3105, 135), life(3860, 115));
+        ld.blocks.push(
+          qBlock(695, 135, 'star'), qBlock(1405, 220, 'doublejump'),
+          qBlock(2125, 135, 'life'), qBlock(2860, 220, 'doublejump'),
+        );
+        ld.goal = goal(5020, 168);
+        ld.length = 5200;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 27 ── CAVERNA DEL DRAGÓN  (10 enemies, plataformas 52px)
+      // ═══════════════════════════════════════════════════════════════
+      case 27:
+        ld.platforms.push(
+          gnd(0, 125),
+          gnd(5000, 500),
+          plat(225, 90, 52),  plat(465, 175, 52),  plat(705, 90, 52),
+          plat(950, 175, 52), plat(1195, 90, 52),  plat(1445, 175, 52),
+          plat(1695, 90, 52), plat(1945, 175, 52), plat(2195, 90, 52),
+          plat(2450, 175, 52),plat(2705, 90, 52),  plat(2960, 175, 52),
+          plat(3215, 90, 52), plat(3475, 170, 57), plat(3730, 90, 62),
+          plat(3985, 80, 265),
+        );
+        ld.enemies.push(
+          enm(100, 42, 10.5),
+          enmP(242, 90, 27, 10.5),enmP(722, 90, 27, 11.0),
+          enmP(1212, 90, 27, 11.0),enmP(1712, 90, 27, 11.5),
+          enmP(2212, 90, 27, 11.5),enmP(2722, 90, 27, 11.5),
+          enmP(3232, 90, 27, 11.5),enmP(3750, 90, 27, 11.0),
+          enmP(4005, 80, 90, 11.0),
+        );
+        ld.powerups.push(star(960, 220), djump(1700, 135), star(2460, 220), djump(2970, 220), life(4010, 115));
+        ld.blocks.push(
+          qBlock(715, 135, 'doublejump'), qBlock(1455, 220, 'star'),
+          qBlock(2205, 135, 'life'), qBlock(3225, 135, 'doublejump'),
+        );
+        ld.goal = goal(5120, 165);
+        ld.length = 5300;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 28 ── EL VACÍO  (plataformas 50px, gaps extremos 140px)
+      // ═══════════════════════════════════════════════════════════════
+      case 28:
+        ld.platforms.push(
+          gnd(0, 120),
+          gnd(5100, 500),
+          plat(230, 90, 50),  plat(480, 175, 50),  plat(730, 90, 50),
+          plat(985, 175, 50), plat(1240, 90, 50),  plat(1500, 175, 50),
+          plat(1760, 90, 50), plat(2020, 175, 50), plat(2280, 90, 50),
+          plat(2545, 175, 50),plat(2810, 90, 50),  plat(3075, 175, 50),
+          plat(3340, 90, 50), plat(3610, 170, 55), plat(3875, 90, 60),
+          plat(4140, 80, 270),
+        );
+        ld.enemies.push(
+          enm(100, 38, 11.0),
+          enmP(248, 90, 25, 11.0),enmP(748, 90, 25, 11.5),
+          enmP(1258, 90, 25, 11.5),enmP(1778, 90, 25, 12.0),
+          enmP(2298, 90, 25, 12.0),enmP(2828, 90, 25, 12.0),
+          enmP(3358, 90, 25, 12.0),enmP(3895, 90, 25, 11.5),
+          enmP(4160, 80, 90, 11.5),
+        );
+        ld.powerups.push(star(995, 220), djump(1765, 135), star(2555, 220), djump(3085, 220), life(4165, 115));
+        ld.blocks.push(
+          qBlock(740, 135, 'doublejump'), qBlock(1510, 220, 'star'),
+          qBlock(2290, 135, 'life'), qBlock(3350, 135, 'doublejump'),
+        );
+        ld.goal = goal(5220, 162);
+        ld.length = 5400;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 29 ── PESADILLA  (11 enemies, plataformas 48px, gaps 140px)
+      // ═══════════════════════════════════════════════════════════════
+      case 29:
+        ld.platforms.push(
+          gnd(0, 115),
+          gnd(5200, 500),
+          plat(235, 90, 49),  plat(495, 175, 48),  plat(755, 90, 49),
+          plat(1015, 175, 48),plat(1275, 90, 49),  plat(1540, 175, 48),
+          plat(1805, 90, 49), plat(2070, 175, 48), plat(2335, 90, 49),
+          plat(2605, 175, 48),plat(2875, 90, 49),  plat(3145, 175, 48),
+          plat(3415, 90, 49), plat(3690, 170, 54), plat(3960, 90, 59),
+          plat(4235, 80, 270),
+        );
+        ld.enemies.push(
+          enm(100, 35, 11.5),
+          enmP(252, 90, 24, 11.5),enmP(772, 90, 24, 12.0),
+          enmP(1292, 90, 24, 12.0),enmP(1822, 90, 24, 12.5),
+          enmP(2352, 90, 24, 12.5),enmP(2892, 90, 24, 12.5),
+          enmP(3432, 90, 24, 12.5),enmP(3978, 90, 24, 12.0),
+          enmP(3705, 170, 29, 12.0),enmP(4255, 80, 90, 12.0),
+        );
+        ld.powerups.push(
+          star(1025, 220), djump(1545, 220), star(2345, 135),
+          djump(3155, 220), star(3700, 215), life(4260, 115),
+        );
+        ld.blocks.push(
+          qBlock(765, 135, 'doublejump'), qBlock(1550, 220, 'star'),
+          qBlock(2345, 135, 'life'), qBlock(3425, 135, 'doublejump'),
+          qBlock(3970, 135, 'star'),
+        );
+        ld.goal = goal(5320, 158);
+        ld.length = 5500;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 30 ── DIOS DE LOS MUNDOS  (nivel final definitivo)
+      // Plataformas 45px, gaps 140-145px, 12 enemies 12.0-14.0.
+      // ═══════════════════════════════════════════════════════════════
+      default:
+        ld.platforms.push(
+          gnd(0, 110),
+          gnd(5300, 500),
+          // fase 1
+          plat(240, 90, 47),  plat(510, 175, 45),  plat(780, 90, 47),
+          plat(1055, 175, 45),plat(1330, 90, 47),
+          // fase 2
+          plat(1610, 175, 45),plat(1890, 90, 47),  plat(2170, 175, 45),
+          plat(2450, 90, 47), plat(2735, 175, 45),
+          // fase 3
+          plat(3020, 90, 47), plat(3310, 175, 45), plat(3600, 90, 47),
+          plat(3895, 170, 52),plat(4195, 90, 57),
+          plat(4470, 80, 280),
+        );
+        ld.enemies.push(
+          enm(100, 30, 12.0),
+          enmP(257, 90, 22, 12.0),enmP(797, 90, 22, 12.5),
+          enmP(1347, 90, 22, 12.5),enmP(1907, 90, 22, 13.0),
+          enmP(2467, 90, 22, 13.0),enmP(3037, 90, 22, 13.5),
+          enmP(3617, 90, 22, 13.5),enmP(4215, 90, 22, 13.0),
+          enmP(1625, 175, 27, 13.0),enmP(2750, 175, 27, 13.5),
+          enmP(4490, 80, 90, 14.0),
+        );
+        ld.powerups.push(
+          star(1065, 220), djump(1615, 220), star(2460, 135),
+          djump(2745, 220), star(3910, 215), life(3320, 220), life(4495, 115),
+        );
+        ld.blocks.push(
+          qBlock(790, 135, 'doublejump'), qBlock(1620, 220, 'star'),
+          qBlock(2460, 135, 'life'), qBlock(3030, 135, 'doublejump'),
+          qBlock(3610, 135, 'star'), qBlock(4210, 135, 'doublejump'),
+        );
+        ld.goal = goal(5420, 155);
+        ld.length = 5600;
+        break;
     }
 
     world.current = ld;
@@ -1247,7 +1721,7 @@ function PixelQuest({ onExit }) {
 
   const initLevel = (lvl) => {
     setLevel(lvl);
-    if (lvl >= 11 && lvl <= 13) setLives(l => l + 1);
+    if ((lvl >= 11 && lvl <= 13) || (lvl >= 21 && lvl <= 23) || lvl === 26) setLives(l => l + 1);
     if (lvl > maxLevelRef.current) {
       maxLevelRef.current = lvl;
       setMaxLevel(lvl);
@@ -1535,7 +2009,7 @@ function PixelQuest({ onExit }) {
       // Goal collision
       if (w.goal && p.x < w.goal.x + w.goal.w && p.x + p.w > w.goal.x && p.y < w.goal.y + w.goal.h && p.y + p.h > w.goal.y) {
         celebrateVibrate();
-        if (level >= 15) {
+        if (level >= 30) {
           setRunning(false); setGameWon(true);
         } else {
           initLevel(level + 1);
@@ -1606,7 +2080,7 @@ function PixelQuest({ onExit }) {
         {!running && (
           <View style={styles.overlay}>
             <Text style={styles.overlayTitle}>{gameWon ? 'YOU WIN!' : gameOver ? 'GAME OVER' : 'PIXEL QUEST'}</Text>
-            <Text style={styles.overlaySub}>{gameWon ? '¡Todos los 15 mundos conquistados! 🏆' : 'Reach the green pillar. Grab ⭐ for invincibility + gun.'}</Text>
+            <Text style={styles.overlaySub}>{gameWon ? '¡Todos los 30 mundos conquistados! 🏆' : 'Reach the green pillar. Grab ⭐ for invincibility + gun.'}</Text>
             <View style={{flexDirection: 'row', gap: 20}}>
               <Pressable style={styles.btn} onPress={startGame}><Text style={styles.btnText}>{gameOver || gameWon ? 'RESTART' : 'START'}</Text></Pressable>
               {(!gameOver && !gameWon) && <Pressable style={[styles.btn, {backgroundColor: '#ffd700'}]} onPress={loadGame}><Text style={styles.btnText}>LOAD</Text></Pressable>}
@@ -5198,6 +5672,38 @@ export default function App() {
     return <WallJumper onExit={() => setCurrentScreen('menu')} />;
   }
 
+  if (currentScreen === 'mathrush') {
+    return <MathRush onExit={() => setCurrentScreen('menu')} />;
+  }
+
+  if (currentScreen === 'neon2048') {
+    return <NeonGame2048 onExit={() => setCurrentScreen('menu')} />;
+  }
+
+  if (currentScreen === 'whackamole') {
+    return <WhackAMole onExit={() => setCurrentScreen('menu')} />;
+  }
+
+  if (currentScreen === 'rhythm') {
+    return <RhythmTap onExit={() => setCurrentScreen('menu')} />;
+  }
+
+  if (currentScreen === 'starcatcher') {
+    return <StarCatcher onExit={() => setCurrentScreen('menu')} />;
+  }
+
+  if (currentScreen === 'wordscramble') {
+    return <WordScramble onExit={() => setCurrentScreen('menu')} />;
+  }
+
+  if (currentScreen === 'crossyroad') {
+    return <CR2_CrossyRoad onExit={() => setCurrentScreen('menu')} />;
+  }
+
+  if (currentScreen === 'bubbleshooter') {
+    return <BubbleShooter onExit={() => setCurrentScreen('menu')} />;
+  }
+
   return (
     <SafeAreaView style={styles.menuContainer}>
       <ScrollView contentContainerStyle={styles.menuScroll} showsVerticalScrollIndicator={false}>
@@ -5216,7 +5722,7 @@ export default function App() {
 
       <Pressable style={[styles.menuBtn, { backgroundColor: '#32cd32' }]} onPress={() => setCurrentScreen('pixel')}>
         <Text style={styles.menuBtnTitle}>PIXEL QUEST</Text>
-        <Text style={styles.menuBtnSub}>15-World Platformer</Text>
+        <Text style={styles.menuBtnSub}>30-World Platformer</Text>
       </Pressable>
 
       <Pressable style={[styles.menuBtn, { backgroundColor: '#7c3aed' }]} onPress={() => setCurrentScreen('galactic')}>
@@ -5278,6 +5784,46 @@ export default function App() {
         <Text style={[styles.menuBtnTitle, { color: '#ff6600' }]}>🧗 WALL JUMPER</Text>
         <Text style={[styles.menuBtnSub, { color: '#cc4400' }]}>Rebota entre paredes · Esquiva las púas · Sube alto</Text>
       </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#0a0010', borderWidth: 2, borderColor: '#ff2d78' }]} onPress={() => setCurrentScreen('mathrush')}>
+        <Text style={[styles.menuBtnTitle, { color: '#ff2d78' }]}>🔢 MATH RUSH</Text>
+        <Text style={[styles.menuBtnSub, { color: '#aa1050' }]}>Responde sumas, restas y × · Destruye enemigos</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#0a0010', borderWidth: 2, borderColor: '#00f0ff' }]} onPress={() => setCurrentScreen('neon2048')}>
+        <Text style={[styles.menuBtnTitle, { color: '#00f0ff' }]}>🟦 2048 NEON</Text>
+        <Text style={[styles.menuBtnSub, { color: '#0099aa' }]}>Desliza y fusiona fichas · Llega al 2048</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#1a0a2e', borderWidth: 2, borderColor: '#7c3aed' }]} onPress={() => setCurrentScreen('whackamole')}>
+        <Text style={[styles.menuBtnTitle, { color: '#fff' }]}>🐹 WHACK-A-MOLE</Text>
+        <Text style={[styles.menuBtnSub, { color: '#ccc' }]}>Golpea topos · Evita bombas · 60 segundos</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#0d0d1a', borderWidth: 2, borderColor: '#6c5ce7' }]} onPress={() => setCurrentScreen('rhythm')}>
+        <Text style={[styles.menuBtnTitle, { color: '#a29bfe' }]}>🎵 RITMO Y COLOR</Text>
+        <Text style={[styles.menuBtnSub, { color: '#8888cc' }]}>Simon Says · Repite la secuencia de colores</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#0a0a1a', borderWidth: 2, borderColor: '#00e5ff' }]} onPress={() => setCurrentScreen('starcatcher')}>
+        <Text style={[styles.menuBtnTitle, { color: '#ffe066' }]}>⭐ STAR CATCHER</Text>
+        <Text style={[styles.menuBtnSub, { color: '#ccaa00' }]}>Atrapa estrellas y gemas · Evita bombas · x3 combo</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#0f0f1e', borderWidth: 2, borderColor: '#a855f7' }]} onPress={() => setCurrentScreen('wordscramble')}>
+        <Text style={[styles.menuBtnTitle, { color: '#a855f7' }]}>🔤 PALABRAS</Text>
+        <Text style={[styles.menuBtnSub, { color: '#7733aa' }]}>Ordena letras revueltas · 20 palabras en español</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#0a1a0a', borderWidth: 2, borderColor: '#2ecc71' }]} onPress={() => setCurrentScreen('crossyroad')}>
+        <Text style={[styles.menuBtnTitle, { color: '#2ecc71' }]}>🐸 CROSSY ROAD</Text>
+        <Text style={[styles.menuBtnSub, { color: '#1a8a4a' }]}>Cruza el tráfico · Esquiva coches y camiones</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#0a0a1a', borderWidth: 2, borderColor: '#e74c3c' }]} onPress={() => setCurrentScreen('bubbleshooter')}>
+        <Text style={[styles.menuBtnTitle, { color: '#e74c3c' }]}>🫧 BUBBLE SHOOTER</Text>
+        <Text style={[styles.menuBtnSub, { color: '#aa2222' }]}>Dispara burbujas · Une 3+ del mismo color</Text>
+      </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -5317,3 +5863,1470 @@ const styles = StyleSheet.create({
   dpadText: { color: '#fff', fontSize: 30, fontWeight: 'bold' },
   controlBar: { backgroundColor: 'rgba(0,0,0,0.4)', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 15, height: 100 }
 });
+
+// ══════════════════════════════════════════════════════════════════
+// MATH RUSH
+// ══════════════════════════════════════════════════════════════════
+
+const MR_ENEMY_W = 56;
+const MR_ENEMY_H = 44;
+const MR_SPAWN_INTERVAL = 1600;
+const MR_INITIAL_SPEED = 1.2;
+const MR_SPEED_INCREMENT = 0.0004;
+const MR_MAX_LIVES = 3;
+const MR_CANNON_H = 48;
+const MR_CANNON_W = 36;
+const MR_COLORS = ['#ff2d78', '#00f0ff', '#ffe600', '#a259ff', '#00ff99', '#ff6a00'];
+
+function MathRush({ onExit }) {
+  const [phase, setPhase] = useState('idle');
+  const [score, setScore] = useState(0);
+  const [best, setBest] = useState(0);
+  const [lives, setLives] = useState(MR_MAX_LIVES);
+  const [problem, setProblem] = useState(null);
+  const [answers, setAnswers] = useState([]);
+  const [enemies, setEnemies] = useState([]);
+  const [flash, setFlash] = useState(null);
+  const rafRef = useRef(null);
+  const lastTimeRef = useRef(null);
+  const enemiesRef = useRef([]);
+  const spawnTimerRef = useRef(0);
+  const speedRef = useRef(MR_INITIAL_SPEED);
+  const scoreRef = useRef(0);
+  const livesRef = useRef(MR_MAX_LIVES);
+  const problemRef = useRef(null);
+  const phaseRef = useRef('idle');
+  const idCounterRef = useRef(0);
+
+  useEffect(() => {
+    AsyncStorage.getItem('mr_best').then(v => { if (v) setBest(parseInt(v, 10)); });
+  }, []);
+
+  const generateProblem = () => {
+    const ops = ['+', '-', '×'];
+    const op = ops[Math.floor(Math.random() * ops.length)];
+    let a, b, answer;
+    if (op === '+') { a = Math.floor(Math.random() * 10) + 1; b = Math.floor(Math.random() * 10) + 1; answer = a + b; }
+    else if (op === '-') { a = Math.floor(Math.random() * 10) + 5; b = Math.floor(Math.random() * a) + 1; answer = a - b; }
+    else { a = Math.floor(Math.random() * 9) + 2; b = Math.floor(Math.random() * 9) + 2; answer = a * b; }
+    return { text: `${a} ${op} ${b} = ?`, answer };
+  };
+
+  const buildAnswers = (correct) => {
+    const wrongs = new Set();
+    while (wrongs.size < 2) {
+      const delta = Math.floor(Math.random() * 10) + 1;
+      const w = Math.random() < 0.5 ? correct + delta : Math.max(1, correct - delta);
+      if (w !== correct) wrongs.add(w);
+    }
+    const arr = [correct, ...wrongs];
+    for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
+    return arr;
+  };
+
+  const startGame = () => {
+    const p = generateProblem();
+    problemRef.current = p; setProblem(p); setAnswers(buildAnswers(p.answer));
+    enemiesRef.current = []; setEnemies([]);
+    scoreRef.current = 0; setScore(0);
+    livesRef.current = MR_MAX_LIVES; setLives(MR_MAX_LIVES);
+    speedRef.current = MR_INITIAL_SPEED; spawnTimerRef.current = 0; lastTimeRef.current = null;
+    phaseRef.current = 'playing'; setPhase('playing');
+  };
+
+  const endGame = async () => {
+    phaseRef.current = 'dead'; setPhase('dead');
+    cancelAnimationFrame(rafRef.current);
+    deathVibrate();
+    const s = scoreRef.current;
+    const stored = await AsyncStorage.getItem('mr_best');
+    const prev = stored ? parseInt(stored, 10) : 0;
+    if (s > prev) { await AsyncStorage.setItem('mr_best', String(s)); setBest(s); }
+  };
+
+  const handleAnswer = (val) => {
+    if (phaseRef.current !== 'playing') return;
+    const p = problemRef.current; if (!p) return;
+    if (val === p.answer) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setFlash('good'); setTimeout(() => setFlash(null), 300);
+      const pts = enemiesRef.current.filter(e => e.value === p.answer).length * 10;
+      enemiesRef.current = enemiesRef.current.filter(e => e.value !== p.answer);
+      setEnemies([...enemiesRef.current]);
+      scoreRef.current += pts; setScore(scoreRef.current);
+      const np = generateProblem(); problemRef.current = np; setProblem(np); setAnswers(buildAnswers(np.answer));
+    } else {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setFlash('bad'); setTimeout(() => setFlash(null), 300);
+      livesRef.current -= 1; setLives(livesRef.current);
+      if (livesRef.current <= 0) endGame();
+    }
+  };
+
+  useEffect(() => {
+    if (phase !== 'playing') return;
+    const loop = (timestamp) => {
+      if (phaseRef.current !== 'playing') return;
+      if (!lastTimeRef.current) lastTimeRef.current = timestamp;
+      const dt = timestamp - lastTimeRef.current; lastTimeRef.current = timestamp;
+      speedRef.current += MR_SPEED_INCREMENT * dt;
+      spawnTimerRef.current += dt;
+      if (spawnTimerRef.current > MR_SPAWN_INTERVAL) {
+        spawnTimerRef.current = 0;
+        const p = problemRef.current; if (p) {
+          const useCorrect = Math.random() < 0.55;
+          const value = useCorrect ? p.answer : (buildAnswers(p.answer).find(v => v !== p.answer) || p.answer + 3);
+          idCounterRef.current += 1;
+          enemiesRef.current = [...enemiesRef.current, { id: idCounterRef.current, x: Math.random() * (width - MR_ENEMY_W - 16) + 8, y: -MR_ENEMY_H, value, color: MR_COLORS[Math.floor(Math.random() * MR_COLORS.length)] }];
+        }
+      }
+      let hitBottom = false;
+      enemiesRef.current = enemiesRef.current.map(e => {
+        const ny = e.y + speedRef.current * (dt / 16);
+        if (ny > GAME_HEIGHT - MR_CANNON_H - MR_ENEMY_H) { hitBottom = true; return null; }
+        return { ...e, y: ny };
+      }).filter(Boolean);
+      setEnemies([...enemiesRef.current]);
+      if (hitBottom) {
+        livesRef.current -= 1; setLives(livesRef.current);
+        if (livesRef.current <= 0) { endGame(); return; }
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      }
+      rafRef.current = requestAnimationFrame(loop);
+    };
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [phase]);
+
+  const flashBg = flash === 'good' ? '#00ff9944' : flash === 'bad' ? '#ff003344' : 'transparent';
+  return (
+    <View style={{ flex: 1, backgroundColor: '#0a0010' }}>
+      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: flashBg, zIndex: 99, pointerEvents: 'none' }} />
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingTop: 36, paddingBottom: 4 }}>
+        <Pressable onPress={onExit} hitSlop={12}><Text style={{ color: '#888', fontSize: 20, fontWeight: 'bold' }}>✕</Text></Pressable>
+        <Text style={{ color: '#ff2d78', fontSize: 18, fontWeight: '900', letterSpacing: 2 }}>MATH RUSH</Text>
+        <Text style={{ color: '#ffe600', fontSize: 13, fontWeight: '700' }}>⭐{score}  🏆{best}</Text>
+      </View>
+      {phase === 'playing' && problem && (
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginHorizontal: 14, marginBottom: 4, backgroundColor: '#1a0030', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1, borderColor: '#a259ff' }}>
+          <Text style={{ color: '#fff', fontSize: 24, fontWeight: '900' }}>{problem.text}</Text>
+          <Text style={{ fontSize: 18 }}>{'❤️'.repeat(lives)}</Text>
+        </View>
+      )}
+      <View style={{ flex: 1, marginHorizontal: 6, borderRadius: 12, overflow: 'hidden', backgroundColor: '#07000f', borderWidth: 1, borderColor: '#1a0040' }}>
+        {phase === 'playing' && enemies.map(e => (
+          <View key={e.id} style={{ position: 'absolute', width: MR_ENEMY_W, height: MR_ENEMY_H, borderRadius: 10, borderWidth: 2, alignItems: 'center', justifyContent: 'center', left: e.x, top: e.y, borderColor: e.color, backgroundColor: e.color + '33' }}>
+            <Text style={{ color: e.color, fontSize: 20, fontWeight: '900' }}>{e.value}</Text>
+          </View>
+        ))}
+        {phase === 'playing' && <View style={{ position: 'absolute', bottom: 6, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', width: MR_CANNON_W, height: MR_CANNON_H }}><Text style={{ fontSize: 34 }}>🚀</Text></View>}
+        {phase === 'idle' && <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 }}>
+          <Text style={{ fontSize: 56, marginBottom: 10 }}>🔢</Text>
+          <Text style={{ color: '#ff2d78', fontSize: 30, fontWeight: '900', letterSpacing: 3, marginBottom: 8 }}>MATH RUSH</Text>
+          <Text style={{ color: '#bbb', fontSize: 15, textAlign: 'center', marginBottom: 24 }}>¡Toca la respuesta correcta{'\n'}para destruir los enemigos!</Text>
+          <Pressable onPress={startGame} style={{ backgroundColor: '#ff2d78', paddingHorizontal: 40, paddingVertical: 14, borderRadius: 30 }} hitSlop={8}><Text style={{ color: '#fff', fontSize: 20, fontWeight: '900' }}>START</Text></Pressable>
+        </View>}
+        {phase === 'dead' && <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 56, marginBottom: 10 }}>💥</Text>
+          <Text style={{ color: '#ff2d78', fontSize: 30, fontWeight: '900', marginBottom: 8 }}>GAME OVER</Text>
+          <Text style={{ color: '#ffe600', fontSize: 22, fontWeight: '800', marginBottom: 16 }}>Score: {score}</Text>
+          <Pressable onPress={startGame} style={{ backgroundColor: '#ff2d78', paddingHorizontal: 40, paddingVertical: 14, borderRadius: 30 }}><Text style={{ color: '#fff', fontSize: 20, fontWeight: '900' }}>RETRY</Text></Pressable>
+        </View>}
+      </View>
+      {phase === 'playing' && answers.length === 3 && (
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 10, paddingVertical: 10, gap: 8 }}>
+          {answers.map((a, i) => (
+            <Pressable key={i} onPress={() => handleAnswer(a)} hitSlop={10} style={{ flex: 1, backgroundColor: '#1a0040', borderRadius: 16, paddingVertical: 18, alignItems: 'center', borderWidth: 2, borderColor: '#a259ff' }}>
+              <Text style={{ color: '#fff', fontSize: 22, fontWeight: '900' }}>{a}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// 2048 NEON
+// ══════════════════════════════════════════════════════════════════
+
+const NN_SIZE = 4;
+const NN_GAP = 8;
+const NN_BOARD_PAD = 10;
+const NN_CELL = Math.floor((Math.min(width, 420) - NN_BOARD_PAD * 2 - NN_GAP * (NN_SIZE + 1)) / NN_SIZE);
+const NN_TILE_COLORS = { 0:{bg:'#1a0a2e',fg:'#1a0a2e'},2:{bg:'#0d1b4b',fg:'#7eb8ff'},4:{bg:'#0a2060',fg:'#9dcfff'},8:{bg:'#006e7f',fg:'#00f0ff'},16:{bg:'#005c1a',fg:'#00ff70'},32:{bg:'#6b6b00',fg:'#ffe600'},64:{bg:'#7a3300',fg:'#ff8c00'},128:{bg:'#6b0000',fg:'#ff4444'},256:{bg:'#6b0050',fg:'#ff66cc'},512:{bg:'#3a006b',fg:'#c77dff'},1024:{bg:'#5a4400',fg:'#ffd700'},2048:{bg:'#fff',fg:'#0a0010'} };
+const NN_getTileStyle = (val) => NN_TILE_COLORS[val] || { bg: '#fff', fg: '#0a0010' };
+const NN_emptyGrid = () => Array(NN_SIZE).fill(null).map(() => Array(NN_SIZE).fill(0));
+const NN_addRandom = (grid) => { const empty = []; for (let r=0;r<NN_SIZE;r++) for (let c=0;c<NN_SIZE;c++) if(grid[r][c]===0) empty.push([r,c]); if(!empty.length) return grid; const [r,c]=empty[Math.floor(Math.random()*empty.length)]; const ng=grid.map(row=>[...row]); ng[r][c]=Math.random()<0.85?2:4; return ng; };
+const NN_initGrid = () => { let g=NN_emptyGrid(); g=NN_addRandom(g); g=NN_addRandom(g); return g; };
+const NN_slideRow = (row) => { const nums=row.filter(v=>v!==0); let score=0; const merged=[]; let i=0; while(i<nums.length){if(i+1<nums.length&&nums[i]===nums[i+1]){const val=nums[i]*2;merged.push(val);score+=val;i+=2;}else{merged.push(nums[i]);i++;}} while(merged.length<NN_SIZE) merged.push(0); return {row:merged,score}; };
+const NN_moveLeft = (grid) => { let totalScore=0,changed=false; const ng=grid.map(row=>{const{row:nr,score}=NN_slideRow(row);totalScore+=score;if(nr.join()!==row.join())changed=true;return nr;}); return{grid:ng,score:totalScore,changed}; };
+const NN_rotateGrid = (grid) => { const n=NN_SIZE; return Array(n).fill(null).map((_,r)=>Array(n).fill(null).map((__,c)=>grid[n-1-c][r])); };
+const NN_move = (grid,dir) => { let rot=0; if(dir==='right')rot=2; else if(dir==='up')rot=3; else if(dir==='down')rot=1; let g=grid; for(let i=0;i<rot;i++)g=NN_rotateGrid(g); const{grid:moved,score,changed}=NN_moveLeft(g); let result=moved; for(let i=0;i<(4-rot)%4;i++)result=NN_rotateGrid(result); return{grid:result,score,changed}; };
+const NN_hasWon=(grid)=>grid.some(row=>row.some(v=>v===2048));
+const NN_hasMovesLeft=(grid)=>{for(let r=0;r<NN_SIZE;r++)for(let c=0;c<NN_SIZE;c++){if(grid[r][c]===0)return true;if(c+1<NN_SIZE&&grid[r][c]===grid[r][c+1])return true;if(r+1<NN_SIZE&&grid[r][c]===grid[r+1][c])return true;}return false;};
+
+function NeonGame2048({ onExit }) {
+  const [grid, setGrid] = useState(() => NN_initGrid());
+  const [score, setScore] = useState(0);
+  const [best, setBest] = useState(0);
+  const [status, setStatus] = useState('playing');
+  const gridRef = useRef(grid);
+  const scoreRef = useRef(0);
+  const statusRef = useRef('playing');
+
+  useEffect(() => { AsyncStorage.getItem('nn_best').then(v => { if (v) setBest(parseInt(v, 10)); }); }, []);
+
+  const saveBest = async (s) => { const stored = await AsyncStorage.getItem('nn_best'); const prev = stored ? parseInt(stored, 10) : 0; if (s > prev) { await AsyncStorage.setItem('nn_best', String(s)); setBest(s); } };
+
+  const newGame = () => { const g=NN_initGrid(); gridRef.current=g; setGrid(g); scoreRef.current=0; setScore(0); statusRef.current='playing'; setStatus('playing'); };
+
+  const applyMove = (dir) => {
+    if (statusRef.current !== 'playing') return;
+    const { grid: newGrid, score: gained, changed } = NN_move(gridRef.current, dir);
+    if (!changed) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const withNew = NN_addRandom(newGrid);
+    gridRef.current = withNew; setGrid(withNew);
+    const newScore = scoreRef.current + gained; scoreRef.current = newScore; setScore(newScore); saveBest(newScore);
+    if (NN_hasWon(withNew)) { statusRef.current='won'; setStatus('won'); celebrateVibrate(); }
+    else if (!NN_hasMovesLeft(withNew)) { statusRef.current='lost'; setStatus('lost'); deathVibrate(); }
+  };
+
+  const panResponder = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: () => true,
+    onPanResponderRelease: (_, g) => {
+      const { dx, dy } = g; const absDx = Math.abs(dx); const absDy = Math.abs(dy);
+      if (Math.max(absDx, absDy) < 20) return;
+      if (absDx > absDy) applyMove(dx > 0 ? 'right' : 'left');
+      else applyMove(dy > 0 ? 'down' : 'up');
+    },
+  })).current;
+
+  const boardSize = NN_BOARD_PAD * 2 + NN_GAP * (NN_SIZE + 1) + NN_CELL * NN_SIZE;
+  return (
+    <View style={{ flex: 1, backgroundColor: '#0a0010', alignItems: 'center' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 14, paddingTop: 36, paddingBottom: 4 }}>
+        <Pressable onPress={onExit} hitSlop={12}><Text style={{ color: '#888', fontSize: 20, fontWeight: 'bold' }}>✕</Text></Pressable>
+        <Text style={{ color: '#00f0ff', fontSize: 18, fontWeight: '900', letterSpacing: 3 }}>2048 NEON</Text>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          {[['SCORE', score], ['BEST', best]].map(([label, val]) => (
+            <View key={label} style={{ backgroundColor: '#1a0040', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, alignItems: 'center', minWidth: 60, borderWidth: 1, borderColor: '#a259ff' }}>
+              <Text style={{ color: '#a259ff', fontSize: 10, fontWeight: '800' }}>{label}</Text>
+              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '900' }}>{val}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+      <Pressable onPress={newGame} style={{ backgroundColor: '#a259ff', paddingHorizontal: 28, paddingVertical: 10, borderRadius: 20, marginVertical: 8 }}>
+        <Text style={{ color: '#fff', fontSize: 14, fontWeight: '900' }}>NUEVO JUEGO</Text>
+      </Pressable>
+      <View style={{ width: boardSize, height: boardSize, backgroundColor: '#120025', borderRadius: 16, borderWidth: 2, borderColor: '#a259ff', overflow: 'hidden', position: 'relative' }} {...panResponder.panHandlers}>
+        {Array(NN_SIZE).fill(null).map((_,r)=>Array(NN_SIZE).fill(null).map((__,c)=>(
+          <View key={`bg-${r}-${c}`} style={{ position:'absolute', width:NN_CELL, height:NN_CELL, left:NN_BOARD_PAD+NN_GAP+c*(NN_CELL+NN_GAP), top:NN_BOARD_PAD+NN_GAP+r*(NN_CELL+NN_GAP), backgroundColor:'#1f0045', borderRadius:8 }} />
+        )))}
+        {grid.map((row,r)=>row.map((val,c)=>{
+          if(val===0) return null;
+          const{bg,fg}=NN_getTileStyle(val); const isMax=val===2048;
+          return (<View key={`tile-${r}-${c}`} style={{ position:'absolute', width:NN_CELL, height:NN_CELL, left:NN_BOARD_PAD+NN_GAP+c*(NN_CELL+NN_GAP), top:NN_BOARD_PAD+NN_GAP+r*(NN_CELL+NN_GAP), backgroundColor:bg, borderRadius:8, borderWidth:1.5, borderColor:fg, shadowColor:isMax?'#fff':fg, shadowOpacity:0.7, shadowRadius:isMax?16:6, elevation:isMax?16:4, alignItems:'center', justifyContent:'center' }}>
+            <Text style={{ color:fg, fontSize:val>=1024?18:val>=128?22:26, fontWeight:'900' }}>{val}</Text>
+          </View>);
+        }))}
+        {status==='won' && <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor:'#0a001088', alignItems:'center', justifyContent:'center', borderRadius:14 }}>
+          <Text style={{ fontSize:48, marginBottom:8 }}>🎉</Text>
+          <Text style={{ color:'#ffe600', fontSize:32, fontWeight:'900', marginBottom:6 }}>YOU WIN!</Text>
+          <Pressable onPress={newGame} style={{ backgroundColor:'#ff2d78', paddingHorizontal:32, paddingVertical:12, borderRadius:24, marginTop:10 }}><Text style={{ color:'#fff', fontSize:16, fontWeight:'900' }}>NUEVO JUEGO</Text></Pressable>
+        </View>}
+        {status==='lost' && <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor:'#0a001088', alignItems:'center', justifyContent:'center', borderRadius:14 }}>
+          <Text style={{ fontSize:48, marginBottom:8 }}>💀</Text>
+          <Text style={{ color:'#ff2d78', fontSize:32, fontWeight:'900', marginBottom:6 }}>GAME OVER</Text>
+          <Pressable onPress={newGame} style={{ backgroundColor:'#ff2d78', paddingHorizontal:32, paddingVertical:12, borderRadius:24, marginTop:10 }}><Text style={{ color:'#fff', fontSize:16, fontWeight:'900' }}>RETRY</Text></Pressable>
+        </View>}
+      </View>
+      <Text style={{ color:'#333', fontSize:12, marginTop:10 }}>Desliza para mover fichas</Text>
+    </View>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// WHACK-A-MOLE
+// ══════════════════════════════════════════════════════════════════
+
+const WM_GRID_SIZE = 9;
+const WM_BOMB_CHANCE = 0.2;
+const WM_GAME_DURATION = 60;
+const WM_HOLE_SIZE = Math.min((width - 60) / 3, 90);
+
+function WhackAMole({ onExit }) {
+  const [gameState, setGameState] = useState('idle');
+  const [score, setScore] = useState(0);
+  const [lives, setLives] = useState(3);
+  const [timeLeft, setTimeLeft] = useState(WM_GAME_DURATION);
+  const [bestScore, setBestScore] = useState(0);
+  const [holes, setHoles] = useState(Array.from({ length: WM_GRID_SIZE }, () => ({ active: false, isBomb: false })));
+  const moleAnims = useRef(Array.from({ length: WM_GRID_SIZE }, () => new Animated.Value(0))).current;
+  const timerRef = useRef(null); const moleTimersRef = useRef([]); const spawnIntervalRef = useRef(null);
+  const scoreRef = useRef(0); const livesRef = useRef(3); const gameStateRef = useRef('idle');
+
+  useEffect(() => { AsyncStorage.getItem('wm_best').then(val => { if (val) setBestScore(parseInt(val)); }); return () => clearAllTimers(); }, []);
+
+  const clearAllTimers = () => { clearInterval(timerRef.current); clearInterval(spawnIntervalRef.current); moleTimersRef.current.forEach(t => clearTimeout(t)); moleTimersRef.current = []; };
+
+  const startGame = () => {
+    scoreRef.current = 0; livesRef.current = 3; gameStateRef.current = 'playing';
+    setScore(0); setLives(3); setTimeLeft(WM_GAME_DURATION);
+    setHoles(Array.from({ length: WM_GRID_SIZE }, () => ({ active: false, isBomb: false })));
+    moleAnims.forEach(a => a.setValue(0)); setGameState('playing');
+    timerRef.current = setInterval(() => { setTimeLeft(prev => { if (prev <= 1) { endGame(); return 0; } return prev - 1; }); }, 1000);
+    spawnIntervalRef.current = setInterval(() => { if (gameStateRef.current !== 'playing') return; spawnMole(); }, Math.max(500, 1200 - Math.floor(scoreRef.current / 5) * 80));
+  };
+
+  const spawnMole = () => {
+    const idx = Math.floor(Math.random() * WM_GRID_SIZE);
+    const isBomb = Math.random() < WM_BOMB_CHANCE;
+    const duration = Math.max(700, 1800 - Math.floor(scoreRef.current / 5) * 100);
+    setHoles(prev => { if (prev[idx].active) return prev; const next = [...prev]; next[idx] = { active: true, isBomb }; return next; });
+    Animated.sequence([Animated.timing(moleAnims[idx], { toValue: 1, duration: 180, useNativeDriver: true }), Animated.delay(duration), Animated.timing(moleAnims[idx], { toValue: 0, duration: 180, useNativeDriver: true })]).start();
+    const t = setTimeout(() => { setHoles(prev => { const next = [...prev]; next[idx] = { active: false, isBomb: false }; return next; }); moleAnims[idx].setValue(0); }, duration + 400);
+    moleTimersRef.current.push(t);
+  };
+
+  const endGame = () => {
+    gameStateRef.current = 'gameover'; clearAllTimers(); setGameState('gameover');
+    setHoles(Array.from({ length: WM_GRID_SIZE }, () => ({ active: false, isBomb: false }))); moleAnims.forEach(a => a.setValue(0));
+    const finalScore = scoreRef.current;
+    AsyncStorage.getItem('wm_best').then(val => { const prev = val ? parseInt(val) : 0; if (finalScore > prev) { AsyncStorage.setItem('wm_best', String(finalScore)); setBestScore(finalScore); } });
+  };
+
+  const tapHole = (idx) => {
+    if (gameStateRef.current !== 'playing') return;
+    setHoles(prev => {
+      if (!prev[idx].active) return prev;
+      const hole = prev[idx];
+      if (hole.isBomb) { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); livesRef.current = Math.max(0, livesRef.current - 1); setLives(livesRef.current); if (livesRef.current <= 0) endGame(); }
+      else { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); scoreRef.current += 1; setScore(scoreRef.current); }
+      Animated.timing(moleAnims[idx], { toValue: 0, duration: 100, useNativeDriver: true }).start();
+      const next = [...prev]; next[idx] = { active: false, isBomb: false }; return next;
+    });
+  };
+
+  const holeSize = WM_HOLE_SIZE;
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#1a0a2e', alignItems: 'center' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4, justifyContent: 'space-between' }}>
+        <Pressable onPress={onExit} style={{ padding: 8 }}><Text style={{ color: '#aaa', fontSize: 18, fontWeight: 'bold' }}>✕</Text></Pressable>
+        <Text style={{ color: '#fff', fontSize: 20, fontWeight: 'bold' }}>🐹 Whack-a-Mole</Text>
+        <Text style={{ color: '#ffd700', fontSize: 14, fontWeight: '600' }}>Mejor: {bestScore}</Text>
+      </View>
+      {gameState !== 'idle' && (
+        <View style={{ flexDirection: 'row', justifyContent: 'space-around', width: '100%', paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#2d1b4e', marginBottom: 8 }}>
+          <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>⏱ {timeLeft}s</Text>
+          <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Score: {score}</Text>
+          <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{Array.from({ length: 3 }, (_, i) => i < lives ? '❤️' : '🖤').join('')}</Text>
+        </View>
+      )}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: holeSize * 3 + 48, justifyContent: 'space-around', alignContent: 'space-around', marginTop: 24, gap: 12, padding: 8 }}>
+        {holes.map((hole, idx) => {
+          const translateY = moleAnims[idx].interpolate({ inputRange: [0, 1], outputRange: [holeSize * 0.6, 0] });
+          return (
+            <Pressable key={idx} onPress={() => tapHole(idx)} style={{ width: holeSize, height: holeSize, borderRadius: holeSize / 2, backgroundColor: '#3d1f00', justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: '#5a3010', overflow: 'hidden' }}>
+              {hole.active && <Animated.Text style={{ fontSize: holeSize * 0.5, opacity: moleAnims[idx], transform: [{ translateY }] }}>{hole.isBomb ? '💣' : idx % 2 === 0 ? '🐹' : '🐭'}</Animated.Text>}
+            </Pressable>
+          );
+        })}
+      </View>
+      {gameState === 'idle' && (
+        <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(10,0,30,0.88)', justifyContent: 'center', alignItems: 'center', padding: 32, zIndex: 10 }}>
+          <Text style={{ color: '#fff', fontSize: 32, fontWeight: 'bold', marginBottom: 12 }}>Whack-a-Mole!</Text>
+          <Text style={{ color: '#ccc', fontSize: 16, textAlign: 'center', marginBottom: 28 }}>Toca los topos para puntuar.{'\n'}¡Evita las bombas 💣!</Text>
+          <Pressable style={{ backgroundColor: '#7c3aed', paddingHorizontal: 40, paddingVertical: 14, borderRadius: 30 }} onPress={startGame}><Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Comenzar</Text></Pressable>
+        </View>
+      )}
+      {gameState === 'gameover' && (
+        <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(10,0,30,0.88)', justifyContent: 'center', alignItems: 'center', padding: 32, zIndex: 10 }}>
+          <Text style={{ color: '#fff', fontSize: 32, fontWeight: 'bold', marginBottom: 12 }}>¡Juego terminado!</Text>
+          <Text style={{ color: '#ffd700', fontSize: 26, fontWeight: 'bold', marginBottom: 8 }}>Score: {score}</Text>
+          {score >= bestScore && score > 0 && <Text style={{ color: '#ffd700', fontSize: 20, marginBottom: 20 }}>🏆 ¡Nuevo récord!</Text>}
+          <Pressable style={{ backgroundColor: '#7c3aed', paddingHorizontal: 40, paddingVertical: 14, borderRadius: 30, marginBottom: 12 }} onPress={startGame}><Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Jugar de nuevo</Text></Pressable>
+          <Pressable onPress={onExit}><Text style={{ color: '#a78bfa', fontSize: 16 }}>Menú principal</Text></Pressable>
+        </View>
+      )}
+    </SafeAreaView>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// RHYTHM TAP
+// ══════════════════════════════════════════════════════════════════
+
+const RT_COLORS = [
+  { key: 'red', label: '🔴', bg: '#c0392b', lit: '#ff6b6b', text: 'Rojo' },
+  { key: 'blue', label: '🔵', bg: '#2980b9', lit: '#74b9ff', text: 'Azul' },
+  { key: 'yellow', label: '🟡', bg: '#d4a017', lit: '#ffeaa7', text: 'Amarillo' },
+  { key: 'green', label: '🟢', bg: '#27ae60', lit: '#55efc4', text: 'Verde' },
+];
+const RT_PAD_SIZE = Math.min((width - 48) / 2, 155);
+
+function RhythmTap({ onExit }) {
+  const [gameState, setGameState] = useState('idle');
+  const [sequence, setSequence] = useState([]);
+  const [playerIndex, setPlayerIndex] = useState(0);
+  const [bestLevel, setBestLevel] = useState(1);
+  const [isShowingSequence, setIsShowingSequence] = useState(false);
+  const [message, setMessage] = useState('');
+  const padAnims = useRef(RT_COLORS.map(() => new Animated.Value(0))).current;
+  const sequenceRef = useRef([]); const playerIndexRef = useRef(0); const isShowingRef = useRef(false);
+  const gameStateRef = useRef('idle'); const showTimeoutRef = useRef(null);
+
+  useEffect(() => { AsyncStorage.getItem('rt_best').then(val => { if (val) setBestLevel(parseInt(val)); }); return () => { if (showTimeoutRef.current) clearTimeout(showTimeoutRef.current); }; }, []);
+
+  const flashPad = (colorIdx, duration = 350) => new Promise(resolve => {
+    Animated.sequence([Animated.timing(padAnims[colorIdx], { toValue: 1, duration: duration * 0.4, useNativeDriver: false }), Animated.timing(padAnims[colorIdx], { toValue: 0, duration: duration * 0.6, useNativeDriver: false })]).start(() => resolve());
+  });
+
+  const showSequence = async (seq) => {
+    isShowingRef.current = true; setIsShowingSequence(true); setMessage('¡Observa!');
+    const speed = Math.max(280, 700 - Math.floor((seq.length - 1) / 3) * 90);
+    const flashDur = Math.max(180, speed * 0.55); const pause = Math.max(100, speed * 0.45);
+    for (let i = 0; i < seq.length; i++) {
+      if (gameStateRef.current !== 'playing') break;
+      await flashPad(seq[i], flashDur);
+      await new Promise(r => { showTimeoutRef.current = setTimeout(r, pause); });
+    }
+    isShowingRef.current = false; setIsShowingSequence(false);
+    if (gameStateRef.current === 'playing') { setMessage('¡Tu turno!'); playerIndexRef.current = 0; setPlayerIndex(0); }
+  };
+
+  const startGame = () => {
+    gameStateRef.current = 'playing'; setGameState('playing'); setMessage('');
+    const firstSeq = [Math.floor(Math.random() * 4)];
+    sequenceRef.current = firstSeq; setSequence(firstSeq); playerIndexRef.current = 0; setPlayerIndex(0);
+    setTimeout(() => showSequence(firstSeq), 600);
+  };
+
+  const handlePadPress = (colorIdx) => {
+    if (gameStateRef.current !== 'playing' || isShowingRef.current) return;
+    flashPad(colorIdx, 220); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (colorIdx !== sequenceRef.current[playerIndexRef.current]) {
+      setMessage('¡Incorrecto!');
+      gameStateRef.current = 'gameover'; setGameState('gameover');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      const lvl = sequenceRef.current.length;
+      AsyncStorage.getItem('rt_best').then(val => { const prev = val ? parseInt(val) : 1; if (lvl > prev) { AsyncStorage.setItem('rt_best', String(lvl)); setBestLevel(lvl); } });
+      return;
+    }
+    const nextIndex = playerIndexRef.current + 1; playerIndexRef.current = nextIndex; setPlayerIndex(nextIndex);
+    if (nextIndex === sequenceRef.current.length) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const nextSeq = [...sequenceRef.current, Math.floor(Math.random() * 4)];
+      sequenceRef.current = nextSeq; setSequence(nextSeq); playerIndexRef.current = 0; setPlayerIndex(0);
+      setMessage('¡Correcto!');
+      setTimeout(() => { if (gameStateRef.current === 'playing') showSequence(nextSeq); }, 900);
+    }
+  };
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#0d0d1a', alignItems: 'center' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4, justifyContent: 'space-between' }}>
+        <Pressable onPress={onExit} style={{ padding: 8 }}><Text style={{ color: '#aaa', fontSize: 18, fontWeight: 'bold' }}>✕</Text></Pressable>
+        <Text style={{ color: '#fff', fontSize: 20, fontWeight: 'bold' }}>🎵 Ritmo y Color</Text>
+        <Text style={{ color: '#ffd700', fontSize: 14 }}>Mejor: Niv.{bestLevel}</Text>
+      </View>
+      {gameState === 'playing' && (
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingHorizontal: 20, paddingVertical: 8, backgroundColor: '#1a1a2e', marginBottom: 8 }}>
+          <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>Nivel: {sequence.length}</Text>
+          <Text style={{ color: '#a29bfe', fontSize: 14, fontWeight: '600' }}>{message}</Text>
+        </View>
+      )}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 16, marginTop: 32, paddingHorizontal: 16 }}>
+        {RT_COLORS.map((color, idx) => {
+          const bgColor = padAnims[idx].interpolate({ inputRange: [0, 1], outputRange: [color.bg, color.lit] });
+          const scale = padAnims[idx].interpolate({ inputRange: [0, 1], outputRange: [1, 1.07] });
+          return (
+            <Pressable key={color.key} onPress={() => handlePadPress(idx)} disabled={isShowingSequence || gameState !== 'playing'}>
+              <Animated.View style={{ width: RT_PAD_SIZE, height: RT_PAD_SIZE, borderRadius: 24, justifyContent: 'center', alignItems: 'center', backgroundColor: bgColor, transform: [{ scale }], opacity: gameState !== 'playing' ? 0.5 : 1 }}>
+                <Text style={{ fontSize: RT_PAD_SIZE * 0.3, marginBottom: 6 }}>{color.label}</Text>
+                <Text style={{ color: '#fff', fontSize: RT_PAD_SIZE * 0.13, fontWeight: 'bold' }}>{color.text}</Text>
+              </Animated.View>
+            </Pressable>
+          );
+        })}
+      </View>
+      {gameState === 'idle' && (
+        <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,0,20,0.9)', justifyContent: 'center', alignItems: 'center', padding: 32, zIndex: 10 }}>
+          <Text style={{ color: '#fff', fontSize: 30, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' }}>🎵 Ritmo y Color</Text>
+          <Text style={{ color: '#ccc', fontSize: 15, textAlign: 'center', marginBottom: 28, lineHeight: 24 }}>Observa la secuencia de colores{'\n'}y repítela en el mismo orden.{'\n'}¡Cada ronda agrega un paso más!</Text>
+          <Pressable style={{ backgroundColor: '#6c5ce7', paddingHorizontal: 44, paddingVertical: 14, borderRadius: 30 }} onPress={startGame}><Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Comenzar</Text></Pressable>
+        </View>
+      )}
+      {gameState === 'gameover' && (
+        <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,0,20,0.9)', justifyContent: 'center', alignItems: 'center', padding: 32, zIndex: 10 }}>
+          <Text style={{ color: '#fff', fontSize: 30, fontWeight: 'bold', marginBottom: 16 }}>¡Fin del juego!</Text>
+          <Text style={{ color: '#ffd700', fontSize: 24, fontWeight: 'bold', marginBottom: 8 }}>Nivel: {sequence.length}</Text>
+          {sequence.length >= bestLevel && <Text style={{ color: '#ffd700', fontSize: 20, marginBottom: 20 }}>🏆 ¡Nuevo récord!</Text>}
+          <Pressable style={{ backgroundColor: '#6c5ce7', paddingHorizontal: 44, paddingVertical: 14, borderRadius: 30, marginBottom: 14 }} onPress={startGame}><Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Jugar de nuevo</Text></Pressable>
+          <Pressable onPress={onExit}><Text style={{ color: '#a29bfe', fontSize: 16 }}>Menú principal</Text></Pressable>
+        </View>
+      )}
+    </SafeAreaView>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// STAR CATCHER
+// ══════════════════════════════════════════════════════════════════
+
+const SC_CATCHER_W = 70;
+const SC_CATCHER_H = 18;
+const SC_OBJ_SIZE = 28;
+const SC_MAX_LIVES = 5;
+const SC_INIT_LIVES = 3;
+const SC_GAME_DURATION = 60;
+const SC_MAX_OBJECTS = 6;
+const SC_OBJECT_TYPES = [{ emoji:'⭐',points:1,type:'star'},{emoji:'💎',points:3,type:'diamond'},{emoji:'💣',points:0,type:'bomb'},{emoji:'❤️',points:0,type:'heart'}];
+const SC_TYPE_WEIGHTS = [50,25,15,10];
+function scPickType() { const r=Math.random()*100; let acc=0; for(let i=0;i<SC_TYPE_WEIGHTS.length;i++){acc+=SC_TYPE_WEIGHTS[i];if(r<acc)return SC_OBJECT_TYPES[i];}return SC_OBJECT_TYPES[0]; }
+
+function StarCatcher({ onExit }) {
+  const [gameState, setGameState] = useState('idle');
+  const [score, setScore] = useState(0); const [bestScore, setBestScore] = useState(0);
+  const [lives, setLives] = useState(SC_INIT_LIVES); const [multiplier, setMultiplier] = useState(1);
+  const [timeLeft, setTimeLeft] = useState(SC_GAME_DURATION); const [objects, setObjects] = useState([]);
+  const [catcherX, setCatcherX] = useState(width / 2 - SC_CATCHER_W / 2); const [flashMsg, setFlashMsg] = useState(null);
+  const catcherXRef = useRef(width / 2 - SC_CATCHER_W / 2); const livesRef = useRef(SC_INIT_LIVES);
+  const scoreRef = useRef(0); const multiplierRef = useRef(1); const consecutiveRef = useRef(0);
+  const objectsRef = useRef([]); const objectIdRef = useRef(0); const rafRef = useRef(null);
+  const lastTimeRef = useRef(null); const gameStateRef = useRef('idle'); const spawnTimerRef = useRef(0);
+  const timerIntervalRef = useRef(null); const moveIntervalRef = useRef(null); const flashTimerRef = useRef(null);
+
+  useEffect(() => { AsyncStorage.getItem('sc_best').then(v => { if (v) setBestScore(parseInt(v, 10)); }); return () => { cancelAnimationFrame(rafRef.current); clearInterval(timerIntervalRef.current); clearInterval(moveIntervalRef.current); if(flashTimerRef.current) clearTimeout(flashTimerRef.current); }; }, []);
+
+  const showFlash = (msg) => { if(flashTimerRef.current) clearTimeout(flashTimerRef.current); setFlashMsg(msg); flashTimerRef.current = setTimeout(() => setFlashMsg(null), 700); };
+
+  const startGame = () => {
+    catcherXRef.current = width/2-SC_CATCHER_W/2; setCatcherX(catcherXRef.current);
+    livesRef.current = SC_INIT_LIVES; scoreRef.current = 0; multiplierRef.current = 1; consecutiveRef.current = 0;
+    objectsRef.current = []; objectIdRef.current = 0; spawnTimerRef.current = 0; lastTimeRef.current = null;
+    setLives(SC_INIT_LIVES); setScore(0); setMultiplier(1); setTimeLeft(SC_GAME_DURATION); setObjects([]);
+    gameStateRef.current = 'playing'; setGameState('playing');
+    timerIntervalRef.current = setInterval(() => { setTimeLeft(t => { if(t<=1){endGame();return 0;}return t-1; }); }, 1000);
+    rafRef.current = requestAnimationFrame(gameLoop);
+  };
+
+  const endGame = async () => {
+    gameStateRef.current = 'over'; setGameState('over');
+    cancelAnimationFrame(rafRef.current); clearInterval(timerIntervalRef.current); clearInterval(moveIntervalRef.current);
+    const finalScore = scoreRef.current;
+    const stored = await AsyncStorage.getItem('sc_best'); const prev = stored ? parseInt(stored,10) : 0;
+    if(finalScore>prev){await AsyncStorage.setItem('sc_best',String(finalScore));setBestScore(finalScore);}
+  };
+
+  const gameLoop = (ts) => {
+    if(gameStateRef.current!=='playing') return;
+    if(!lastTimeRef.current) lastTimeRef.current = ts;
+    const delta = ts - lastTimeRef.current; lastTimeRef.current = ts;
+    const fallSpeed = Math.min(1+scoreRef.current*0.015, 3.5) * 3.5 * (delta/16);
+    spawnTimerRef.current += delta;
+    if(spawnTimerRef.current >= Math.max(400,1200-scoreRef.current*8) && objectsRef.current.length < SC_MAX_OBJECTS) {
+      spawnTimerRef.current = 0;
+      const type = scPickType(); const x = Math.random()*(width-SC_OBJ_SIZE);
+      objectsRef.current = [...objectsRef.current, {id:objectIdRef.current++,x,y:-SC_OBJ_SIZE,...type}];
+    }
+    const catcherLeft = catcherXRef.current; const catcherRight = catcherLeft+SC_CATCHER_W;
+    const catcherTop = GAME_HEIGHT-SC_CATCHER_H-10;
+    let livesChanged = false; let newScore = scoreRef.current; let newMult = multiplierRef.current; let newConsec = consecutiveRef.current;
+    const surviving = [];
+    for(const obj of objectsRef.current) {
+      const ny = obj.y+fallSpeed; const objCenterX = obj.x+SC_OBJ_SIZE/2; const objBottom = ny+SC_OBJ_SIZE;
+      if(objBottom>=catcherTop && ny<catcherTop+SC_CATCHER_H && objCenterX>=catcherLeft && objCenterX<=catcherRight) {
+        if(obj.type==='bomb'){livesRef.current=Math.max(0,livesRef.current-1);livesChanged=true;newConsec=0;newMult=1;Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);showFlash('💥 -1 vida');}
+        else if(obj.type==='heart'){livesRef.current=Math.min(SC_MAX_LIVES,livesRef.current+1);livesChanged=true;Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);showFlash('❤️ +1 vida');}
+        else{newConsec++;if(newConsec>=5)newMult=3;else if(newConsec>=3)newMult=2;const pts=obj.points*newMult;newScore+=pts;scoreRef.current=newScore;Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);showFlash(`+${pts}${newMult>1?` x${newMult}`:''}`);}
+        continue;
+      }
+      if(objBottom>=GAME_HEIGHT){if(obj.type==='star'||obj.type==='diamond'){newConsec=0;newMult=1;}continue;}
+      surviving.push({...obj,y:ny});
+    }
+    multiplierRef.current=newMult; consecutiveRef.current=newConsec; scoreRef.current=newScore;
+    objectsRef.current=surviving;
+    setScore(newScore); setMultiplier(newMult); setObjects([...surviving]);
+    if(livesChanged) setLives(livesRef.current);
+    if(livesRef.current<=0){endGame();return;}
+    rafRef.current = requestAnimationFrame(gameLoop);
+  };
+
+  const moveCatcher = (dir) => { catcherXRef.current=Math.max(0,Math.min(width-SC_CATCHER_W,catcherXRef.current+dir*18)); setCatcherX(catcherXRef.current); };
+  const startMoving = (dir) => { moveCatcher(dir); moveIntervalRef.current=setInterval(()=>moveCatcher(dir),50); };
+  const stopMoving = () => clearInterval(moveIntervalRef.current);
+
+  const panResponder = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => gameStateRef.current === 'playing',
+    onMoveShouldSetPanResponder: () => gameStateRef.current === 'playing',
+    onPanResponderMove: (_, gs) => { const nx=gs.moveX-SC_CATCHER_W/2; catcherXRef.current=Math.max(0,Math.min(width-SC_CATCHER_W,nx)); setCatcherX(catcherXRef.current); },
+  })).current;
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#0a0a1a' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#12122a' }}>
+        <Pressable onPress={onExit} style={{ padding: 6 }}><Text style={{ color: '#ff6b6b', fontSize: 20, fontWeight: 'bold' }}>✕</Text></Pressable>
+        <Text style={{ color: '#ffe066', fontSize: 18, fontWeight: 'bold' }}>⭐ Star Catcher</Text>
+        <Text style={{ color: '#aaa', fontSize: 13 }}>Mejor: {bestScore}</Text>
+      </View>
+      {gameState === 'playing' && (
+        <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-around', paddingVertical:6, backgroundColor:'#0d0d2b' }}>
+          <Text style={{ color:'#fff', fontSize:14, fontWeight:'600' }}>⏱ {timeLeft}s</Text>
+          <Text style={{ color:'#fff', fontSize:14, fontWeight:'600' }}>Score: {score}</Text>
+          <Text style={{ color:'#ffd700', fontSize:16, fontWeight:'bold' }}>x{multiplier}</Text>
+          <Text style={{ fontSize:14 }}>{Array.from({length:SC_MAX_LIVES},(_,i)=>i<lives?'❤️':'🖤').join('')}</Text>
+        </View>
+      )}
+      <View style={{ width, height: GAME_HEIGHT, backgroundColor: '#0d0d2b', overflow: 'hidden', position: 'relative' }} {...panResponder.panHandlers}>
+        {gameState === 'idle' && <View style={{ flex:1, alignItems:'center', justifyContent:'center' }}>
+          <Text style={{ color:'#ffe066', fontSize:30, fontWeight:'bold', marginBottom:10 }}>⭐ Star Catcher</Text>
+          <Text style={{ color:'#ccc', fontSize:15, textAlign:'center', marginBottom:24, lineHeight:22 }}>Atrapa estrellas y gemas.{'\n'}¡Evita las bombas!</Text>
+          <Pressable style={{ backgroundColor:'#00e5ff', paddingHorizontal:40, paddingVertical:14, borderRadius:30 }} onPress={startGame}><Text style={{ color:'#0a0a1a', fontSize:18, fontWeight:'bold' }}>JUGAR</Text></Pressable>
+        </View>}
+        {gameState === 'over' && <View style={{ flex:1, alignItems:'center', justifyContent:'center' }}>
+          <Text style={{ color:'#ffe066', fontSize:30, fontWeight:'bold', marginBottom:10 }}>Game Over</Text>
+          <Text style={{ color:'#fff', fontSize:22, marginBottom:8 }}>Puntuación: {score}</Text>
+          {score >= bestScore && score > 0 && <Text style={{ color:'#ffd700', fontSize:18, marginBottom:16 }}>¡Nuevo récord! 🏆</Text>}
+          <Pressable style={{ backgroundColor:'#00e5ff', paddingHorizontal:40, paddingVertical:14, borderRadius:30, marginBottom:12 }} onPress={startGame}><Text style={{ color:'#0a0a1a', fontSize:18, fontWeight:'bold' }}>REINICIAR</Text></Pressable>
+          <Pressable onPress={onExit}><Text style={{ color:'#aaa', fontSize:15 }}>Salir</Text></Pressable>
+        </View>}
+        {gameState === 'playing' && objects.map(obj => (
+          <Text key={obj.id} style={{ position:'absolute', fontSize:SC_OBJ_SIZE-4, left:obj.x, top:obj.y }}>{obj.emoji}</Text>
+        ))}
+        {gameState === 'playing' && <View style={{ position:'absolute', width:SC_CATCHER_W, height:SC_CATCHER_H, left:catcherX, top:GAME_HEIGHT-SC_CATCHER_H-10, backgroundColor:'#00e5ff', borderRadius:6, shadowColor:'#00e5ff', shadowOpacity:0.9, shadowRadius:8 }} />}
+        {flashMsg && <Text style={{ position:'absolute', top:GAME_HEIGHT/2-30, width:'100%', textAlign:'center', color:'#ffe066', fontSize:22, fontWeight:'bold' }}>{flashMsg}</Text>}
+      </View>
+      {gameState === 'playing' && (
+        <View style={{ flexDirection:'row', justifyContent:'space-around', paddingVertical:10, backgroundColor:'#12122a' }}>
+          <Pressable style={{ backgroundColor:'#1e1e4a', paddingHorizontal:50, paddingVertical:14, borderRadius:16, borderWidth:1, borderColor:'#00e5ff44' }} onPressIn={() => startMoving(-1)} onPressOut={stopMoving}><Text style={{ color:'#00e5ff', fontSize:22, fontWeight:'bold' }}>◀</Text></Pressable>
+          <Pressable style={{ backgroundColor:'#1e1e4a', paddingHorizontal:50, paddingVertical:14, borderRadius:16, borderWidth:1, borderColor:'#00e5ff44' }} onPressIn={() => startMoving(1)} onPressOut={stopMoving}><Text style={{ color:'#00e5ff', fontSize:22, fontWeight:'bold' }}>▶</Text></Pressable>
+        </View>
+      )}
+    </SafeAreaView>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// WORD SCRAMBLE
+// ══════════════════════════════════════════════════════════════════
+
+const WS_WORDS = ['GATO','CASA','MUNDO','PLAYA','JUEGO','CIELO','FUEGO','AGUA','LIBRO','VERDE','ROJO','NOCHE','LUNA','SOL','FLOR','ARBOL','PATO','MESA','SILLA','PUERTA'];
+const WS_TOTAL = WS_WORDS.length;
+const WS_TILE_COLORS = ['#ff6b6b','#ffd166','#06d6a0','#118ab2','#a855f7','#f97316','#14b8a6','#e879f9'];
+function wsScramble(word){const arr=word.split('');for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}if(arr.join('')===word&&word.length>1)[arr[0],arr[1]]=[arr[1],arr[0]];return arr;}
+function wsShuffleWords(){const arr=[...WS_WORDS];for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;}
+
+function WordScramble({ onExit }) {
+  const [gameState, setGameState] = useState('idle');
+  const [wordList, setWordList] = useState([]); const [wordIndex, setWordIndex] = useState(0);
+  const [tiles, setTiles] = useState([]); const [answer, setAnswer] = useState([]);
+  const [score, setScore] = useState(0); const [bestScore, setBestScore] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(30); const [feedback, setFeedback] = useState(null);
+  const timerRef = useRef(null); const shakeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => { AsyncStorage.getItem('ws_best').then(v => { if (v) setBestScore(parseInt(v, 10)); }); return () => clearInterval(timerRef.current); }, []);
+
+  const loadWord = (list, idx, currentScore) => {
+    const word = list[idx];
+    const scrambled = wsScramble(word);
+    setTiles(scrambled.map((letter, i) => ({ letter, id: i, color: WS_TILE_COLORS[i % WS_TILE_COLORS.length], used: false })));
+    setAnswer([]); setTimeLeft(30); setFeedback(null); clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => { setTimeLeft(t => { if(t<=1){skipWord(list,idx,currentScore);return 0;}return t-1; }); }, 1000);
+  };
+
+  const skipWord = (list, idx, currentScore) => {
+    clearInterval(timerRef.current);
+    const newScore = Math.max(0, currentScore-5); setScore(newScore);
+    const nextIdx = idx + 1;
+    if(nextIdx>=WS_TOTAL) finishGame(newScore);
+    else { setWordIndex(nextIdx); loadWord(list, nextIdx, newScore); }
+  };
+
+  const startGame = () => {
+    const list = wsShuffleWords(); setWordList(list); setWordIndex(0); setScore(0); setGameState('playing'); loadWord(list, 0, 0);
+  };
+
+  const finishGame = async (finalScore) => {
+    clearInterval(timerRef.current); setGameState('over');
+    const stored = await AsyncStorage.getItem('ws_best'); const prev = stored ? parseInt(stored,10) : 0;
+    if(finalScore>prev){await AsyncStorage.setItem('ws_best',String(finalScore));setBestScore(finalScore);}
+  };
+
+  const tapTile = (tile) => {
+    if(tile.used||feedback) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const newTiles = tiles.map(t => t.id===tile.id?{...t,used:true}:t);
+    const newAnswer = [...answer,{letter:tile.letter,id:tile.id}];
+    setTiles(newTiles); setAnswer(newAnswer);
+    const word = wordList[wordIndex];
+    if(newAnswer.length===word.length) {
+      const attempt = newAnswer.map(a=>a.letter).join('');
+      if(attempt===word) {
+        clearInterval(timerRef.current); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setFeedback('correct');
+        const pts = Math.max(10, Math.round((timeLeft/30)*100)); const newScore = score+pts; setScore(newScore);
+        setTimeout(() => { const nextIdx=wordIndex+1; if(nextIdx>=WS_TOTAL)finishGame(newScore); else{setWordIndex(nextIdx);loadWord(wordList,nextIdx,newScore);} }, 800);
+      } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); setFeedback('wrong');
+        Animated.sequence([Animated.timing(shakeAnim,{toValue:10,duration:60,useNativeDriver:true}),Animated.timing(shakeAnim,{toValue:-10,duration:60,useNativeDriver:true}),Animated.timing(shakeAnim,{toValue:6,duration:50,useNativeDriver:true}),Animated.timing(shakeAnim,{toValue:0,duration:50,useNativeDriver:true})]).start();
+        setTimeout(() => { setTiles(newTiles.map(t=>({...t,used:false}))); setAnswer([]); setFeedback(null); }, 700);
+      }
+    }
+  };
+
+  const word = wordList[wordIndex] || '';
+  const timerColor = timeLeft > 10 ? '#06d6a0' : timeLeft > 5 ? '#ffd166' : '#ff6b6b';
+
+  return (
+    <SafeAreaView style={{ flex:1, backgroundColor:'#0f0f1e' }}>
+      <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between', paddingHorizontal:16, paddingVertical:8, backgroundColor:'#1a1a2e' }}>
+        <Pressable onPress={onExit} style={{ padding:6 }}><Text style={{ color:'#ff6b6b', fontSize:20, fontWeight:'bold' }}>✕</Text></Pressable>
+        <Text style={{ color:'#a855f7', fontSize:18, fontWeight:'bold' }}>🔤 Palabras</Text>
+        <Text style={{ color:'#aaa', fontSize:13 }}>Mejor: {bestScore}</Text>
+      </View>
+      {gameState==='idle' && <View style={{ flex:1, alignItems:'center', justifyContent:'center', padding:24 }}>
+        <Text style={{ color:'#a855f7', fontSize:28, fontWeight:'bold', marginBottom:10, textAlign:'center' }}>Palabras Revueltas</Text>
+        <Text style={{ color:'#ccc', fontSize:16, textAlign:'center', marginBottom:20, lineHeight:24 }}>Ordena las letras para{'\n'}formar la palabra correcta</Text>
+        <Text style={{ color:'#aaa', fontSize:14, textAlign:'center', marginBottom:28, lineHeight:24 }}>⭐ Más rápido = más puntos{'\n'}⏭ Saltar = -5 puntos{'\n'}🔤 20 palabras en español</Text>
+        <Pressable style={{ backgroundColor:'#a855f7', paddingHorizontal:40, paddingVertical:14, borderRadius:30 }} onPress={startGame}><Text style={{ color:'#fff', fontSize:18, fontWeight:'bold' }}>COMENZAR</Text></Pressable>
+      </View>}
+      {gameState==='over' && <View style={{ flex:1, alignItems:'center', justifyContent:'center', padding:24 }}>
+        <Text style={{ color:'#a855f7', fontSize:28, fontWeight:'bold', marginBottom:10 }}>¡Juego Terminado!</Text>
+        <Text style={{ color:'#fff', fontSize:26, fontWeight:'bold', marginBottom:10 }}>Puntuación: {score}</Text>
+        {score>=bestScore&&score>0&&<Text style={{ color:'#ffd700', fontSize:18, marginBottom:20 }}>¡Nuevo récord! 🏆</Text>}
+        <Pressable style={{ backgroundColor:'#a855f7', paddingHorizontal:40, paddingVertical:14, borderRadius:30, marginBottom:16 }} onPress={startGame}><Text style={{ color:'#fff', fontSize:18, fontWeight:'bold' }}>JUGAR DE NUEVO</Text></Pressable>
+        <Pressable onPress={onExit}><Text style={{ color:'#aaa', fontSize:15 }}>Salir</Text></Pressable>
+      </View>}
+      {gameState==='playing' && <View style={{ flex:1, paddingHorizontal:16, paddingTop:12 }}>
+        <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+          <Text style={{ color:'#ccc', fontSize:15, fontWeight:'600' }}>{wordIndex+1}/{WS_TOTAL}</Text>
+          <View style={{ backgroundColor:'#1a1a2e', paddingHorizontal:16, paddingVertical:4, borderRadius:20 }}><Text style={{ color:timerColor, fontSize:18, fontWeight:'bold' }}>{timeLeft}s</Text></View>
+          <Text style={{ color:'#ffd166', fontSize:15, fontWeight:'600' }}>Pts: {score}</Text>
+        </View>
+        {feedback==='correct'&&<View style={{ backgroundColor:'#06d6a044', borderRadius:10, padding:8, marginBottom:8, alignItems:'center' }}><Text style={{ color:'#06d6a0', fontSize:18, fontWeight:'bold' }}>¡Correcto! ✓</Text></View>}
+        <Pressable style={{ minHeight:80, backgroundColor:'#1a1a2e', borderRadius:14, marginBottom:24, justifyContent:'center', alignItems:'center', padding:12, borderWidth:2, borderColor:'#a855f733' }} onPress={() => { if(answer.length===0||feedback) return; const removed=answer[answer.length-1]; setAnswer(answer.slice(0,-1)); setTiles(tiles.map(t=>t.id===removed.id?{...t,used:false}:t)); }}>
+          {answer.length===0&&<Text style={{ color:'#555', fontSize:14, position:'absolute' }}>Toca las letras…</Text>}
+          <Animated.View style={{ flexDirection:'row', flexWrap:'wrap', justifyContent:'center', gap:6, transform:[{translateX:shakeAnim}] }}>
+            {answer.map((a,i)=>(<View key={`${a.id}-${i}`} style={{ backgroundColor:'#2d2d4e', width:40, height:44, borderRadius:8, alignItems:'center', justifyContent:'center', borderWidth:1, borderColor:feedback==='wrong'?'#ff6b6b':'#a855f7' }}><Text style={{ color:'#fff', fontSize:20, fontWeight:'bold' }}>{a.letter}</Text></View>))}
+          </Animated.View>
+        </Pressable>
+        <View style={{ alignItems:'center', marginBottom:24 }}>
+          <View style={{ flexDirection:'row', flexWrap:'wrap', justifyContent:'center', gap:10 }}>
+            {tiles.map(tile=>(<Pressable key={tile.id} style={{ width:52, height:58, borderRadius:12, backgroundColor:tile.color, alignItems:'center', justifyContent:'center', opacity:tile.used?0.25:1 }} onPress={()=>tapTile(tile)} disabled={tile.used||!!feedback}><Text style={{ color:'#fff', fontSize:24, fontWeight:'bold' }}>{tile.letter}</Text></Pressable>))}
+          </View>
+        </View>
+        <Pressable style={{ alignSelf:'center', paddingHorizontal:24, paddingVertical:10, borderRadius:20, borderWidth:1, borderColor:'#444' }} onPress={() => skipWord(wordList, wordIndex, score)}><Text style={{ color:'#888', fontSize:14 }}>Saltar (-5 pts)</Text></Pressable>
+      </View>}
+    </SafeAreaView>
+  );
+}
+// ── CROSSY ROAD ──────────────────────────────────────────────────
+
+const CR2_COLS = 9;
+const CR2_ROWS = 11;
+const CR2_CELL = Math.floor((width - 16) / CR2_COLS);
+const CR2_FROG_ROW_START = CR2_ROWS - 1;
+const CR2_TRAFFIC_ROWS = 8;
+const CR2_VEHICLES_CAR = ['🚗', '🚕', '🚙'];
+const CR2_VEHICLES_TRUCK = ['🚛', '🚚', '🚌', '🚎'];
+const CR2_BASE_SPEEDS = [1.2, 1.5, 1.0, 1.8, 1.3, 1.6, 1.1, 1.4];
+const CR2_DIRECTIONS = [1, -1, 1, -1, 1, -1, 1, -1];
+
+function cr2_makeRows(speedMult) {
+  return Array.from({ length: CR2_TRAFFIC_ROWS }, (_, i) => {
+    const dir = CR2_DIRECTIONS[i];
+    const speed = CR2_BASE_SPEEDS[i] * speedMult;
+    const count = 2 + Math.floor(Math.random() * 3);
+    const isTruck = i % 3 === 2;
+    const emoji = isTruck
+      ? CR2_VEHICLES_TRUCK[Math.floor(Math.random() * CR2_VEHICLES_TRUCK.length)]
+      : CR2_VEHICLES_CAR[Math.floor(Math.random() * CR2_VEHICLES_CAR.length)];
+    const cellW = isTruck ? 2 : 1;
+    const vehicles = Array.from({ length: count }, (__, j) => ({
+      id: j,
+      col: (j * Math.floor(CR2_COLS / count) + Math.floor(Math.random() * 2)) % CR2_COLS,
+      emoji,
+      cellW,
+    }));
+    return { dir, speed, vehicles, isTruck };
+  });
+}
+
+function CR2_CrossyRoad({ onExit }) {
+  const [frogPos, setFrogPos] = useState({ row: CR2_FROG_ROW_START, col: Math.floor(CR2_COLS / 2) });
+  const [score, setScore] = useState(0);
+  const [best, setBest] = useState(0);
+  const [dead, setDead] = useState(false);
+  const [rows, setRows] = useState(() => cr2_makeRows(1));
+  const [speedMult, setSpeedMult] = useState(1);
+  const vehiclePositions = useRef(
+    Array.from({ length: CR2_TRAFFIC_ROWS }, (_, i) => {
+      const r = cr2_makeRows(1)[i];
+      return r.vehicles.map(v => v.col);
+    })
+  );
+  const animRef = useRef(null);
+  const lastTime = useRef(null);
+  const frogRef = useRef({ row: CR2_FROG_ROW_START, col: Math.floor(CR2_COLS / 2) });
+  const deadRef = useRef(false);
+  const rowsRef = useRef(rows);
+  const speedRef = useRef(1);
+  const scoreRef = useRef(0);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    AsyncStorage.getItem('cr2_best').then(v => { if (v) setBest(parseInt(v)); });
+  }, []);
+
+  useEffect(() => { rowsRef.current = rows; }, [rows]);
+  useEffect(() => { speedRef.current = speedMult; }, [speedMult]);
+
+  const checkCollision = (fRow, fCol) => {
+    if (fRow === 0 || fRow === CR2_ROWS - 1) return false;
+    const trafficRowIndex = fRow - 1;
+    if (trafficRowIndex < 0 || trafficRowIndex >= CR2_TRAFFIC_ROWS) return false;
+    const rowData = rowsRef.current[trafficRowIndex];
+    const positions = vehiclePositions.current[trafficRowIndex];
+    for (let vi = 0; vi < positions.length; vi++) {
+      const col = positions[vi];
+      const cellW = rowData.vehicles[vi].cellW;
+      const normalizedCol = ((col % CR2_COLS) + CR2_COLS) % CR2_COLS;
+      for (let c = 0; c < cellW; c++) {
+        if (((normalizedCol + c) % CR2_COLS) === fCol) return true;
+      }
+    }
+    return false;
+  };
+
+  useEffect(() => {
+    deadRef.current = dead;
+  }, [dead]);
+
+  useEffect(() => {
+    const loop = (timestamp) => {
+      if (deadRef.current) { animRef.current = null; return; }
+      if (!lastTime.current) lastTime.current = timestamp;
+      const delta = (timestamp - lastTime.current) / 16;
+      lastTime.current = timestamp;
+
+      const currentRows = rowsRef.current;
+      const sm = speedRef.current;
+      for (let i = 0; i < CR2_TRAFFIC_ROWS; i++) {
+        const row = currentRows[i];
+        const positions = vehiclePositions.current[i];
+        for (let vi = 0; vi < positions.length; vi++) {
+          positions[vi] = positions[vi] + row.dir * row.speed * sm * delta * 0.05;
+        }
+      }
+
+      const fp = frogRef.current;
+      if (checkCollision(fp.row, fp.col)) {
+        deadRef.current = true;
+        setDead(true);
+        deathVibrate();
+        return;
+      }
+
+      setTick(t => t + 1);
+      animRef.current = requestAnimationFrame(loop);
+    };
+    animRef.current = requestAnimationFrame(loop);
+    return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
+  }, []);
+
+  const move = (dr, dc) => {
+    if (dead) return;
+    setFrogPos(prev => {
+      const nr = Math.max(0, Math.min(CR2_ROWS - 1, prev.row + dr));
+      const nc = Math.max(0, Math.min(CR2_COLS - 1, prev.col + dc));
+      frogRef.current = { row: nr, col: nc };
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+      if (nr === 0) {
+        const ns = scoreRef.current + 1;
+        scoreRef.current = ns;
+        setScore(ns);
+        celebrateVibrate();
+        setBest(prev2 => {
+          const nb = Math.max(prev2, ns);
+          AsyncStorage.setItem('cr2_best', String(nb));
+          return nb;
+        });
+        const nm = 1 + ns * 0.12;
+        speedRef.current = nm;
+        setSpeedMult(nm);
+        const newRows = cr2_makeRows(nm);
+        rowsRef.current = newRows;
+        setRows(newRows);
+        vehiclePositions.current = newRows.map(r => r.vehicles.map(v => v.col));
+        const startPos = { row: CR2_FROG_ROW_START, col: Math.floor(CR2_COLS / 2) };
+        frogRef.current = startPos;
+        return startPos;
+      }
+
+      if (checkCollision(nr, nc)) {
+        deadRef.current = true;
+        setDead(true);
+        deathVibrate();
+      }
+      return { row: nr, col: nc };
+    });
+  };
+
+  const restart = () => {
+    const startPos = { row: CR2_FROG_ROW_START, col: Math.floor(CR2_COLS / 2) };
+    frogRef.current = startPos;
+    deadRef.current = false;
+    scoreRef.current = 0;
+    speedRef.current = 1;
+    const newRows = cr2_makeRows(1);
+    rowsRef.current = newRows;
+    vehiclePositions.current = newRows.map(r => r.vehicles.map(v => v.col));
+    setFrogPos(startPos);
+    setDead(false);
+    setScore(0);
+    setSpeedMult(1);
+    setRows(newRows);
+    lastTime.current = null;
+    animRef.current = requestAnimationFrame(function loop(ts) {
+      if (deadRef.current) { animRef.current = null; return; }
+      if (!lastTime.current) lastTime.current = ts;
+      const delta = (ts - lastTime.current) / 16;
+      lastTime.current = ts;
+      const currentRows = rowsRef.current;
+      const sm = speedRef.current;
+      for (let i = 0; i < CR2_TRAFFIC_ROWS; i++) {
+        const row = currentRows[i];
+        const positions = vehiclePositions.current[i];
+        for (let vi = 0; vi < positions.length; vi++) {
+          positions[vi] = positions[vi] + row.dir * row.speed * sm * delta * 0.05;
+        }
+      }
+      const fp = frogRef.current;
+      if (checkCollision(fp.row, fp.col)) {
+        deadRef.current = true;
+        setDead(true);
+        deathVibrate();
+        return;
+      }
+      setTick(t => t + 1);
+      animRef.current = requestAnimationFrame(loop);
+    });
+  };
+
+  const boardH = CR2_CELL * CR2_ROWS;
+
+  const renderGrid = () => {
+    const cells = [];
+    for (let r = 0; r < CR2_ROWS; r++) {
+      const isGrass = r === 0 || r === CR2_ROWS - 1;
+      const bgColor = isGrass ? '#2d6a2d' : (r % 2 === 0 ? '#555' : '#444');
+      cells.push(
+        <View key={r} style={{ flexDirection: 'row', height: CR2_CELL, backgroundColor: bgColor }}>
+          {Array.from({ length: CR2_COLS }, (_, c) => (
+            <View key={c} style={{ width: CR2_CELL, height: CR2_CELL, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.05)' }} />
+          ))}
+        </View>
+      );
+    }
+    return cells;
+  };
+
+  const renderVehicles = () => {
+    const els = [];
+    for (let i = 0; i < CR2_TRAFFIC_ROWS; i++) {
+      const rowData = rows[i];
+      const positions = vehiclePositions.current[i];
+      const rowIndex = i + 1;
+      for (let vi = 0; vi < positions.length; vi++) {
+        const rawCol = positions[vi];
+        const col = ((rawCol % CR2_COLS) + CR2_COLS) % CR2_COLS;
+        const x = col * CR2_CELL;
+        const y = rowIndex * CR2_CELL;
+        const w = rowData.vehicles[vi].cellW * CR2_CELL;
+        els.push(
+          <View key={`v-${i}-${vi}`} style={{
+            position: 'absolute', left: x, top: y,
+            width: w, height: CR2_CELL,
+            justifyContent: 'center', alignItems: 'center',
+          }}>
+            <Text style={{ fontSize: CR2_CELL * 0.65 }}>{rowData.vehicles[vi].emoji}</Text>
+          </View>
+        );
+        if (col + rowData.vehicles[vi].cellW > CR2_COLS) {
+          const overflowX = (col - CR2_COLS) * CR2_CELL;
+          els.push(
+            <View key={`v-${i}-${vi}-ov`} style={{
+              position: 'absolute', left: overflowX, top: y,
+              width: w, height: CR2_CELL,
+              justifyContent: 'center', alignItems: 'center',
+            }}>
+              <Text style={{ fontSize: CR2_CELL * 0.65 }}>{rowData.vehicles[vi].emoji}</Text>
+            </View>
+          );
+        }
+      }
+    }
+    return els;
+  };
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#1a1a2e' }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 }}>
+        <Pressable onPress={onExit} style={{ padding: 8 }}>
+          <Text style={{ color: '#aaa', fontSize: 15 }}>✕ Salir</Text>
+        </Pressable>
+        <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>🐸 Rana Veloz</Text>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={{ color: '#FFD700', fontSize: 16, fontWeight: 'bold' }}>Pts: {score}</Text>
+          <Text style={{ color: '#aaa', fontSize: 12 }}>Mejor: {best}</Text>
+        </View>
+      </View>
+
+      <View style={{ alignItems: 'center', marginTop: 4 }}>
+        <View style={{ width: CR2_CELL * CR2_COLS, height: boardH, position: 'relative', overflow: 'hidden' }}>
+          {renderGrid()}
+          {renderVehicles()}
+          <View style={{
+            position: 'absolute',
+            left: frogPos.col * CR2_CELL,
+            top: frogPos.row * CR2_CELL,
+            width: CR2_CELL, height: CR2_CELL,
+            justifyContent: 'center', alignItems: 'center',
+            zIndex: 10,
+          }}>
+            <Text style={{ fontSize: CR2_CELL * 0.7 }}>🐸</Text>
+          </View>
+          {dead && (
+            <View style={{
+              position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.72)',
+              justifyContent: 'center', alignItems: 'center',
+            }}>
+              <Text style={{ fontSize: 36, marginBottom: 8 }}>💀</Text>
+              <Text style={{ color: '#fff', fontSize: 22, fontWeight: 'bold', marginBottom: 4 }}>¡Aplastado!</Text>
+              <Text style={{ color: '#FFD700', fontSize: 16, marginBottom: 16 }}>Puntos: {score}  |  Mejor: {best}</Text>
+              <Pressable onPress={restart} style={{ backgroundColor: '#4CAF50', paddingHorizontal: 32, paddingVertical: 12, borderRadius: 12 }}>
+                <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Reintentar</Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
+      </View>
+
+      <View style={{ alignItems: 'center', marginTop: 12 }}>
+        <Pressable onPress={() => move(-1, 0)} style={{ backgroundColor: '#2196F3', width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center', marginBottom: 6 }}>
+          <Text style={{ color: '#fff', fontSize: 28 }}>▲</Text>
+        </Pressable>
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          <Pressable onPress={() => move(0, -1)} style={{ backgroundColor: '#2196F3', width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={{ color: '#fff', fontSize: 28 }}>◀</Text>
+          </Pressable>
+          <Pressable onPress={() => move(1, 0)} style={{ backgroundColor: '#2196F3', width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={{ color: '#fff', fontSize: 28 }}>▼</Text>
+          </Pressable>
+          <Pressable onPress={() => move(0, 1)} style={{ backgroundColor: '#2196F3', width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={{ color: '#fff', fontSize: 28 }}>▶</Text>
+          </Pressable>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+}
+
+// ── BUBBLE SHOOTER ────────────────────────────────────────────────
+
+const BS_COLS = 10;
+const BS_BUBBLE_R = Math.floor((width - 16) / BS_COLS / 2);
+const BS_BUBBLE_D = BS_BUBBLE_R * 2;
+const BS_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#e91e63'];
+const BS_SHOOTER_Y = GAME_HEIGHT - 80;
+const BS_MAX_ROWS_VISIBLE = Math.floor((GAME_HEIGHT - 120) / BS_BUBBLE_D);
+
+function bs_randomColor() {
+  return BS_COLORS[Math.floor(Math.random() * BS_COLORS.length)];
+}
+
+function bs_makeRow(rowIndex, colorPool) {
+  return Array.from({ length: BS_COLS }, (_, c) => ({
+    id: `${rowIndex}-${c}`,
+    color: colorPool[Math.floor(Math.random() * colorPool.length)],
+    row: rowIndex,
+    col: c,
+    alive: true,
+  }));
+}
+
+function bs_initGrid() {
+  const pool = BS_COLORS.slice(0, 6);
+  return Array.from({ length: 5 }, (_, i) => bs_makeRow(i, pool));
+}
+
+function BubbleShooter({ onExit }) {
+  const [grid, setGrid] = useState(() => bs_initGrid());
+  const [currentColor, setCurrentColor] = useState(bs_randomColor);
+  const [nextColor, setNextColor] = useState(bs_randomColor);
+  const [score, setScore] = useState(0);
+  const [best, setBest] = useState(0);
+  const [gameOver, setGameOver] = useState(false);
+  const [shotsFired, setShotsFired] = useState(0);
+  const [projectile, setProjectile] = useState(null);
+  const [aimDots, setAimDots] = useState([]);
+  const projRef = useRef(null);
+  const animRef = useRef(null);
+  const gridRef = useRef(grid);
+  const scoreRef = useRef(0);
+  const shotsFiredRef = useRef(0);
+  const currentColorRef = useRef(currentColor);
+  const nextColorRef = useRef(nextColor);
+  const gameOverRef = useRef(false);
+  const boardWidth = BS_COLS * BS_BUBBLE_D;
+  const boardLeft = (width - boardWidth) / 2;
+
+  useEffect(() => { gridRef.current = grid; }, [grid]);
+  useEffect(() => { currentColorRef.current = currentColor; }, [currentColor]);
+  useEffect(() => { nextColorRef.current = nextColor; }, [nextColor]);
+  useEffect(() => { gameOverRef.current = gameOver; }, [gameOver]);
+
+  useEffect(() => {
+    AsyncStorage.getItem('bs_best').then(v => { if (v) setBest(parseInt(v)); });
+  }, []);
+
+  const getColorsInGrid = (g) => {
+    const used = new Set();
+    g.forEach(row => row.forEach(b => { if (b.alive) used.add(b.color); }));
+    return used.size > 0 ? [...used] : BS_COLORS.slice(0, 4);
+  };
+
+  const bs_computeAim = (tx, ty) => {
+    const shooterX = boardLeft + boardWidth / 2;
+    const shooterY = BS_SHOOTER_Y;
+    let dx = tx - shooterX;
+    let dy = ty - shooterY;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len === 0) return [];
+    dx /= len; dy /= len;
+    if (dy > -0.1) dy = -0.1;
+    const dots = [];
+    let x = shooterX, y = shooterY;
+    let vx = dx, vy = dy;
+    for (let i = 0; i < 20; i++) {
+      x += vx * 18;
+      y += vy * 18;
+      if (x - BS_BUBBLE_R < boardLeft) { x = boardLeft + BS_BUBBLE_R; vx = Math.abs(vx); }
+      if (x + BS_BUBBLE_R > boardLeft + boardWidth) { x = boardLeft + boardWidth - BS_BUBBLE_R; vx = -Math.abs(vx); }
+      if (y < 0) break;
+      dots.push({ x, y });
+    }
+    return dots;
+  };
+
+  const findConnectedSameColor = (g, startRow, startCol, color) => {
+    const visited = new Set();
+    const queue = [`${startRow},${startCol}`];
+    const result = [];
+    while (queue.length > 0) {
+      const key = queue.shift();
+      if (visited.has(key)) continue;
+      visited.add(key);
+      const [r, c] = key.split(',').map(Number);
+      const row = g[r];
+      if (!row) continue;
+      const b = row[c];
+      if (!b || !b.alive || b.color !== color) continue;
+      result.push({ r, c });
+      const neighbors = [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]];
+      neighbors.forEach(([nr, nc]) => {
+        if (nr >= 0 && nc >= 0 && nc < BS_COLS) queue.push(`${nr},${nc}`);
+      });
+    }
+    return result;
+  };
+
+  const findDetached = (g) => {
+    const connected = new Set();
+    const queue = [];
+    g[0] && g[0].forEach((b, c) => { if (b && b.alive) { queue.push(`0,${c}`); connected.add(`0,${c}`); } });
+    while (queue.length > 0) {
+      const key = queue.shift();
+      const [r, c] = key.split(',').map(Number);
+      const neighbors = [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]];
+      neighbors.forEach(([nr, nc]) => {
+        const nkey = `${nr},${nc}`;
+        if (!connected.has(nkey) && nr >= 0 && nr < g.length && nc >= 0 && nc < BS_COLS) {
+          const row = g[nr];
+          if (row && row[nc] && row[nc].alive) {
+            connected.add(nkey);
+            queue.push(nkey);
+          }
+        }
+      });
+    }
+    const detached = [];
+    g.forEach((row, r) => {
+      row.forEach((b, c) => {
+        if (b && b.alive && !connected.has(`${r},${c}`)) detached.push({ r, c });
+      });
+    });
+    return detached;
+  };
+
+  const landBubble = (bx, by, color) => {
+    const g = gridRef.current.map(row => row.map(b => ({ ...b })));
+    const col = Math.round((bx - boardLeft) / BS_BUBBLE_D - 0.5);
+    const row = Math.round(by / BS_BUBBLE_D - 0.5);
+    const clampedCol = Math.max(0, Math.min(BS_COLS - 1, col));
+    const clampedRow = Math.max(0, row);
+
+    while (g.length <= clampedRow) {
+      g.push(Array.from({ length: BS_COLS }, (_, c2) => ({ id: `${g.length}-${c2}`, color: '', row: g.length, col: c2, alive: false })));
+    }
+    g[clampedRow][clampedCol] = { id: `${clampedRow}-${clampedCol}-new`, color, row: clampedRow, col: clampedCol, alive: true };
+
+    const matched = findConnectedSameColor(g, clampedRow, clampedCol, color);
+    let pts = 0;
+    if (matched.length >= 3) {
+      matched.forEach(({ r, c }) => { g[r][c] = { ...g[r][c], alive: false }; });
+      pts += matched.length * 10;
+      popVibrate();
+      const detached = findDetached(g);
+      if (detached.length > 0) {
+        detached.forEach(({ r, c }) => { g[r][c] = { ...g[r][c], alive: false }; });
+        pts += detached.length * 15;
+      }
+    }
+
+    const newShotsFired = shotsFiredRef.current + 1;
+    shotsFiredRef.current = newShotsFired;
+    let finalGrid = g;
+    if (newShotsFired % 8 === 0) {
+      const pool = getColorsInGrid(g);
+      const newRow = bs_makeRow(0, pool);
+      finalGrid = [newRow, ...g].map((rw, ri) =>
+        rw.map(b => ({ ...b, row: ri }))
+      );
+    }
+    finalGrid = finalGrid.filter(rw => rw.some(b => b.alive) || rw[0].row < 3);
+    while (finalGrid.length < 3) {
+      const pool = getColorsInGrid(finalGrid);
+      finalGrid.push(bs_makeRow(finalGrid.length, pool));
+    }
+
+    const isOver = finalGrid.some((rw, ri) => ri >= BS_MAX_ROWS_VISIBLE && rw.some(b => b.alive));
+    if (isOver) {
+      gameOverRef.current = true;
+      setGameOver(true);
+      deathVibrate();
+    }
+
+    if (pts > 0) {
+      scoreRef.current += pts;
+      setScore(scoreRef.current);
+      setBest(prev => {
+        const nb = Math.max(prev, scoreRef.current);
+        AsyncStorage.setItem('bs_best', String(nb));
+        return nb;
+      });
+    }
+
+    const pool2 = getColorsInGrid(finalGrid);
+    const nc = nextColorRef.current;
+    const nn = pool2[Math.floor(Math.random() * pool2.length)];
+    currentColorRef.current = nc;
+    nextColorRef.current = nn;
+    setCurrentColor(nc);
+    setNextColor(nn);
+    setShotsFired(newShotsFired);
+    setGrid(finalGrid);
+    setProjectile(null);
+    projRef.current = null;
+  };
+
+  const shoot = (tx, ty) => {
+    if (gameOverRef.current || projRef.current) return;
+    const shooterX = boardLeft + boardWidth / 2;
+    const shooterY = BS_SHOOTER_Y;
+    let dx = tx - shooterX;
+    let dy = ty - shooterY;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len === 0 || dy > -10) return;
+    dx /= len; dy /= len;
+    if (dy > -0.15) dy = -0.15;
+    const speed = 10;
+    const proj = { x: shooterX, y: shooterY, vx: dx * speed, vy: dy * speed, color: currentColorRef.current };
+    projRef.current = proj;
+    setProjectile({ ...proj });
+    setAimDots([]);
+
+    const step = () => {
+      if (!projRef.current) return;
+      const p = projRef.current;
+      let nx = p.x + p.vx;
+      let ny = p.y + p.vy;
+      let nvx = p.vx;
+
+      if (nx - BS_BUBBLE_R < boardLeft) { nx = boardLeft + BS_BUBBLE_R; nvx = Math.abs(nvx); }
+      if (nx + BS_BUBBLE_R > boardLeft + boardWidth) { nx = boardLeft + boardWidth - BS_BUBBLE_R; nvx = -Math.abs(nvx); }
+
+      if (ny - BS_BUBBLE_R <= 0) {
+        landBubble(nx, 0, p.color);
+        return;
+      }
+
+      const g = gridRef.current;
+      let landed = false;
+      for (let r = 0; r < g.length && !landed; r++) {
+        for (let c = 0; c < BS_COLS && !landed; c++) {
+          const b = g[r][c];
+          if (!b || !b.alive) continue;
+          const bx2 = boardLeft + c * BS_BUBBLE_D + BS_BUBBLE_R;
+          const by2 = r * BS_BUBBLE_D + BS_BUBBLE_R;
+          const dist = Math.sqrt((nx - bx2) ** 2 + (ny - by2) ** 2);
+          if (dist < BS_BUBBLE_D * 0.95) {
+            landBubble(nx, ny, p.color);
+            landed = true;
+          }
+        }
+      }
+      if (!landed) {
+        const updated = { ...p, x: nx, y: ny, vx: nvx };
+        projRef.current = updated;
+        setProjectile({ ...updated });
+        animRef.current = requestAnimationFrame(step);
+      }
+    };
+    animRef.current = requestAnimationFrame(step);
+  };
+
+  const restart = () => {
+    const newGrid = bs_initGrid();
+    gridRef.current = newGrid;
+    scoreRef.current = 0;
+    shotsFiredRef.current = 0;
+    gameOverRef.current = false;
+    projRef.current = null;
+    const c = bs_randomColor();
+    const n = bs_randomColor();
+    currentColorRef.current = c;
+    nextColorRef.current = n;
+    setGrid(newGrid);
+    setScore(0);
+    setShotsFired(0);
+    setGameOver(false);
+    setProjectile(null);
+    setAimDots([]);
+    setCurrentColor(c);
+    setNextColor(n);
+  };
+
+  const handlePress = (e) => {
+    const { locationX, locationY } = e.nativeEvent;
+    shoot(locationX, locationY);
+  };
+
+  const handleMove = (e) => {
+    if (projRef.current || gameOverRef.current) return;
+    const { locationX, locationY } = e.nativeEvent;
+    setAimDots(bs_computeAim(locationX, locationY));
+  };
+
+  const renderGrid = () => {
+    const els = [];
+    grid.forEach((row, r) => {
+      row.forEach((b, c) => {
+        if (!b || !b.alive) return;
+        const x = boardLeft + c * BS_BUBBLE_D;
+        const y = r * BS_BUBBLE_D;
+        if (y > GAME_HEIGHT - 80) return;
+        els.push(
+          <View key={b.id} style={{
+            position: 'absolute', left: x, top: y,
+            width: BS_BUBBLE_D, height: BS_BUBBLE_D,
+            justifyContent: 'center', alignItems: 'center',
+          }}>
+            <View style={{ width: BS_BUBBLE_D - 3, height: BS_BUBBLE_D - 3, borderRadius: BS_BUBBLE_R, backgroundColor: b.color, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' }} />
+          </View>
+        );
+      });
+    });
+    return els;
+  };
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#0d0d1a' }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 }}>
+        <Pressable onPress={onExit} style={{ padding: 8 }}>
+          <Text style={{ color: '#aaa', fontSize: 15 }}>✕ Salir</Text>
+        </Pressable>
+        <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Burbuja</Text>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={{ color: '#FFD700', fontSize: 16, fontWeight: 'bold' }}>Pts: {score}</Text>
+          <Text style={{ color: '#aaa', fontSize: 12 }}>Mejor: {best}</Text>
+        </View>
+      </View>
+
+      <View
+        style={{ flex: 1, position: 'relative' }}
+        onStartShouldSetResponder={() => true}
+        onResponderGrant={handlePress}
+        onResponderMove={handleMove}
+      >
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
+          {renderGrid()}
+
+          {aimDots.map((d, i) => (
+            <View key={i} style={{
+              position: 'absolute',
+              left: d.x - 4, top: d.y - 4,
+              width: 8, height: 8, borderRadius: 4,
+              backgroundColor: `${currentColor}88`,
+            }} />
+          ))}
+
+          {projectile && (
+            <View style={{
+              position: 'absolute',
+              left: projectile.x - BS_BUBBLE_R,
+              top: projectile.y - BS_BUBBLE_R,
+              width: BS_BUBBLE_D, height: BS_BUBBLE_D,
+              borderRadius: BS_BUBBLE_R,
+              backgroundColor: projectile.color,
+              borderWidth: 2, borderColor: 'rgba(255,255,255,0.5)',
+            }} />
+          )}
+
+          <View style={{
+            position: 'absolute', bottom: 8, left: 0, right: 0,
+            flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', gap: 24,
+          }}>
+            <View style={{ alignItems: 'center' }}>
+              <Text style={{ color: '#aaa', fontSize: 11, marginBottom: 4 }}>Siguiente</Text>
+              <View style={{ width: BS_BUBBLE_D + 4, height: BS_BUBBLE_D + 4, borderRadius: BS_BUBBLE_R + 2, backgroundColor: nextColor, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' }} />
+            </View>
+            <View style={{ alignItems: 'center' }}>
+              <Text style={{ color: '#fff', fontSize: 11, marginBottom: 4 }}>Actual</Text>
+              <View style={{ width: BS_BUBBLE_D + 12, height: BS_BUBBLE_D + 12, borderRadius: BS_BUBBLE_R + 6, backgroundColor: currentColor, borderWidth: 3, borderColor: 'rgba(255,255,255,0.6)' }} />
+            </View>
+          </View>
+        </View>
+
+        {gameOver && (
+          <View style={{
+            position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)',
+            justifyContent: 'center', alignItems: 'center',
+          }}>
+            <Text style={{ fontSize: 40, marginBottom: 8 }}>💥</Text>
+            <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold', marginBottom: 4 }}>¡Juego Terminado!</Text>
+            <Text style={{ color: '#FFD700', fontSize: 16, marginBottom: 20 }}>Puntos: {score}  |  Mejor: {best}</Text>
+            <Pressable onPress={restart} style={{ backgroundColor: '#9b59b6', paddingHorizontal: 32, paddingVertical: 12, borderRadius: 12 }}>
+              <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Jugar de Nuevo</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+    </SafeAreaView>
+  );
+}
