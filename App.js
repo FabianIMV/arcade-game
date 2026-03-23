@@ -1205,7 +1205,7 @@ function PixelQuest({ onExit }) {
       // WORLD 15 ── EL OLIMPO  (nivel final absoluto)
       // Plataformas 70px, gaps 120-125px, 12 enemies 5.0-6.0.
       // ═══════════════════════════════════════════════════════════════
-      default:
+      case 15:
         ld.platforms.push(
           gnd(0,   140),
           gnd(3800, 500),
@@ -1240,6 +1240,480 @@ function PixelQuest({ onExit }) {
         ld.goal = goal(3920, 185);
         ld.length = 4100;
         break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 16 ── PUENTE ROTO  (plataformas alternas cortas 65px)
+      // ═══════════════════════════════════════════════════════════════
+      case 16:
+        ld.platforms.push(
+          gnd(0, 180),
+          gnd(3900, 500),
+          plat(210, 90, 65),  plat(400, 170, 65),  plat(600, 90, 65),
+          plat(800, 175, 65), plat(1005, 95, 65),  plat(1210, 180, 65),
+          plat(1415, 95, 65), plat(1625, 180, 65), plat(1835, 95, 65),
+          plat(2050, 175, 65),plat(2265, 95, 65),  plat(2480, 175, 65),
+          plat(2695, 90, 65), plat(2905, 175, 65), plat(3115, 90, 70),
+          plat(3340, 80, 200),
+        );
+        ld.enemies.push(
+          enm(100, 80, 5.5),
+          enmP(230, 90, 40, 5.5), enmP(620, 90, 40, 6.0),
+          enmP(1025, 95, 40, 6.0), enmP(1435, 95, 40, 6.5),
+          enmP(1855, 95, 40, 6.5), enmP(2285, 95, 40, 6.5),
+          enmP(2715, 90, 40, 6.5), enmP(3360, 80, 90, 6.0),
+        );
+        ld.powerups.push(star(810, 220), djump(1420, 225), star(2060, 220), djump(2910, 220), life(3365, 115));
+        ld.blocks.push(
+          qBlock(610, 135, 'doublejump'), qBlock(1215, 225, 'star'),
+          qBlock(1840, 140, 'life'), qBlock(2700, 135, 'doublejump'),
+        );
+        ld.goal = goal(4010, 185);
+        ld.length = 4200;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 17 ── TÚNEL OSCURO  (techo bajo + piso, ritmo constante)
+      // ═══════════════════════════════════════════════════════════════
+      case 17:
+        ld.platforms.push(
+          gnd(0, 190),
+          gnd(4000, 500),
+          plat(220, 95, 70),  plat(430, 175, 65),  plat(640, 90, 70),
+          plat(850, 180, 65), plat(1065, 90, 70),  plat(1280, 180, 65),
+          plat(1495, 90, 70), plat(1710, 175, 65), plat(1930, 90, 70),
+          plat(2150, 175, 65),plat(2370, 90, 70),  plat(2595, 175, 65),
+          plat(2815, 90, 70), plat(3040, 175, 65), plat(3265, 90, 75),
+          plat(3490, 80, 220),
+        );
+        ld.enemies.push(
+          enm(100, 80, 6.0),
+          enmP(240, 95, 45, 6.0),  enmP(660, 90, 45, 6.5),
+          enmP(1085, 90, 40, 6.5), enmP(1515, 90, 40, 7.0),
+          enmP(1950, 90, 40, 7.0), enmP(2390, 90, 40, 7.0),
+          enmP(2835, 90, 40, 7.0), enmP(3510, 80, 90, 6.5),
+        );
+        ld.powerups.push(star(860, 225), djump(1500, 135), star(2155, 220), djump(3045, 220), life(3515, 115));
+        ld.blocks.push(
+          qBlock(650, 135, 'star'), qBlock(1290, 225, 'doublejump'),
+          qBlock(1940, 135, 'life'), qBlock(2820, 135, 'star'),
+        );
+        ld.goal = goal(4120, 185);
+        ld.length = 4300;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 18 ── AVALANCHA  (gaps 130px, plataformas 65-70px)
+      // ═══════════════════════════════════════════════════════════════
+      case 18:
+        ld.platforms.push(
+          gnd(0, 170),
+          gnd(4100, 500),
+          plat(210, 85, 70),  plat(415, 165, 65),  plat(615, 85, 70),
+          plat(820, 170, 65), plat(1025, 85, 70),  plat(1235, 170, 65),
+          plat(1445, 85, 70), plat(1655, 165, 65), plat(1870, 85, 70),
+          plat(2085, 165, 65),plat(2300, 85, 70),  plat(2515, 165, 65),
+          plat(2730, 85, 70), plat(2945, 165, 70), plat(3165, 85, 80),
+          plat(3390, 80, 230),
+        );
+        ld.enemies.push(
+          enm(100, 75, 6.5),
+          enmP(230, 85, 40, 6.5), enmP(635, 85, 40, 7.0),
+          enmP(1045, 85, 40, 7.0), enmP(1465, 85, 40, 7.5),
+          enmP(1890, 85, 40, 7.5), enmP(2320, 85, 40, 7.5),
+          enmP(2750, 85, 40, 7.5), enmP(3410, 80, 95, 7.0),
+        );
+        ld.powerups.push(star(830, 215), djump(1450, 130), star(2095, 210), djump(2950, 210), life(3415, 115));
+        ld.blocks.push(
+          qBlock(625, 130, 'doublejump'), qBlock(1240, 215, 'star'),
+          qBlock(1875, 130, 'life'), qBlock(2735, 130, 'doublejump'),
+        );
+        ld.goal = goal(4230, 180);
+        ld.length = 4400;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 19 ── ESCALADA EXTREMA  (subida pura, gaps 110px)
+      // ═══════════════════════════════════════════════════════════════
+      case 19:
+        ld.platforms.push(
+          gnd(0, 160),
+          gnd(4200, 500),
+          plat(200, 80, 70),  plat(395, 155, 65),  plat(590, 240, 65),
+          plat(780, 155, 65), plat(975, 80, 70),   plat(1175, 200, 65),
+          plat(1375, 120, 65),plat(1575, 220, 65), plat(1775, 130, 70),
+          plat(1985, 200, 65),plat(2195, 110, 70), plat(2415, 195, 65),
+          plat(2630, 105, 70),plat(2850, 185, 65), plat(3075, 95, 75),
+          plat(3300, 80, 230),
+        );
+        ld.enemies.push(
+          enm(100, 70, 6.5),
+          enmP(215, 80, 40, 7.0),  enmP(605, 240, 40, 7.0),
+          enmP(995, 80, 40, 7.5),  enmP(1390, 120, 40, 7.5),
+          enmP(1790, 130, 40, 8.0),enmP(2210, 110, 40, 8.0),
+          enmP(2645, 105, 40, 8.0),enmP(3315, 80, 95, 7.5),
+        );
+        ld.powerups.push(star(790, 200), djump(1380, 165), star(1985, 245), djump(2855, 230), life(3320, 115));
+        ld.blocks.push(
+          qBlock(600, 285, 'doublejump'), qBlock(1185, 245, 'star'),
+          qBlock(1785, 175, 'life'), qBlock(2635, 150, 'doublejump'),
+        );
+        ld.goal = goal(4320, 180);
+        ld.length = 4500;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 20 ── INFIERNO DE FUEGO  (enemies 8.0, plataformas 60px)
+      // ═══════════════════════════════════════════════════════════════
+      case 20:
+        ld.platforms.push(
+          gnd(0, 160),
+          gnd(4300, 500),
+          plat(210, 90, 62),  plat(415, 170, 60),  plat(620, 90, 62),
+          plat(825, 175, 60), plat(1035, 90, 62),  plat(1250, 175, 60),
+          plat(1465, 90, 62), plat(1680, 170, 60), plat(1895, 90, 62),
+          plat(2115, 170, 60),plat(2335, 90, 62),  plat(2555, 170, 60),
+          plat(2775, 90, 62), plat(2995, 170, 62), plat(3220, 90, 68),
+          plat(3445, 80, 240),
+        );
+        ld.enemies.push(
+          enm(100, 70, 7.0),
+          enmP(228, 90, 37, 7.5),  enmP(638, 90, 37, 8.0),
+          enmP(1053, 90, 37, 8.0), enmP(1483, 90, 37, 8.5),
+          enmP(1913, 90, 37, 8.5), enmP(2353, 90, 37, 8.5),
+          enmP(2793, 90, 37, 8.5), enmP(3465, 80, 95, 8.0),
+        );
+        ld.powerups.push(star(835, 220), djump(1470, 135), star(2125, 215), djump(3005, 215), life(3470, 115));
+        ld.blocks.push(
+          qBlock(630, 135, 'doublejump'), qBlock(1260, 220, 'star'),
+          qBlock(1905, 135, 'life'), qBlock(2785, 135, 'doublejump'),
+        );
+        ld.goal = goal(4420, 180);
+        ld.length = 4600;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 21 ── ESPIRAL  (plataformas en zigzag amplio, gaps 115px)
+      // ═══════════════════════════════════════════════════════════════
+      case 21:
+        ld.platforms.push(
+          gnd(0, 155),
+          gnd(4400, 500),
+          plat(200, 80, 60),  plat(380, 200, 60),  plat(560, 85, 60),
+          plat(745, 210, 60), plat(935, 90, 60),   plat(1130, 215, 60),
+          plat(1330, 95, 60), plat(1535, 215, 60), plat(1740, 95, 60),
+          plat(1950, 210, 60),plat(2165, 90, 60),  plat(2375, 205, 60),
+          plat(2590, 85, 60), plat(2800, 200, 60), plat(3025, 85, 65),
+          plat(3260, 80, 250),
+        );
+        ld.enemies.push(
+          enm(100, 65, 7.5),
+          enmP(218, 80, 35, 7.5),  enmP(578, 85, 35, 8.0),
+          enmP(953, 90, 35, 8.0),  enmP(1348, 95, 35, 8.5),
+          enmP(1758, 95, 35, 8.5), enmP(2183, 90, 35, 9.0),
+          enmP(2608, 85, 35, 9.0), enmP(3280, 80, 90, 8.5),
+        );
+        ld.powerups.push(star(755, 255), djump(1335, 140), star(1955, 255), djump(2805, 245), life(3285, 115));
+        ld.blocks.push(
+          qBlock(570, 130, 'doublejump'), qBlock(1140, 260, 'star'),
+          qBlock(1750, 140, 'life'), qBlock(2595, 130, 'doublejump'),
+        );
+        ld.goal = goal(4510, 178);
+        ld.length = 4700;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 22 ── MURO INFINITO  (pendiente continua de subida)
+      // ═══════════════════════════════════════════════════════════════
+      case 22:
+        ld.platforms.push(
+          gnd(0, 150),
+          gnd(4500, 500),
+          plat(205, 85, 60),  plat(400, 160, 58),  plat(600, 235, 58),
+          plat(795, 160, 58), plat(995, 90, 60),   plat(1200, 185, 58),
+          plat(1405, 260, 58),plat(1610, 185, 58), plat(1820, 100, 60),
+          plat(2035, 195, 58),plat(2250, 270, 58), plat(2465, 195, 58),
+          plat(2680, 100, 60),plat(2895, 190, 58), plat(3120, 90, 65),
+          plat(3355, 80, 255),
+        );
+        ld.enemies.push(
+          enm(100, 60, 8.0),
+          enmP(222, 85, 35, 8.0),  enmP(617, 235, 35, 8.5),
+          enmP(1013, 90, 35, 8.5), enmP(1422, 260, 35, 9.0),
+          enmP(1838, 100, 35, 9.0),enmP(2268, 270, 35, 9.0),
+          enmP(2698, 100, 35, 9.0),enmP(3375, 80, 90, 8.5),
+        );
+        ld.powerups.push(star(805, 205), djump(1410, 305), star(2045, 240), djump(2905, 235), life(3380, 115));
+        ld.blocks.push(
+          qBlock(610, 280, 'doublejump'), qBlock(1210, 230, 'star'),
+          qBlock(1830, 145, 'life'), qBlock(2690, 145, 'doublejump'),
+        );
+        ld.goal = goal(4610, 175);
+        ld.length = 4800;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 23 ── RAIN OF DEATH  (muchos enemigos, plataformas 58px)
+      // ═══════════════════════════════════════════════════════════════
+      case 23:
+        ld.platforms.push(
+          gnd(0, 145),
+          gnd(4600, 500),
+          plat(210, 90, 58),  plat(415, 170, 56),  plat(625, 90, 58),
+          plat(840, 175, 56), plat(1055, 90, 58),  plat(1275, 175, 56),
+          plat(1495, 90, 58), plat(1715, 170, 56), plat(1935, 90, 58),
+          plat(2160, 170, 56),plat(2385, 90, 58),  plat(2610, 170, 56),
+          plat(2835, 90, 58), plat(3060, 170, 60), plat(3290, 90, 65),
+          plat(3520, 80, 255),
+        );
+        ld.enemies.push(
+          enm(100, 55, 8.5),
+          enmP(227, 90, 33, 8.5),  enmP(642, 90, 33, 9.0),
+          enmP(1072, 90, 33, 9.0), enmP(1512, 90, 33, 9.5),
+          enmP(1952, 90, 33, 9.5), enmP(2402, 90, 33, 9.5),
+          enmP(2852, 90, 33, 9.5), enmP(3308, 90, 33, 9.0),
+          enmP(3540, 80, 90, 9.0),
+        );
+        ld.powerups.push(star(850, 220), djump(1500, 135), star(2170, 215), djump(3070, 215), life(3545, 115));
+        ld.blocks.push(
+          qBlock(635, 135, 'doublejump'), qBlock(1285, 220, 'star'),
+          qBlock(1945, 135, 'life'), qBlock(2845, 135, 'doublejump'),
+        );
+        ld.goal = goal(4710, 175);
+        ld.length = 4900;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 24 ── CAÍDA LIBRE  (plataformas super angostas 55px)
+      // ═══════════════════════════════════════════════════════════════
+      case 24:
+        ld.platforms.push(
+          gnd(0, 140),
+          gnd(4700, 500),
+          plat(215, 90, 56),  plat(430, 170, 55),  plat(645, 90, 56),
+          plat(860, 175, 55), plat(1075, 90, 56),  plat(1295, 175, 55),
+          plat(1515, 90, 56), plat(1735, 170, 55), plat(1955, 90, 56),
+          plat(2180, 170, 55),plat(2405, 90, 56),  plat(2630, 170, 55),
+          plat(2855, 90, 56), plat(3080, 170, 58), plat(3310, 90, 63),
+          plat(3545, 80, 260),
+        );
+        ld.enemies.push(
+          enm(100, 50, 9.0),
+          enmP(232, 90, 31, 9.0),  enmP(662, 90, 31, 9.5),
+          enmP(1092, 90, 31, 9.5), enmP(1532, 90, 31, 10.0),
+          enmP(1972, 90, 31, 10.0),enmP(2422, 90, 31, 10.0),
+          enmP(2872, 90, 31, 10.0),enmP(3565, 80, 90, 9.5),
+        );
+        ld.powerups.push(star(870, 220), djump(1520, 135), star(2190, 215), djump(3090, 215), life(3570, 115));
+        ld.blocks.push(
+          qBlock(655, 135, 'doublejump'), qBlock(1305, 220, 'star'),
+          qBlock(1965, 135, 'life'), qBlock(2865, 135, 'doublejump'),
+        );
+        ld.goal = goal(4810, 172);
+        ld.length = 5000;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 25 ── EL UMBRAL  (punto medio de la expansión, 10+ enemies)
+      // ═══════════════════════════════════════════════════════════════
+      case 25:
+        ld.platforms.push(
+          gnd(0, 135),
+          gnd(4800, 500),
+          plat(220, 90, 55),  plat(445, 175, 55),  plat(665, 90, 55),
+          plat(890, 175, 55), plat(1115, 90, 55),  plat(1345, 175, 55),
+          plat(1575, 90, 55), plat(1805, 175, 55), plat(2035, 90, 55),
+          plat(2270, 175, 55),plat(2505, 90, 55),  plat(2740, 175, 55),
+          plat(2975, 90, 55), plat(3210, 170, 60), plat(3450, 90, 65),
+          plat(3685, 80, 265),
+        );
+        ld.enemies.push(
+          enm(100, 50, 9.5),
+          enmP(238, 90, 30, 9.5),  enmP(682, 90, 30, 10.0),
+          enmP(1132, 90, 30, 10.0),enmP(1592, 90, 30, 10.5),
+          enmP(2052, 90, 30, 10.5),enmP(2522, 90, 30, 10.5),
+          enmP(2992, 90, 30, 10.5),enmP(3470, 90, 30, 10.0),
+          enmP(3705, 80, 90, 10.0),
+        );
+        ld.powerups.push(
+          star(900, 220), djump(1350, 220), star(2045, 135),
+          djump(2745, 220), star(3220, 215), life(3710, 115),
+        );
+        ld.blocks.push(
+          qBlock(675, 135, 'doublejump'), qBlock(1355, 220, 'star'),
+          qBlock(2045, 135, 'life'), qBlock(2985, 135, 'doublejump'),
+          qBlock(3460, 135, 'star'),
+        );
+        ld.goal = goal(4920, 170);
+        ld.length = 5100;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 26 ── TORMENTA ELÉCTRICA  (plataformas 53px, gaps 130px)
+      // ═══════════════════════════════════════════════════════════════
+      case 26:
+        ld.platforms.push(
+          gnd(0, 130),
+          gnd(4900, 500),
+          plat(220, 90, 54),  plat(455, 175, 52),  plat(685, 90, 54),
+          plat(920, 175, 52), plat(1155, 90, 54),  plat(1395, 175, 52),
+          plat(1635, 90, 54), plat(1875, 175, 52), plat(2115, 90, 54),
+          plat(2360, 175, 52),plat(2605, 90, 54),  plat(2850, 175, 52),
+          plat(3095, 90, 54), plat(3345, 170, 58), plat(3590, 90, 63),
+          plat(3835, 80, 265),
+        );
+        ld.enemies.push(
+          enm(100, 45, 10.0),
+          enmP(237, 90, 29, 10.0), enmP(702, 90, 29, 10.5),
+          enmP(1172, 90, 29, 10.5),enmP(1652, 90, 29, 11.0),
+          enmP(2132, 90, 29, 11.0),enmP(2622, 90, 29, 11.0),
+          enmP(3112, 90, 29, 11.0),enmP(3855, 80, 90, 10.5),
+        );
+        ld.powerups.push(star(930, 220), djump(1640, 135), star(2370, 220), djump(3105, 135), life(3860, 115));
+        ld.blocks.push(
+          qBlock(695, 135, 'star'), qBlock(1405, 220, 'doublejump'),
+          qBlock(2125, 135, 'life'), qBlock(2860, 220, 'doublejump'),
+        );
+        ld.goal = goal(5020, 168);
+        ld.length = 5200;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 27 ── CAVERNA DEL DRAGÓN  (10 enemies, plataformas 52px)
+      // ═══════════════════════════════════════════════════════════════
+      case 27:
+        ld.platforms.push(
+          gnd(0, 125),
+          gnd(5000, 500),
+          plat(225, 90, 52),  plat(465, 175, 52),  plat(705, 90, 52),
+          plat(950, 175, 52), plat(1195, 90, 52),  plat(1445, 175, 52),
+          plat(1695, 90, 52), plat(1945, 175, 52), plat(2195, 90, 52),
+          plat(2450, 175, 52),plat(2705, 90, 52),  plat(2960, 175, 52),
+          plat(3215, 90, 52), plat(3475, 170, 57), plat(3730, 90, 62),
+          plat(3985, 80, 265),
+        );
+        ld.enemies.push(
+          enm(100, 42, 10.5),
+          enmP(242, 90, 27, 10.5),enmP(722, 90, 27, 11.0),
+          enmP(1212, 90, 27, 11.0),enmP(1712, 90, 27, 11.5),
+          enmP(2212, 90, 27, 11.5),enmP(2722, 90, 27, 11.5),
+          enmP(3232, 90, 27, 11.5),enmP(3750, 90, 27, 11.0),
+          enmP(4005, 80, 90, 11.0),
+        );
+        ld.powerups.push(star(960, 220), djump(1700, 135), star(2460, 220), djump(2970, 220), life(4010, 115));
+        ld.blocks.push(
+          qBlock(715, 135, 'doublejump'), qBlock(1455, 220, 'star'),
+          qBlock(2205, 135, 'life'), qBlock(3225, 135, 'doublejump'),
+        );
+        ld.goal = goal(5120, 165);
+        ld.length = 5300;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 28 ── EL VACÍO  (plataformas 50px, gaps extremos 140px)
+      // ═══════════════════════════════════════════════════════════════
+      case 28:
+        ld.platforms.push(
+          gnd(0, 120),
+          gnd(5100, 500),
+          plat(230, 90, 50),  plat(480, 175, 50),  plat(730, 90, 50),
+          plat(985, 175, 50), plat(1240, 90, 50),  plat(1500, 175, 50),
+          plat(1760, 90, 50), plat(2020, 175, 50), plat(2280, 90, 50),
+          plat(2545, 175, 50),plat(2810, 90, 50),  plat(3075, 175, 50),
+          plat(3340, 90, 50), plat(3610, 170, 55), plat(3875, 90, 60),
+          plat(4140, 80, 270),
+        );
+        ld.enemies.push(
+          enm(100, 38, 11.0),
+          enmP(248, 90, 25, 11.0),enmP(748, 90, 25, 11.5),
+          enmP(1258, 90, 25, 11.5),enmP(1778, 90, 25, 12.0),
+          enmP(2298, 90, 25, 12.0),enmP(2828, 90, 25, 12.0),
+          enmP(3358, 90, 25, 12.0),enmP(3895, 90, 25, 11.5),
+          enmP(4160, 80, 90, 11.5),
+        );
+        ld.powerups.push(star(995, 220), djump(1765, 135), star(2555, 220), djump(3085, 220), life(4165, 115));
+        ld.blocks.push(
+          qBlock(740, 135, 'doublejump'), qBlock(1510, 220, 'star'),
+          qBlock(2290, 135, 'life'), qBlock(3350, 135, 'doublejump'),
+        );
+        ld.goal = goal(5220, 162);
+        ld.length = 5400;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 29 ── PESADILLA  (11 enemies, plataformas 48px, gaps 140px)
+      // ═══════════════════════════════════════════════════════════════
+      case 29:
+        ld.platforms.push(
+          gnd(0, 115),
+          gnd(5200, 500),
+          plat(235, 90, 49),  plat(495, 175, 48),  plat(755, 90, 49),
+          plat(1015, 175, 48),plat(1275, 90, 49),  plat(1540, 175, 48),
+          plat(1805, 90, 49), plat(2070, 175, 48), plat(2335, 90, 49),
+          plat(2605, 175, 48),plat(2875, 90, 49),  plat(3145, 175, 48),
+          plat(3415, 90, 49), plat(3690, 170, 54), plat(3960, 90, 59),
+          plat(4235, 80, 270),
+        );
+        ld.enemies.push(
+          enm(100, 35, 11.5),
+          enmP(252, 90, 24, 11.5),enmP(772, 90, 24, 12.0),
+          enmP(1292, 90, 24, 12.0),enmP(1822, 90, 24, 12.5),
+          enmP(2352, 90, 24, 12.5),enmP(2892, 90, 24, 12.5),
+          enmP(3432, 90, 24, 12.5),enmP(3978, 90, 24, 12.0),
+          enmP(3705, 170, 29, 12.0),enmP(4255, 80, 90, 12.0),
+        );
+        ld.powerups.push(
+          star(1025, 220), djump(1545, 220), star(2345, 135),
+          djump(3155, 220), star(3700, 215), life(4260, 115),
+        );
+        ld.blocks.push(
+          qBlock(765, 135, 'doublejump'), qBlock(1550, 220, 'star'),
+          qBlock(2345, 135, 'life'), qBlock(3425, 135, 'doublejump'),
+          qBlock(3970, 135, 'star'),
+        );
+        ld.goal = goal(5320, 158);
+        ld.length = 5500;
+        break;
+
+      // ═══════════════════════════════════════════════════════════════
+      // WORLD 30 ── DIOS DE LOS MUNDOS  (nivel final definitivo)
+      // Plataformas 45px, gaps 140-145px, 12 enemies 12.0-14.0.
+      // ═══════════════════════════════════════════════════════════════
+      default:
+        ld.platforms.push(
+          gnd(0, 110),
+          gnd(5300, 500),
+          // fase 1
+          plat(240, 90, 47),  plat(510, 175, 45),  plat(780, 90, 47),
+          plat(1055, 175, 45),plat(1330, 90, 47),
+          // fase 2
+          plat(1610, 175, 45),plat(1890, 90, 47),  plat(2170, 175, 45),
+          plat(2450, 90, 47), plat(2735, 175, 45),
+          // fase 3
+          plat(3020, 90, 47), plat(3310, 175, 45), plat(3600, 90, 47),
+          plat(3895, 170, 52),plat(4195, 90, 57),
+          plat(4470, 80, 280),
+        );
+        ld.enemies.push(
+          enm(100, 30, 12.0),
+          enmP(257, 90, 22, 12.0),enmP(797, 90, 22, 12.5),
+          enmP(1347, 90, 22, 12.5),enmP(1907, 90, 22, 13.0),
+          enmP(2467, 90, 22, 13.0),enmP(3037, 90, 22, 13.5),
+          enmP(3617, 90, 22, 13.5),enmP(4215, 90, 22, 13.0),
+          enmP(1625, 175, 27, 13.0),enmP(2750, 175, 27, 13.5),
+          enmP(4490, 80, 90, 14.0),
+        );
+        ld.powerups.push(
+          star(1065, 220), djump(1615, 220), star(2460, 135),
+          djump(2745, 220), star(3910, 215), life(3320, 220), life(4495, 115),
+        );
+        ld.blocks.push(
+          qBlock(790, 135, 'doublejump'), qBlock(1620, 220, 'star'),
+          qBlock(2460, 135, 'life'), qBlock(3030, 135, 'doublejump'),
+          qBlock(3610, 135, 'star'), qBlock(4210, 135, 'doublejump'),
+        );
+        ld.goal = goal(5420, 155);
+        ld.length = 5600;
+        break;
     }
 
     world.current = ld;
@@ -1247,7 +1721,7 @@ function PixelQuest({ onExit }) {
 
   const initLevel = (lvl) => {
     setLevel(lvl);
-    if (lvl >= 11 && lvl <= 13) setLives(l => l + 1);
+    if ((lvl >= 11 && lvl <= 13) || (lvl >= 21 && lvl <= 23) || lvl === 26) setLives(l => l + 1);
     if (lvl > maxLevelRef.current) {
       maxLevelRef.current = lvl;
       setMaxLevel(lvl);
@@ -1535,7 +2009,7 @@ function PixelQuest({ onExit }) {
       // Goal collision
       if (w.goal && p.x < w.goal.x + w.goal.w && p.x + p.w > w.goal.x && p.y < w.goal.y + w.goal.h && p.y + p.h > w.goal.y) {
         celebrateVibrate();
-        if (level >= 15) {
+        if (level >= 30) {
           setRunning(false); setGameWon(true);
         } else {
           initLevel(level + 1);
@@ -1606,7 +2080,7 @@ function PixelQuest({ onExit }) {
         {!running && (
           <View style={styles.overlay}>
             <Text style={styles.overlayTitle}>{gameWon ? 'YOU WIN!' : gameOver ? 'GAME OVER' : 'PIXEL QUEST'}</Text>
-            <Text style={styles.overlaySub}>{gameWon ? '¡Todos los 15 mundos conquistados! 🏆' : 'Reach the green pillar. Grab ⭐ for invincibility + gun.'}</Text>
+            <Text style={styles.overlaySub}>{gameWon ? '¡Todos los 30 mundos conquistados! 🏆' : 'Reach the green pillar. Grab ⭐ for invincibility + gun.'}</Text>
             <View style={{flexDirection: 'row', gap: 20}}>
               <Pressable style={styles.btn} onPress={startGame}><Text style={styles.btnText}>{gameOver || gameWon ? 'RESTART' : 'START'}</Text></Pressable>
               {(!gameOver && !gameWon) && <Pressable style={[styles.btn, {backgroundColor: '#ffd700'}]} onPress={loadGame}><Text style={styles.btnText}>LOAD</Text></Pressable>}
@@ -5248,7 +5722,7 @@ export default function App() {
 
       <Pressable style={[styles.menuBtn, { backgroundColor: '#32cd32' }]} onPress={() => setCurrentScreen('pixel')}>
         <Text style={styles.menuBtnTitle}>PIXEL QUEST</Text>
-        <Text style={styles.menuBtnSub}>15-World Platformer</Text>
+        <Text style={styles.menuBtnSub}>30-World Platformer</Text>
       </Pressable>
 
       <Pressable style={[styles.menuBtn, { backgroundColor: '#7c3aed' }]} onPress={() => setCurrentScreen('galactic')}>
