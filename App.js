@@ -5608,6 +5608,306 @@ function WallJumper({ onExit }) {
   );
 }
 // ─────────────────────────────────────────────────────────────────
+// FLAPPY NEON
+const FB_GRAVITY = 0.5;
+const FB_JUMP = -9;
+const FB_PIPE_W = 60;
+const FB_GAP = 160;
+const FB_SPEED = 3;
+function FlappyNeon({ onExit }) {
+  const [birdY, setBirdY] = React.useState(300);
+  const [vel, setVel] = React.useState(0);
+  const [pipes, setPipes] = React.useState([{ x: 400, top: 150 }]);
+  const [score, setScore] = React.useState(0);
+  const [best, setBest] = React.useState(0);
+  const [alive, setAlive] = React.useState(false);
+  const [started, setStarted] = React.useState(false);
+  const birdRef = React.useRef(birdY);
+  const velRef = React.useRef(vel);
+  const pipesRef = React.useRef(pipes);
+  const scoreRef = React.useRef(score);
+  const aliveRef = React.useRef(false);
+  birdRef.current = birdY; velRef.current = vel; pipesRef.current = pipes; scoreRef.current = score;
+  const W = Dimensions.get('window').width - 20;
+  const H = 500;
+  const BIRD_SIZE = 28;
+
+  const loop = React.useRef(null);
+  const start = () => {
+    setBirdY(300); setVel(0); setPipes([{ x: W, top: 150 }]); setScore(0); setAlive(true); setStarted(true);
+    aliveRef.current = true;
+  };
+  const jump = () => {
+    if (!started) { start(); return; }
+    if (!aliveRef.current) { start(); return; }
+    setVel(FB_JUMP);
+  };
+
+  React.useEffect(() => {
+    loop.current = setInterval(() => {
+      if (!aliveRef.current) return;
+      const newVel = velRef.current + FB_GRAVITY;
+      const newBird = birdRef.current + newVel;
+      setVel(newVel);
+      setBirdY(newBird);
+      const newPipes = pipesRef.current.map(p => ({ ...p, x: p.x - FB_SPEED })).filter(p => p.x > -FB_PIPE_W);
+      if (newPipes.length === 0 || newPipes[newPipes.length - 1].x < W - 220) {
+        newPipes.push({ x: W, top: 80 + Math.random() * 180 });
+      }
+      setPipes(newPipes);
+      let hit = newBird < 0 || newBird > H - BIRD_SIZE;
+      for (const p of newPipes) {
+        if (p.x < 80 + BIRD_SIZE && p.x + FB_PIPE_W > 80) {
+          if (newBird < p.top || newBird + BIRD_SIZE > p.top + FB_GAP) hit = true;
+        }
+        if (p.x + FB_PIPE_W < 80 && !p.scored) { p.scored = true; scoreRef.current += 1; setScore(s => s + 1); }
+      }
+      if (hit) { aliveRef.current = false; setAlive(false); setBest(b => Math.max(b, scoreRef.current)); }
+    }, 16);
+    return () => clearInterval(loop.current);
+  }, []);
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#001' }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 10 }}>
+        <Pressable onPress={onExit}><Text style={{ color: '#0ff', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
+        <Text style={{ color: '#ff0', fontSize: 20, fontWeight: '900' }}>Score: {score}  Best: {best}</Text>
+      </View>
+      <Pressable onPress={jump} style={{ alignSelf: 'center', width: W, height: H, backgroundColor: '#000d1a', borderRadius: 12, overflow: 'hidden', borderWidth: 2, borderColor: '#0ff' }}>
+        {!started && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}><Text style={{ color: '#0ff', fontSize: 28, fontWeight: '900' }}>FLAPPY NEON</Text><Text style={{ color: '#aaa', marginTop: 10 }}>Toca para comenzar</Text></View>}
+        {!alive && started && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}><Text style={{ color: '#f44', fontSize: 32, fontWeight: '900' }}>GAME OVER</Text><Text style={{ color: '#fff', marginTop: 8 }}>Score: {score}</Text><Text style={{ color: '#aaa', marginTop: 6 }}>Toca para reiniciar</Text></View>}
+        <View style={{ position: 'absolute', left: 80, top: birdY, width: BIRD_SIZE, height: BIRD_SIZE, backgroundColor: '#ff0', borderRadius: 14, shadowColor: '#ff0', shadowOpacity: 1, shadowRadius: 8 }} />
+        {pipes.map((p, i) => (
+          <React.Fragment key={i}>
+            <View style={{ position: 'absolute', left: p.x, top: 0, width: FB_PIPE_W, height: p.top, backgroundColor: '#0a0', borderBottomWidth: 4, borderColor: '#0f0' }} />
+            <View style={{ position: 'absolute', left: p.x, top: p.top + FB_GAP, width: FB_PIPE_W, height: H - p.top - FB_GAP, backgroundColor: '#0a0', borderTopWidth: 4, borderColor: '#0f0' }} />
+          </React.Fragment>
+        ))}
+        <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 10, backgroundColor: '#0f0' }} />
+      </Pressable>
+    </SafeAreaView>
+  );
+}
+// ─────────────────────────────────────────────────────────────────
+// MEMORY MATCH
+const MM_EMOJIS = ['🔥','💎','🌙','⚡','🎯','🌊','🍎','👾','🚀','💀','🌈','🦄'];
+function MemoryMatch({ onExit }) {
+  const makeCards = () => {
+    const pairs = MM_EMOJIS.slice(0, 8);
+    return [...pairs, ...pairs].map((e, i) => ({ id: i, emoji: e, flipped: false, matched: false })).sort(() => Math.random() - 0.5);
+  };
+  const [cards, setCards] = React.useState(makeCards());
+  const [selected, setSelected] = React.useState([]);
+  const [moves, setMoves] = React.useState(0);
+  const [won, setWon] = React.useState(false);
+  const [locked, setLocked] = React.useState(false);
+
+  const flip = (idx) => {
+    if (locked || cards[idx].flipped || cards[idx].matched) return;
+    const newCards = cards.map((c, i) => i === idx ? { ...c, flipped: true } : c);
+    const newSel = [...selected, idx];
+    setCards(newCards); setSelected(newSel);
+    if (newSel.length === 2) {
+      setMoves(m => m + 1); setLocked(true);
+      setTimeout(() => {
+        const [a, b] = newSel;
+        setCards(prev => prev.map((c, i) => {
+          if (i === a || i === b) return prev[a].emoji === prev[b].emoji ? { ...c, matched: true, flipped: true } : { ...c, flipped: false };
+          return c;
+        }));
+        setSelected([]); setLocked(false);
+      }, 800);
+    }
+  };
+  React.useEffect(() => { if (cards.every(c => c.matched)) setWon(true); }, [cards]);
+  const reset = () => { setCards(makeCards()); setSelected([]); setMoves(0); setWon(false); setLocked(false); };
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#0a001a' }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 15 }}>
+        <Pressable onPress={onExit}><Text style={{ color: '#a855f7', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
+        <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>Movimientos: {moves}</Text>
+        <Pressable onPress={reset}><Text style={{ color: '#a855f7', fontSize: 16 }}>Reset</Text></Pressable>
+      </View>
+      {won && <View style={{ alignItems: 'center', marginBottom: 10 }}><Text style={{ color: '#ff0', fontSize: 26, fontWeight: '900' }}>¡GANASTE! 🎉</Text><Text style={{ color: '#aaa' }}>en {moves} movimientos</Text></View>}
+      <View style={{ flexWrap: 'wrap', flexDirection: 'row', justifyContent: 'center', padding: 10 }}>
+        {cards.map((c, i) => (
+          <Pressable key={c.id} onPress={() => flip(i)} style={{ width: 76, height: 76, margin: 6, borderRadius: 12, backgroundColor: c.flipped || c.matched ? '#2d0060' : '#1a0040', borderWidth: 2, borderColor: c.matched ? '#a855f7' : '#440088', justifyContent: 'center', alignItems: 'center', shadowColor: '#a855f7', shadowOpacity: c.matched ? 0.9 : 0, shadowRadius: 10 }}>
+            <Text style={{ fontSize: 32 }}>{c.flipped || c.matched ? c.emoji : '❓'}</Text>
+          </Pressable>
+        ))}
+      </View>
+    </SafeAreaView>
+  );
+}
+// ─────────────────────────────────────────────────────────────────
+// ASTEROID DODGE
+const AD_SHIP_W = 36;
+const AD_ASTER_SIZE = 30;
+function AsteroidDodge({ onExit }) {
+  const W = Dimensions.get('window').width;
+  const H = 520;
+  const [shipX, setShipX] = React.useState(W / 2 - AD_SHIP_W / 2);
+  const [asteroids, setAsteroids] = React.useState([]);
+  const [score, setScore] = React.useState(0);
+  const [best, setBest] = React.useState(0);
+  const [alive, setAlive] = React.useState(false);
+  const shipRef = React.useRef(W / 2 - AD_SHIP_W / 2);
+  const aliveRef = React.useRef(false);
+  const scoreRef = React.useRef(0);
+  shipRef.current = shipX; aliveRef.current = alive; scoreRef.current = score;
+
+  const start = () => { setShipX(W / 2 - AD_SHIP_W / 2); setAsteroids([]); setScore(0); setAlive(true); };
+  const handleMove = (e) => {
+    if (!aliveRef.current) return;
+    const x = e.nativeEvent.locationX - AD_SHIP_W / 2;
+    setShipX(Math.max(0, Math.min(W - AD_SHIP_W, x)));
+  };
+
+  React.useEffect(() => {
+    const t = setInterval(() => {
+      if (!aliveRef.current) return;
+      scoreRef.current += 1; setScore(s => s + 1);
+      setAsteroids(prev => {
+        const moved = prev.map(a => ({ ...a, y: a.y + 5 + scoreRef.current / 100 })).filter(a => a.y < H);
+        if (Math.random() < 0.04) moved.push({ x: Math.random() * (W - AD_ASTER_SIZE), y: -AD_ASTER_SIZE, id: Date.now() });
+        for (const a of moved) {
+          if (a.y + AD_ASTER_SIZE > H - 70 && a.x < shipRef.current + AD_SHIP_W && a.x + AD_ASTER_SIZE > shipRef.current) {
+            aliveRef.current = false; setAlive(false); setBest(b => Math.max(b, scoreRef.current));
+          }
+        }
+        return moved;
+      });
+    }, 16);
+    return () => clearInterval(t);
+  }, []);
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#000005' }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 10 }}>
+        <Pressable onPress={onExit}><Text style={{ color: '#0ff', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
+        <Text style={{ color: '#0ff', fontSize: 18, fontWeight: '900' }}>Score: {score}  Best: {best}</Text>
+      </View>
+      <Pressable onPress={!alive ? start : undefined} onTouchMove={handleMove} style={{ alignSelf: 'center', width: W, height: H, backgroundColor: '#000010', overflow: 'hidden' }}>
+        {!alive && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}><Text style={{ color: '#0ff', fontSize: 28, fontWeight: '900' }}>ASTEROID DODGE</Text><Text style={{ color: score > 0 ? '#f44' : '#aaa', fontSize: 18, marginTop: 8 }}>{score > 0 ? `Game Over · Score: ${score}` : 'Toca para comenzar'}</Text><Text style={{ color: '#888', marginTop: 6 }}>Desliza para mover la nave</Text></View>}
+        {asteroids.map(a => <View key={a.id} style={{ position: 'absolute', left: a.x, top: a.y, width: AD_ASTER_SIZE, height: AD_ASTER_SIZE, borderRadius: 8, backgroundColor: '#888', shadowColor: '#fff', shadowOpacity: 0.5, shadowRadius: 4 }}><Text style={{ fontSize: 22, textAlign: 'center' }}>☄️</Text></View>)}
+        {alive && <View style={{ position: 'absolute', left: shipX, top: H - 70, width: AD_SHIP_W, height: 40, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 28 }}>🚀</Text></View>}
+      </Pressable>
+    </SafeAreaView>
+  );
+}
+// ─────────────────────────────────────────────────────────────────
+// TOWER STACK
+function TowerStack({ onExit }) {
+  const W = Dimensions.get('window').width - 40;
+  const BASE_W = 220;
+  const H_BLOCK = 30;
+  const [blocks, setBlocks] = React.useState([{ x: W / 2 - BASE_W / 2, w: BASE_W }]);
+  const [moving, setMoving] = React.useState({ x: 0, w: BASE_W, dir: 1 });
+  const [score, setScore] = React.useState(0);
+  const [best, setBest] = React.useState(0);
+  const [alive, setAlive] = React.useState(true);
+  const movingRef = React.useRef(moving);
+  movingRef.current = moving;
+
+  React.useEffect(() => {
+    if (!alive) return;
+    const speed = 3 + score * 0.1;
+    const t = setInterval(() => {
+      setMoving(m => {
+        let nx = m.x + speed * m.dir;
+        let nd = m.dir;
+        if (nx < 0) { nx = 0; nd = 1; }
+        if (nx + m.w > W) { nx = W - m.w; nd = -1; }
+        return { ...m, x: nx, dir: nd };
+      });
+    }, 16);
+    return () => clearInterval(t);
+  }, [alive, score]);
+
+  const drop = () => {
+    if (!alive) { setBlocks([{ x: W / 2 - BASE_W / 2, w: BASE_W }]); setMoving({ x: 0, w: BASE_W, dir: 1 }); setScore(0); setAlive(true); return; }
+    const top = blocks[blocks.length - 1];
+    const m = movingRef.current;
+    const left = Math.max(m.x, top.x);
+    const right = Math.min(m.x + m.w, top.x + top.w);
+    const newW = right - left;
+    if (newW <= 0) { setAlive(false); setBest(b => Math.max(b, score)); return; }
+    const newBlocks = [...blocks, { x: left, w: newW }];
+    setBlocks(newBlocks); setScore(s => s + 1);
+    setMoving({ x: 0, w: newW, dir: 1 });
+  };
+
+  const visibleBlocks = blocks.slice(-12);
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#080818' }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 10 }}>
+        <Pressable onPress={onExit}><Text style={{ color: '#fa0', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
+        <Text style={{ color: '#fa0', fontSize: 18, fontWeight: '900' }}>Score: {score}  Best: {best}</Text>
+      </View>
+      <Pressable onPress={drop} style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 20 }}>
+        {!alive && <View style={{ position: 'absolute', top: 80, alignItems: 'center' }}><Text style={{ color: '#f44', fontSize: 28, fontWeight: '900' }}>GAME OVER</Text><Text style={{ color: '#aaa', marginTop: 8 }}>Toca para reiniciar</Text></View>}
+        <View style={{ width: W, height: visibleBlocks.length * H_BLOCK + H_BLOCK + 10, position: 'relative' }}>
+          {alive && <View style={{ position: 'absolute', top: 0, left: moving.x, width: moving.w, height: H_BLOCK, backgroundColor: '#0ff', borderRadius: 4, opacity: 0.9 }} />}
+          {visibleBlocks.map((b, i) => {
+            const colors = ['#fa0', '#f70', '#f40', '#e00', '#c00', '#a00', '#900', '#800', '#700', '#600', '#500', '#400'];
+            return <View key={i} style={{ position: 'absolute', top: H_BLOCK + (visibleBlocks.length - 1 - i) * H_BLOCK, left: b.x, width: b.w, height: H_BLOCK, backgroundColor: colors[i % colors.length], borderRadius: 4 }} />;
+          })}
+        </View>
+        <Text style={{ color: '#888', marginTop: 10 }}>Toca para soltar el bloque</Text>
+      </Pressable>
+    </SafeAreaView>
+  );
+}
+// ─────────────────────────────────────────────────────────────────
+// NUMBER PUZZLE (Slide 15-puzzle)
+function NumberPuzzle({ onExit }) {
+  const SIZE = 4;
+  const solved = Array.from({ length: SIZE * SIZE - 1 }, (_, i) => i + 1).concat(0);
+  const shuffle = () => {
+    const arr = [...solved];
+    for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
+    return arr;
+  };
+  const [tiles, setTiles] = React.useState(shuffle());
+  const [moves, setMoves] = React.useState(0);
+  const [won, setWon] = React.useState(false);
+
+  const move = (idx) => {
+    if (won) return;
+    const empty = tiles.indexOf(0);
+    const row = Math.floor(idx / SIZE), col = idx % SIZE;
+    const erow = Math.floor(empty / SIZE), ecol = empty % SIZE;
+    if ((Math.abs(row - erow) === 1 && col === ecol) || (Math.abs(col - ecol) === 1 && row === erow)) {
+      const newT = [...tiles]; [newT[idx], newT[empty]] = [newT[empty], newT[idx]];
+      setTiles(newT); setMoves(m => m + 1);
+      if (newT.every((v, i) => v === solved[i])) setWon(true);
+    }
+  };
+  const reset = () => { setTiles(shuffle()); setMoves(0); setWon(false); };
+  const cellW = Math.floor((Dimensions.get('window').width - 60) / SIZE);
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#001020' }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 15 }}>
+        <Pressable onPress={onExit}><Text style={{ color: '#0ff', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
+        <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>Moves: {moves}</Text>
+        <Pressable onPress={reset}><Text style={{ color: '#0ff', fontSize: 16 }}>Reset</Text></Pressable>
+      </View>
+      <Text style={{ color: '#0ff', fontSize: 24, fontWeight: '900', textAlign: 'center', marginBottom: 10 }}>NUMBER PUZZLE</Text>
+      {won && <Text style={{ color: '#ff0', fontSize: 22, fontWeight: '900', textAlign: 'center', marginBottom: 10 }}>¡RESUELTO en {moves} movimientos! 🎉</Text>}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: cellW * SIZE + 8, alignSelf: 'center' }}>
+        {tiles.map((t, i) => (
+          <Pressable key={i} onPress={() => move(i)} style={{ width: cellW, height: cellW, margin: 2, borderRadius: 8, backgroundColor: t === 0 ? '#001' : '#0d3060', borderWidth: 2, borderColor: t === 0 ? '#001' : '#0ff', justifyContent: 'center', alignItems: 'center' }}>
+            <Text style={{ color: '#0ff', fontSize: 28, fontWeight: '900' }}>{t === 0 ? '' : t}</Text>
+          </Pressable>
+        ))}
+      </View>
+      <Text style={{ color: '#555', textAlign: 'center', marginTop: 20 }}>Ordena los números del 1 al 15</Text>
+    </SafeAreaView>
+  );
+}
+// ─────────────────────────────────────────────────────────────────
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState('menu');
@@ -5702,6 +6002,21 @@ export default function App() {
 
   if (currentScreen === 'bubbleshooter') {
     return <BubbleShooter onExit={() => setCurrentScreen('menu')} />;
+  }
+  if (currentScreen === 'flappyneon') {
+    return <FlappyNeon onExit={() => setCurrentScreen('menu')} />;
+  }
+  if (currentScreen === 'memorymatch') {
+    return <MemoryMatch onExit={() => setCurrentScreen('menu')} />;
+  }
+  if (currentScreen === 'asteroidodge') {
+    return <AsteroidDodge onExit={() => setCurrentScreen('menu')} />;
+  }
+  if (currentScreen === 'towerstack') {
+    return <TowerStack onExit={() => setCurrentScreen('menu')} />;
+  }
+  if (currentScreen === 'numberpuzzle') {
+    return <NumberPuzzle onExit={() => setCurrentScreen('menu')} />;
   }
 
   return (
@@ -5823,6 +6138,31 @@ export default function App() {
       <Pressable style={[styles.menuBtn, { backgroundColor: '#0a0a1a', borderWidth: 2, borderColor: '#e74c3c' }]} onPress={() => setCurrentScreen('bubbleshooter')}>
         <Text style={[styles.menuBtnTitle, { color: '#e74c3c' }]}>🫧 BUBBLE SHOOTER</Text>
         <Text style={[styles.menuBtnSub, { color: '#aa2222' }]}>Dispara burbujas · Une 3+ del mismo color</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#001', borderWidth: 2, borderColor: '#ff0' }]} onPress={() => setCurrentScreen('flappyneon')}>
+        <Text style={[styles.menuBtnTitle, { color: '#ff0' }]}>🐦 FLAPPY NEON</Text>
+        <Text style={[styles.menuBtnSub, { color: '#aa9900' }]}>Toca para volar · Esquiva los tubos</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#0a001a', borderWidth: 2, borderColor: '#a855f7' }]} onPress={() => setCurrentScreen('memorymatch')}>
+        <Text style={[styles.menuBtnTitle, { color: '#a855f7' }]}>🃏 MEMORY MATCH</Text>
+        <Text style={[styles.menuBtnSub, { color: '#7733aa' }]}>Voltea cartas · Encuentra los pares</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#000005', borderWidth: 2, borderColor: '#0ff' }]} onPress={() => setCurrentScreen('asteroidodge')}>
+        <Text style={[styles.menuBtnTitle, { color: '#0ff' }]}>☄️ ASTEROID DODGE</Text>
+        <Text style={[styles.menuBtnSub, { color: '#0099aa' }]}>Desliza la nave · Esquiva asteroides</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#080818', borderWidth: 2, borderColor: '#fa0' }]} onPress={() => setCurrentScreen('towerstack')}>
+        <Text style={[styles.menuBtnTitle, { color: '#fa0' }]}>🏗️ TOWER STACK</Text>
+        <Text style={[styles.menuBtnSub, { color: '#aa6600' }]}>Apila bloques · ¡Llega lo más alto!</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#001020', borderWidth: 2, borderColor: '#0ff' }]} onPress={() => setCurrentScreen('numberpuzzle')}>
+        <Text style={[styles.menuBtnTitle, { color: '#0ff' }]}>🔢 NUMBER PUZZLE</Text>
+        <Text style={[styles.menuBtnSub, { color: '#0077aa' }]}>Slide puzzle 4×4 · Ordena los números</Text>
       </Pressable>
       </ScrollView>
     </SafeAreaView>
@@ -6663,12 +7003,10 @@ function CR2_CrossyRoad({ onExit }) {
   const [dead, setDead] = useState(false);
   const [rows, setRows] = useState(() => cr2_makeRows(1));
   const [speedMult, setSpeedMult] = useState(1);
-  const vehiclePositions = useRef(
-    Array.from({ length: CR2_TRAFFIC_ROWS }, (_, i) => {
-      const r = cr2_makeRows(1)[i];
-      return r.vehicles.map(v => v.col);
-    })
-  );
+  const vehiclePositions = useRef(null);
+  if (!vehiclePositions.current) {
+    vehiclePositions.current = rows.map(r => r.vehicles.map(v => v.col));
+  }
   const animRef = useRef(null);
   const lastTime = useRef(null);
   const frogRef = useRef({ row: CR2_FROG_ROW_START, col: Math.floor(CR2_COLS / 2) });
