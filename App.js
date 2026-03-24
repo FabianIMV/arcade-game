@@ -9,6 +9,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
@@ -5908,6 +5909,301 @@ function NumberPuzzle({ onExit }) {
   );
 }
 // ─────────────────────────────────────────────────────────────────
+// COIN COLLECTOR
+function CoinCollector({ onExit }) {
+  const W = Dimensions.get('window').width;
+  const H = 480;
+  const PSIZE = 40;
+  const CSIZE = 24;
+  const [px, setPx] = React.useState(W / 2 - PSIZE / 2);
+  const [coins, setCoins] = React.useState([]);
+  const [bombs, setBombs] = React.useState([]);
+  const [score, setScore] = React.useState(0);
+  const [best, setBest] = React.useState(0);
+  const [alive, setAlive] = React.useState(false);
+  const [time, setTime] = React.useState(30);
+  const pxRef = React.useRef(px);
+  const aliveRef = React.useRef(false);
+  const scoreRef = React.useRef(0);
+  pxRef.current = px; aliveRef.current = alive; scoreRef.current = score;
+
+  const start = () => { setPx(W / 2 - PSIZE / 2); setCoins([]); setBombs([]); setScore(0); setTime(30); setAlive(true); };
+  const move = (e) => { if (!aliveRef.current) return; setPx(Math.max(0, Math.min(W - PSIZE, e.nativeEvent.locationX - PSIZE / 2))); };
+
+  React.useEffect(() => {
+    const t = setInterval(() => {
+      if (!aliveRef.current) return;
+      setTime(prev => { if (prev <= 1) { aliveRef.current = false; setAlive(false); setBest(b => Math.max(b, scoreRef.current)); return 0; } return prev - 1; });
+    }, 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  React.useEffect(() => {
+    const t = setInterval(() => {
+      if (!aliveRef.current) return;
+      setCoins(prev => {
+        const moved = prev.map(c => ({ ...c, y: c.y + 4 })).filter(c => c.y < H);
+        if (Math.random() < 0.06) moved.push({ x: Math.random() * (W - CSIZE), y: -CSIZE, id: Date.now() + Math.random(), type: 'coin' });
+        const kept = []; let gained = 0;
+        for (const c of moved) {
+          if (c.y + CSIZE > H - PSIZE - 20 && c.x + CSIZE > pxRef.current && c.x < pxRef.current + PSIZE) gained++;
+          else kept.push(c);
+        }
+        if (gained) { scoreRef.current += gained; setScore(s => s + gained); }
+        return kept;
+      });
+      setBombs(prev => {
+        const moved = prev.map(b => ({ ...b, y: b.y + 3 })).filter(b => b.y < H);
+        if (Math.random() < 0.03) moved.push({ x: Math.random() * (W - CSIZE), y: -CSIZE, id: Date.now() + Math.random() });
+        for (const b of moved) {
+          if (b.y + CSIZE > H - PSIZE - 20 && b.x + CSIZE > pxRef.current && b.x < pxRef.current + PSIZE) {
+            aliveRef.current = false; setAlive(false); setBest(bb => Math.max(bb, scoreRef.current));
+          }
+        }
+        return moved;
+      });
+    }, 16);
+    return () => clearInterval(t);
+  }, []);
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#0a0500' }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 10 }}>
+        <Pressable onPress={onExit}><Text style={{ color: '#ffd700', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
+        <Text style={{ color: '#ffd700', fontSize: 16, fontWeight: '900' }}>⭐{score}  ⏱{time}s  Best:{best}</Text>
+      </View>
+      <Pressable onPress={!alive ? start : undefined} onTouchMove={move} style={{ alignSelf: 'center', width: W, height: H, backgroundColor: '#0a0800', overflow: 'hidden' }}>
+        {!alive && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}><Text style={{ color: '#ffd700', fontSize: 28, fontWeight: '900' }}>COIN COLLECTOR</Text><Text style={{ color: score > 0 ? '#fff' : '#aaa', fontSize: 18, marginTop: 8 }}>{score > 0 ? `Score: ${score}` : 'Toca para comenzar'}</Text><Text style={{ color: '#888', marginTop: 6 }}>Desliza para recoger monedas</Text></View>}
+        {coins.map(c => <Text key={c.id} style={{ position: 'absolute', left: c.x, top: c.y, fontSize: 22 }}>🪙</Text>)}
+        {bombs.map(b => <Text key={b.id} style={{ position: 'absolute', left: b.x, top: b.y, fontSize: 22 }}>💣</Text>)}
+        {alive && <Text style={{ position: 'absolute', left: px, top: H - PSIZE - 20, fontSize: 34 }}>🧺</Text>}
+      </Pressable>
+    </SafeAreaView>
+  );
+}
+// ─────────────────────────────────────────────────────────────────
+// REACTION TIME
+function ReactionTime({ onExit }) {
+  const [state, setState] = React.useState('idle'); // idle, waiting, ready, result
+  const [reactionMs, setReactionMs] = React.useState(null);
+  const [best, setBest] = React.useState(null);
+  const [startTime, setStartTime] = React.useState(null);
+  const timerRef = React.useRef(null);
+
+  const startGame = () => {
+    setState('waiting');
+    const delay = 1500 + Math.random() * 3000;
+    timerRef.current = setTimeout(() => { setState('ready'); setStartTime(Date.now()); }, delay);
+  };
+  const handlePress = () => {
+    if (state === 'idle' || state === 'result') { startGame(); return; }
+    if (state === 'waiting') { clearTimeout(timerRef.current); setState('idle'); setReactionMs(null); return; }
+    if (state === 'ready') {
+      const ms = Date.now() - startTime;
+      setReactionMs(ms); setState('result');
+      setBest(b => b === null ? ms : Math.min(b, ms));
+    }
+  };
+  const grade = reactionMs ? (reactionMs < 200 ? '⚡ INCREÍBLE' : reactionMs < 300 ? '🔥 Rápido' : reactionMs < 450 ? '👍 Bien' : '🐢 Lento') : '';
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#050005' }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 15 }}>
+        <Pressable onPress={onExit}><Text style={{ color: '#f0f', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
+        {best && <Text style={{ color: '#f0f', fontSize: 16, fontWeight: '900' }}>Mejor: {best}ms</Text>}
+      </View>
+      <Pressable onPress={handlePress} style={{ flex: 1, backgroundColor: state === 'ready' ? '#00aa00' : state === 'waiting' ? '#aa0000' : '#111', justifyContent: 'center', alignItems: 'center' }}>
+        {state === 'idle' && <><Text style={{ color: '#f0f', fontSize: 32, fontWeight: '900', textAlign: 'center' }}>REACTION TIME</Text><Text style={{ color: '#aaa', fontSize: 18, marginTop: 20 }}>Toca para comenzar</Text></>}
+        {state === 'waiting' && <><Text style={{ color: '#fff', fontSize: 36, fontWeight: '900' }}>ESPERA...</Text><Text style={{ color: '#ccc', marginTop: 10 }}>No toques todavía · (si tocas, pierdes)</Text></>}
+        {state === 'ready' && <><Text style={{ color: '#fff', fontSize: 48, fontWeight: '900' }}>¡TOCA!</Text></>}
+        {state === 'result' && <><Text style={{ color: '#ff0', fontSize: 44, fontWeight: '900' }}>{reactionMs}ms</Text><Text style={{ color: '#fff', fontSize: 24, marginTop: 10 }}>{grade}</Text>{best && <Text style={{ color: '#aaa', marginTop: 10 }}>Mejor: {best}ms</Text>}<Text style={{ color: '#888', marginTop: 30 }}>Toca para intentar de nuevo</Text></>}
+      </Pressable>
+    </SafeAreaView>
+  );
+}
+// ─────────────────────────────────────────────────────────────────
+// COLOR RUSH – tap the correct color name
+function ColorRush({ onExit }) {
+  const COLORS = [
+    { name: 'ROJO', hex: '#ff2222' }, { name: 'AZUL', hex: '#2266ff' },
+    { name: 'VERDE', hex: '#22cc44' }, { name: 'AMARILLO', hex: '#ffdd00' },
+    { name: 'NARANJA', hex: '#ff8800' }, { name: 'MORADO', hex: '#aa00ff' },
+  ];
+  const make = () => {
+    const word = COLORS[Math.floor(Math.random() * COLORS.length)];
+    const ink = COLORS[Math.floor(Math.random() * COLORS.length)];
+    const opts = [word, ...COLORS.filter(c => c !== word).sort(() => Math.random() - 0.5).slice(0, 3)].sort(() => Math.random() - 0.5);
+    return { word, ink, opts };
+  };
+  const [q, setQ] = React.useState(make());
+  const [score, setScore] = React.useState(0);
+  const [best, setBest] = React.useState(0);
+  const [lives, setLives] = React.useState(3);
+  const [flash, setFlash] = React.useState(null);
+  const [started, setStarted] = React.useState(false);
+
+  const answer = (c) => {
+    if (!started) return;
+    if (c.name === q.word.name) {
+      setScore(s => s + 1); setFlash('correct');
+    } else {
+      const newLives = lives - 1; setLives(newLives); setFlash('wrong');
+      if (newLives <= 0) { setBest(b => Math.max(b, score)); }
+    }
+    setTimeout(() => { setFlash(null); if (lives > 1 || c.name === q.word.name) setQ(make()); }, 300);
+  };
+  const reset = () => { setScore(0); setLives(3); setQ(make()); setStarted(true); };
+
+  if (!started || lives <= 0) return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#050010', justifyContent: 'center', alignItems: 'center' }}>
+      <Pressable onPress={onExit} style={{ position: 'absolute', top: 50, left: 20 }}><Text style={{ color: '#f0f', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
+      <Text style={{ color: '#fff', fontSize: 30, fontWeight: '900', marginBottom: 10 }}>COLOR RUSH</Text>
+      {lives <= 0 && <Text style={{ color: '#f44', fontSize: 22, marginBottom: 8 }}>Game Over · Score: {score}</Text>}
+      {best > 0 && <Text style={{ color: '#ff0', fontSize: 18, marginBottom: 20 }}>Mejor: {best}</Text>}
+      <Text style={{ color: '#aaa', textAlign: 'center', marginHorizontal: 30, marginBottom: 30 }}>Toca el botón con el COLOR del texto, no la palabra</Text>
+      <Pressable onPress={reset} style={{ backgroundColor: '#f0f', padding: 16, borderRadius: 12 }}><Text style={{ color: '#000', fontSize: 20, fontWeight: '900' }}>JUGAR</Text></Pressable>
+    </SafeAreaView>
+  );
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: flash === 'correct' ? '#003300' : flash === 'wrong' ? '#330000' : '#050010' }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 15 }}>
+        <Pressable onPress={onExit}><Text style={{ color: '#f0f', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
+        <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>{'❤️'.repeat(lives)}  Score: {score}</Text>
+      </View>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: '#888', marginBottom: 10 }}>Toca el color del texto</Text>
+        <Text style={{ color: q.ink.hex, fontSize: 52, fontWeight: '900', marginBottom: 40 }}>{q.word.name}</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12 }}>
+          {q.opts.map((c, i) => (
+            <Pressable key={i} onPress={() => answer(c)} style={{ backgroundColor: c.hex, width: 140, height: 60, borderRadius: 12, justifyContent: 'center', alignItems: 'center', margin: 6 }}>
+              <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 4 }}>{c.name}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+}
+// ─────────────────────────────────────────────────────────────────
+// PONG SOLO – jugador vs pared rebotante
+function PongSolo({ onExit }) {
+  const W = Dimensions.get('window').width - 20;
+  const H = 500;
+  const PAD_W = 90, PAD_H = 14, BALL = 14;
+  const [padX, setPadX] = React.useState(W / 2 - PAD_W / 2);
+  const [ball, setBall] = React.useState({ x: W / 2, y: H / 2, vx: 3, vy: -4 });
+  const [score, setScore] = React.useState(0);
+  const [best, setBest] = React.useState(0);
+  const [alive, setAlive] = React.useState(false);
+  const padRef = React.useRef(W / 2 - PAD_W / 2);
+  const ballRef = React.useRef(ball);
+  const aliveRef = React.useRef(false);
+  const scoreRef = React.useRef(0);
+  padRef.current = padX; ballRef.current = ball; aliveRef.current = alive; scoreRef.current = score;
+
+  const start = () => { setPadX(W / 2 - PAD_W / 2); setBall({ x: W / 2, y: H / 2, vx: 3 + Math.random() * 2 - 1, vy: -4 }); setScore(0); setAlive(true); };
+  const move = (e) => { if (!aliveRef.current) return; setPadX(Math.max(0, Math.min(W - PAD_W, e.nativeEvent.locationX - PAD_W / 2))); };
+
+  React.useEffect(() => {
+    const t = setInterval(() => {
+      if (!aliveRef.current) return;
+      setBall(prev => {
+        let { x, y, vx, vy } = prev;
+        x += vx; y += vy;
+        if (x < 0) { x = 0; vx = -vx; }
+        if (x + BALL > W) { x = W - BALL; vx = -vx; }
+        if (y < 0) { y = 0; vy = -vy; }
+        const pad = padRef.current;
+        if (y + BALL >= H - PAD_H - 20 && x + BALL > pad && x < pad + PAD_W && vy > 0) {
+          vy = -(Math.abs(vy) + 0.05); vx += (x + BALL / 2 - (pad + PAD_W / 2)) * 0.05;
+          scoreRef.current += 1; setScore(s => s + 1); y = H - PAD_H - 20 - BALL;
+        }
+        if (y > H) { aliveRef.current = false; setAlive(false); setBest(b => Math.max(b, scoreRef.current)); return prev; }
+        return { x, y, vx, vy };
+      });
+    }, 16);
+    return () => clearInterval(t);
+  }, []);
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#000a0a' }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 10 }}>
+        <Pressable onPress={onExit}><Text style={{ color: '#0ff', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
+        <Text style={{ color: '#0ff', fontSize: 18, fontWeight: '900' }}>Score: {score}  Best: {best}</Text>
+      </View>
+      <Pressable onPress={!alive ? start : undefined} onTouchMove={move} style={{ alignSelf: 'center', width: W, height: H, backgroundColor: '#001111', borderRadius: 10, overflow: 'hidden', borderWidth: 2, borderColor: '#0ff' }}>
+        {!alive && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}><Text style={{ color: '#0ff', fontSize: 28, fontWeight: '900' }}>PONG SOLO</Text><Text style={{ color: score > 0 ? '#f44' : '#aaa', fontSize: 18, marginTop: 8 }}>{score > 0 ? `Game Over · ${score} rebotes` : 'Toca para comenzar'}</Text></View>}
+        {alive && <>
+          <View style={{ position: 'absolute', left: ball.x, top: ball.y, width: BALL, height: BALL, backgroundColor: '#fff', borderRadius: BALL / 2, shadowColor: '#fff', shadowOpacity: 1, shadowRadius: 8 }} />
+          <View style={{ position: 'absolute', left: padX, top: H - PAD_H - 20, width: PAD_W, height: PAD_H, backgroundColor: '#0ff', borderRadius: 7, shadowColor: '#0ff', shadowOpacity: 0.8, shadowRadius: 8 }} />
+        </>}
+      </Pressable>
+    </SafeAreaView>
+  );
+}
+// ─────────────────────────────────────────────────────────────────
+// WORD CHAIN – escribe palabras que empiezan con la última letra
+function WordChain({ onExit }) {
+  const WORDS_ES = ['árbol','libro','osito','ola','agua','uva','avión','nuez','zebra','abeja','jabón','nave','estrella','anillo','lobo','oso','oveja','ajo','oído','dado','dragón','noche','elefante','espejo','ojo','jabali','iguana','alfil','llave','leche','café','eclipse','esfinge','gato','otoño','ogro','rata','ardilla','anguila','araña','niño','orco'];
+  const norm = w => w.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const [chain, setChain] = React.useState([]);
+  const [input, setInput] = React.useState('');
+  const [msg, setMsg] = React.useState('');
+  const [used, setUsed] = React.useState(new Set());
+  const [score, setScore] = React.useState(0);
+  const [best, setBest] = React.useState(0);
+  const [lives, setLives] = React.useState(3);
+  const [started, setStarted] = React.useState(false);
+
+  const start = () => { setChain([]); setInput(''); setMsg(''); setUsed(new Set()); setScore(0); setLives(3); setStarted(true); };
+
+  const submit = () => {
+    const w = input.trim().toLowerCase();
+    if (!w) return;
+    if (used.has(norm(w))) { setMsg('¡Ya usada!'); setInput(''); return; }
+    if (!WORDS_ES.some(x => norm(x) === norm(w))) { setMsg('No conozco esa palabra'); setInput(''); return; }
+    if (chain.length > 0) {
+      const last = norm(chain[chain.length - 1]);
+      if (norm(w)[0] !== last[last.length - 1]) { setMsg(`Debe empezar con "${last[last.length - 1].toUpperCase()}"`); const nl = lives - 1; setLives(nl); setInput(''); if (nl <= 0) { setBest(b => Math.max(b, score)); setStarted(false); } return; }
+    }
+    setChain(c => [...c, w]); setUsed(u => new Set([...u, norm(w)])); setScore(s => s + 1); setMsg('✅'); setInput('');
+  };
+
+  if (!started) return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#001a00', justifyContent: 'center', alignItems: 'center' }}>
+      <Pressable onPress={onExit} style={{ position: 'absolute', top: 50, left: 20 }}><Text style={{ color: '#0f0', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
+      <Text style={{ color: '#0f0', fontSize: 28, fontWeight: '900' }}>WORD CHAIN</Text>
+      {score > 0 && <Text style={{ color: '#f44', fontSize: 20, marginTop: 8 }}>Game Over · Score: {score}</Text>}
+      {best > 0 && <Text style={{ color: '#ff0', fontSize: 16, marginTop: 4 }}>Mejor: {best}</Text>}
+      <Text style={{ color: '#aaa', textAlign: 'center', marginHorizontal: 30, marginVertical: 20 }}>Escribe palabras en cadena. Cada palabra debe empezar con la última letra de la anterior.</Text>
+      <Pressable onPress={start} style={{ backgroundColor: '#0f0', padding: 16, borderRadius: 12 }}><Text style={{ color: '#000', fontSize: 20, fontWeight: '900' }}>JUGAR</Text></Pressable>
+    </SafeAreaView>
+  );
+
+  const lastWord = chain.length > 0 ? chain[chain.length - 1] : null;
+  const lastLetter = lastWord ? norm(lastWord)[norm(lastWord).length - 1].toUpperCase() : null;
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#001a00' }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 15 }}>
+        <Pressable onPress={onExit}><Text style={{ color: '#0f0', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
+        <Text style={{ color: '#fff', fontSize: 16, fontWeight: '900' }}>{'❤️'.repeat(lives)}  Score: {score}</Text>
+      </View>
+      {lastLetter && <Text style={{ color: '#ff0', fontSize: 22, fontWeight: '900', textAlign: 'center' }}>Empieza con: {lastLetter}</Text>}
+      <Text style={{ color: msg.startsWith('✅') ? '#0f0' : '#f44', textAlign: 'center', fontSize: 16, minHeight: 22 }}>{msg}</Text>
+      <View style={{ flex: 1, padding: 15 }}>
+        <ScrollView style={{ maxHeight: 200, marginBottom: 10 }}>
+          {chain.slice().reverse().map((w, i) => <Text key={i} style={{ color: i === 0 ? '#0ff' : '#888', fontSize: 16, marginBottom: 4 }}>{i === 0 ? '→ ' : '   '}{w}</Text>)}
+        </ScrollView>
+        <View style={{ flexDirection: 'row', marginTop: 10 }}>
+          <TextInput value={input} onChangeText={setInput} onSubmitEditing={submit} placeholder={lastLetter ? `Empieza con ${lastLetter}...` : 'Escribe una palabra...'} placeholderTextColor="#555" style={{ flex: 1, backgroundColor: '#003300', color: '#0f0', padding: 12, borderRadius: 10, fontSize: 18, borderWidth: 2, borderColor: '#0f0' }} autoCapitalize="none" autoCorrect={false} />
+          <Pressable onPress={submit} style={{ backgroundColor: '#0f0', padding: 14, borderRadius: 10, marginLeft: 8, justifyContent: 'center' }}><Text style={{ color: '#000', fontWeight: '900', fontSize: 18 }}>OK</Text></Pressable>
+        </View>
+      </View>
+    </SafeAreaView>
+  );
+}
+// ─────────────────────────────────────────────────────────────────
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState('menu');
@@ -6017,6 +6313,21 @@ export default function App() {
   }
   if (currentScreen === 'numberpuzzle') {
     return <NumberPuzzle onExit={() => setCurrentScreen('menu')} />;
+  }
+  if (currentScreen === 'coincollector') {
+    return <CoinCollector onExit={() => setCurrentScreen('menu')} />;
+  }
+  if (currentScreen === 'reactiontime') {
+    return <ReactionTime onExit={() => setCurrentScreen('menu')} />;
+  }
+  if (currentScreen === 'colorrush') {
+    return <ColorRush onExit={() => setCurrentScreen('menu')} />;
+  }
+  if (currentScreen === 'pongsolo') {
+    return <PongSolo onExit={() => setCurrentScreen('menu')} />;
+  }
+  if (currentScreen === 'wordchain') {
+    return <WordChain onExit={() => setCurrentScreen('menu')} />;
   }
 
   return (
@@ -6163,6 +6474,31 @@ export default function App() {
       <Pressable style={[styles.menuBtn, { backgroundColor: '#001020', borderWidth: 2, borderColor: '#0ff' }]} onPress={() => setCurrentScreen('numberpuzzle')}>
         <Text style={[styles.menuBtnTitle, { color: '#0ff' }]}>🔢 NUMBER PUZZLE</Text>
         <Text style={[styles.menuBtnSub, { color: '#0077aa' }]}>Slide puzzle 4×4 · Ordena los números</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#0a0500', borderWidth: 2, borderColor: '#ffd700' }]} onPress={() => setCurrentScreen('coincollector')}>
+        <Text style={[styles.menuBtnTitle, { color: '#ffd700' }]}>🪙 COIN COLLECTOR</Text>
+        <Text style={[styles.menuBtnSub, { color: '#aa8800' }]}>Atrapa monedas · Evita bombas · 30 segundos</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#050005', borderWidth: 2, borderColor: '#f0f' }]} onPress={() => setCurrentScreen('reactiontime')}>
+        <Text style={[styles.menuBtnTitle, { color: '#f0f' }]}>⚡ REACTION TIME</Text>
+        <Text style={[styles.menuBtnSub, { color: '#aa00aa' }]}>¿Qué tan rápido reaccionas? Mide tus reflejos</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#050010', borderWidth: 2, borderColor: '#f0f' }]} onPress={() => setCurrentScreen('colorrush')}>
+        <Text style={[styles.menuBtnTitle, { color: '#f0f' }]}>🎨 COLOR RUSH</Text>
+        <Text style={[styles.menuBtnSub, { color: '#aa00aa' }]}>Toca el color del texto · No te confundas</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#000a0a', borderWidth: 2, borderColor: '#0ff' }]} onPress={() => setCurrentScreen('pongsolo')}>
+        <Text style={[styles.menuBtnTitle, { color: '#0ff' }]}>🏓 PONG SOLO</Text>
+        <Text style={[styles.menuBtnSub, { color: '#007788' }]}>Rebota la bola · No dejes que caiga</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#001a00', borderWidth: 2, borderColor: '#0f0' }]} onPress={() => setCurrentScreen('wordchain')}>
+        <Text style={[styles.menuBtnTitle, { color: '#0f0' }]}>🔤 WORD CHAIN</Text>
+        <Text style={[styles.menuBtnSub, { color: '#007700' }]}>Encadena palabras · Empieza con la última letra</Text>
       </Pressable>
       </ScrollView>
     </SafeAreaView>
