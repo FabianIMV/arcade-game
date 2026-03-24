@@ -1248,28 +1248,27 @@ function PixelQuest({ onExit }) {
       case 16:
         ld.platforms.push(
           gnd(0, 180),
-          gnd(3900, 500),
-          plat(210, 90, 65),  plat(400, 170, 65),  plat(600, 90, 65),
-          plat(800, 175, 65), plat(1005, 95, 65),  plat(1210, 180, 65),
-          plat(1415, 95, 65), plat(1625, 180, 65), plat(1835, 95, 65),
-          plat(2050, 175, 65),plat(2265, 95, 65),  plat(2480, 175, 65),
-          plat(2695, 90, 65), plat(2905, 175, 65), plat(3115, 90, 70),
-          plat(3340, 80, 200),
+          plat(210, 90, 65),  plat(410, 175, 65),  plat(610, 90, 65),
+          plat(810, 175, 65), plat(1010, 90, 65),  plat(1215, 175, 65),
+          plat(1415, 90, 65), plat(1620, 175, 65), plat(1820, 90, 65),
+          plat(2025, 175, 65),plat(2225, 90, 65),  plat(2430, 175, 65),
+          plat(2630, 90, 65), plat(2835, 175, 65), plat(3035, 90, 70),
+          plat(3205, 80, 220),
         );
         ld.enemies.push(
           enm(100, 80, 5.5),
-          enmP(230, 90, 40, 5.5), enmP(620, 90, 40, 6.0),
-          enmP(1025, 95, 40, 6.0), enmP(1435, 95, 40, 6.5),
-          enmP(1855, 95, 40, 6.5), enmP(2285, 95, 40, 6.5),
-          enmP(2715, 90, 40, 6.5), enmP(3360, 80, 90, 6.0),
+          enmP(228, 90, 40, 5.5), enmP(628, 90, 40, 6.0),
+          enmP(1028, 90, 40, 6.0), enmP(1433, 90, 40, 6.5),
+          enmP(1838, 90, 40, 6.5), enmP(2243, 90, 40, 6.5),
+          enmP(2648, 90, 40, 6.5), enmP(3225, 80, 90, 6.0),
         );
-        ld.powerups.push(star(810, 220), djump(1420, 225), star(2060, 220), djump(2910, 220), life(3365, 115));
+        ld.powerups.push(star(820, 220), djump(1430, 225), star(2040, 220), djump(2845, 220), life(3230, 115));
         ld.blocks.push(
-          qBlock(610, 135, 'doublejump'), qBlock(1215, 225, 'star'),
-          qBlock(1840, 140, 'life'), qBlock(2700, 135, 'doublejump'),
+          qBlock(620, 135, 'doublejump'), qBlock(1225, 225, 'star'),
+          qBlock(1830, 140, 'life'), qBlock(2640, 135, 'doublejump'),
         );
-        ld.goal = goal(4010, 185);
-        ld.length = 4200;
+        ld.goal = goal(3500, 185);
+        ld.length = 3700;
         break;
 
       // ═══════════════════════════════════════════════════════════════
@@ -1278,7 +1277,6 @@ function PixelQuest({ onExit }) {
       case 17:
         ld.platforms.push(
           gnd(0, 190),
-          gnd(4000, 500),
           plat(220, 95, 70),  plat(430, 175, 65),  plat(640, 90, 70),
           plat(850, 180, 65), plat(1065, 90, 70),  plat(1280, 180, 65),
           plat(1495, 90, 70), plat(1710, 175, 65), plat(1930, 90, 70),
@@ -1298,8 +1296,8 @@ function PixelQuest({ onExit }) {
           qBlock(650, 135, 'star'), qBlock(1290, 225, 'doublejump'),
           qBlock(1940, 135, 'life'), qBlock(2820, 135, 'star'),
         );
-        ld.goal = goal(4120, 185);
-        ld.length = 4300;
+        ld.goal = goal(3785, 185);
+        ld.length = 3980;
         break;
 
       // ═══════════════════════════════════════════════════════════════
@@ -1308,7 +1306,6 @@ function PixelQuest({ onExit }) {
       case 18:
         ld.platforms.push(
           gnd(0, 170),
-          gnd(4100, 500),
           plat(210, 85, 70),  plat(415, 165, 65),  plat(615, 85, 70),
           plat(820, 170, 65), plat(1025, 85, 70),  plat(1235, 170, 65),
           plat(1445, 85, 70), plat(1655, 165, 65), plat(1870, 85, 70),
@@ -1328,8 +1325,8 @@ function PixelQuest({ onExit }) {
           qBlock(625, 130, 'doublejump'), qBlock(1240, 215, 'star'),
           qBlock(1875, 130, 'life'), qBlock(2735, 130, 'doublejump'),
         );
-        ld.goal = goal(4230, 180);
-        ld.length = 4400;
+        ld.goal = goal(3700, 180);
+        ld.length = 3900;
         break;
 
       // ═══════════════════════════════════════════════════════════════
@@ -1338,7 +1335,6 @@ function PixelQuest({ onExit }) {
       case 19:
         ld.platforms.push(
           gnd(0, 160),
-          gnd(4200, 500),
           plat(200, 80, 70),  plat(395, 155, 65),  plat(590, 240, 65),
           plat(780, 155, 65), plat(975, 80, 70),   plat(1175, 200, 65),
           plat(1375, 120, 65),plat(1575, 220, 65), plat(1775, 130, 70),
@@ -1358,8 +1354,8 @@ function PixelQuest({ onExit }) {
           qBlock(600, 285, 'doublejump'), qBlock(1185, 245, 'star'),
           qBlock(1785, 175, 'life'), qBlock(2635, 150, 'doublejump'),
         );
-        ld.goal = goal(4320, 180);
-        ld.length = 4500;
+        ld.goal = goal(3610, 180);
+        ld.length = 3810;
         break;
 
       // ═══════════════════════════════════════════════════════════════
@@ -1368,7 +1364,6 @@ function PixelQuest({ onExit }) {
       case 20:
         ld.platforms.push(
           gnd(0, 160),
-          gnd(4300, 500),
           plat(210, 90, 62),  plat(415, 170, 60),  plat(620, 90, 62),
           plat(825, 175, 60), plat(1035, 90, 62),  plat(1250, 175, 60),
           plat(1465, 90, 62), plat(1680, 170, 60), plat(1895, 90, 62),
@@ -1388,8 +1383,8 @@ function PixelQuest({ onExit }) {
           qBlock(630, 135, 'doublejump'), qBlock(1260, 220, 'star'),
           qBlock(1905, 135, 'life'), qBlock(2785, 135, 'doublejump'),
         );
-        ld.goal = goal(4420, 180);
-        ld.length = 4600;
+        ld.goal = goal(3760, 180);
+        ld.length = 3960;
         break;
 
       // ═══════════════════════════════════════════════════════════════
@@ -1398,7 +1393,6 @@ function PixelQuest({ onExit }) {
       case 21:
         ld.platforms.push(
           gnd(0, 155),
-          gnd(4400, 500),
           plat(200, 80, 60),  plat(380, 200, 60),  plat(560, 85, 60),
           plat(745, 210, 60), plat(935, 90, 60),   plat(1130, 215, 60),
           plat(1330, 95, 60), plat(1535, 215, 60), plat(1740, 95, 60),
@@ -1418,8 +1412,8 @@ function PixelQuest({ onExit }) {
           qBlock(570, 130, 'doublejump'), qBlock(1140, 260, 'star'),
           qBlock(1750, 140, 'life'), qBlock(2595, 130, 'doublejump'),
         );
-        ld.goal = goal(4510, 178);
-        ld.length = 4700;
+        ld.goal = goal(3590, 178);
+        ld.length = 3790;
         break;
 
       // ═══════════════════════════════════════════════════════════════
@@ -1428,7 +1422,6 @@ function PixelQuest({ onExit }) {
       case 22:
         ld.platforms.push(
           gnd(0, 150),
-          gnd(4500, 500),
           plat(205, 85, 60),  plat(400, 160, 58),  plat(600, 235, 58),
           plat(795, 160, 58), plat(995, 90, 60),   plat(1200, 185, 58),
           plat(1405, 260, 58),plat(1610, 185, 58), plat(1820, 100, 60),
@@ -1448,8 +1441,8 @@ function PixelQuest({ onExit }) {
           qBlock(610, 280, 'doublejump'), qBlock(1210, 230, 'star'),
           qBlock(1830, 145, 'life'), qBlock(2690, 145, 'doublejump'),
         );
-        ld.goal = goal(4610, 175);
-        ld.length = 4800;
+        ld.goal = goal(3690, 175);
+        ld.length = 3890;
         break;
 
       // ═══════════════════════════════════════════════════════════════
@@ -1458,7 +1451,6 @@ function PixelQuest({ onExit }) {
       case 23:
         ld.platforms.push(
           gnd(0, 145),
-          gnd(4600, 500),
           plat(210, 90, 58),  plat(415, 170, 56),  plat(625, 90, 58),
           plat(840, 175, 56), plat(1055, 90, 58),  plat(1275, 175, 56),
           plat(1495, 90, 58), plat(1715, 170, 56), plat(1935, 90, 58),
@@ -1479,8 +1471,8 @@ function PixelQuest({ onExit }) {
           qBlock(635, 135, 'doublejump'), qBlock(1285, 220, 'star'),
           qBlock(1945, 135, 'life'), qBlock(2845, 135, 'doublejump'),
         );
-        ld.goal = goal(4710, 175);
-        ld.length = 4900;
+        ld.goal = goal(3855, 175);
+        ld.length = 4055;
         break;
 
       // ═══════════════════════════════════════════════════════════════
@@ -1489,7 +1481,6 @@ function PixelQuest({ onExit }) {
       case 24:
         ld.platforms.push(
           gnd(0, 140),
-          gnd(4700, 500),
           plat(215, 90, 56),  plat(430, 170, 55),  plat(645, 90, 56),
           plat(860, 175, 55), plat(1075, 90, 56),  plat(1295, 175, 55),
           plat(1515, 90, 56), plat(1735, 170, 55), plat(1955, 90, 56),
@@ -1509,8 +1500,8 @@ function PixelQuest({ onExit }) {
           qBlock(655, 135, 'doublejump'), qBlock(1305, 220, 'star'),
           qBlock(1965, 135, 'life'), qBlock(2865, 135, 'doublejump'),
         );
-        ld.goal = goal(4810, 172);
-        ld.length = 5000;
+        ld.goal = goal(3885, 172);
+        ld.length = 4085;
         break;
 
       // ═══════════════════════════════════════════════════════════════
@@ -1519,7 +1510,6 @@ function PixelQuest({ onExit }) {
       case 25:
         ld.platforms.push(
           gnd(0, 135),
-          gnd(4800, 500),
           plat(220, 90, 55),  plat(445, 175, 55),  plat(665, 90, 55),
           plat(890, 175, 55), plat(1115, 90, 55),  plat(1345, 175, 55),
           plat(1575, 90, 55), plat(1805, 175, 55), plat(2035, 90, 55),
@@ -1544,8 +1534,8 @@ function PixelQuest({ onExit }) {
           qBlock(2045, 135, 'life'), qBlock(2985, 135, 'doublejump'),
           qBlock(3460, 135, 'star'),
         );
-        ld.goal = goal(4920, 170);
-        ld.length = 5100;
+        ld.goal = goal(4030, 170);
+        ld.length = 4230;
         break;
 
       // ═══════════════════════════════════════════════════════════════
@@ -1554,7 +1544,6 @@ function PixelQuest({ onExit }) {
       case 26:
         ld.platforms.push(
           gnd(0, 130),
-          gnd(4900, 500),
           plat(220, 90, 54),  plat(455, 175, 52),  plat(685, 90, 54),
           plat(920, 175, 52), plat(1155, 90, 54),  plat(1395, 175, 52),
           plat(1635, 90, 54), plat(1875, 175, 52), plat(2115, 90, 54),
@@ -1574,8 +1563,8 @@ function PixelQuest({ onExit }) {
           qBlock(695, 135, 'star'), qBlock(1405, 220, 'doublejump'),
           qBlock(2125, 135, 'life'), qBlock(2860, 220, 'doublejump'),
         );
-        ld.goal = goal(5020, 168);
-        ld.length = 5200;
+        ld.goal = goal(4180, 168);
+        ld.length = 4380;
         break;
 
       // ═══════════════════════════════════════════════════════════════
@@ -1584,7 +1573,6 @@ function PixelQuest({ onExit }) {
       case 27:
         ld.platforms.push(
           gnd(0, 125),
-          gnd(5000, 500),
           plat(225, 90, 52),  plat(465, 175, 52),  plat(705, 90, 52),
           plat(950, 175, 52), plat(1195, 90, 52),  plat(1445, 175, 52),
           plat(1695, 90, 52), plat(1945, 175, 52), plat(2195, 90, 52),
@@ -1605,8 +1593,8 @@ function PixelQuest({ onExit }) {
           qBlock(715, 135, 'doublejump'), qBlock(1455, 220, 'star'),
           qBlock(2205, 135, 'life'), qBlock(3225, 135, 'doublejump'),
         );
-        ld.goal = goal(5120, 165);
-        ld.length = 5300;
+        ld.goal = goal(4330, 165);
+        ld.length = 4530;
         break;
 
       // ═══════════════════════════════════════════════════════════════
@@ -1615,7 +1603,6 @@ function PixelQuest({ onExit }) {
       case 28:
         ld.platforms.push(
           gnd(0, 120),
-          gnd(5100, 500),
           plat(230, 90, 50),  plat(480, 175, 50),  plat(730, 90, 50),
           plat(985, 175, 50), plat(1240, 90, 50),  plat(1500, 175, 50),
           plat(1760, 90, 50), plat(2020, 175, 50), plat(2280, 90, 50),
@@ -1636,8 +1623,8 @@ function PixelQuest({ onExit }) {
           qBlock(740, 135, 'doublejump'), qBlock(1510, 220, 'star'),
           qBlock(2290, 135, 'life'), qBlock(3350, 135, 'doublejump'),
         );
-        ld.goal = goal(5220, 162);
-        ld.length = 5400;
+        ld.goal = goal(4490, 162);
+        ld.length = 4690;
         break;
 
       // ═══════════════════════════════════════════════════════════════
@@ -1646,7 +1633,6 @@ function PixelQuest({ onExit }) {
       case 29:
         ld.platforms.push(
           gnd(0, 115),
-          gnd(5200, 500),
           plat(235, 90, 49),  plat(495, 175, 48),  plat(755, 90, 49),
           plat(1015, 175, 48),plat(1275, 90, 49),  plat(1540, 175, 48),
           plat(1805, 90, 49), plat(2070, 175, 48), plat(2335, 90, 49),
@@ -1671,8 +1657,8 @@ function PixelQuest({ onExit }) {
           qBlock(2345, 135, 'life'), qBlock(3425, 135, 'doublejump'),
           qBlock(3970, 135, 'star'),
         );
-        ld.goal = goal(5320, 158);
-        ld.length = 5500;
+        ld.goal = goal(4585, 158);
+        ld.length = 4785;
         break;
 
       // ═══════════════════════════════════════════════════════════════
@@ -1682,7 +1668,6 @@ function PixelQuest({ onExit }) {
       default:
         ld.platforms.push(
           gnd(0, 110),
-          gnd(5300, 500),
           // fase 1
           plat(240, 90, 47),  plat(510, 175, 45),  plat(780, 90, 47),
           plat(1055, 175, 45),plat(1330, 90, 47),
@@ -1712,8 +1697,8 @@ function PixelQuest({ onExit }) {
           qBlock(2460, 135, 'life'), qBlock(3030, 135, 'doublejump'),
           qBlock(3610, 135, 'star'), qBlock(4210, 135, 'doublejump'),
         );
-        ld.goal = goal(5420, 155);
-        ld.length = 5600;
+        ld.goal = goal(4830, 155);
+        ld.length = 5030;
         break;
     }
 
