@@ -6204,6 +6204,356 @@ function WordChain({ onExit }) {
   );
 }
 // ─────────────────────────────────────────────────────────────────
+// DINO RUN
+function DinoRun({ onExit }) {
+  const W = Dimensions.get('window').width - 20;
+  const GROUND = 80, DINO_W = 36, DINO_H = 44, OBS_W = 22;
+  const [dinoY, setDinoY] = React.useState(0);
+  const [obstacles, setObstacles] = React.useState([]);
+  const [score, setScore] = React.useState(0);
+  const [best, setBest] = React.useState(0);
+  const [alive, setAlive] = React.useState(false);
+  const [started, setStarted] = React.useState(false);
+  const velRef = React.useRef(0);
+  const dinoRef = React.useRef(0);
+  const aliveRef = React.useRef(false);
+  const scoreRef = React.useRef(0);
+  dinoRef.current = dinoY; aliveRef.current = alive; scoreRef.current = score;
+
+  const start = () => {
+    setDinoY(0); setObstacles([]); setScore(0); setAlive(true); setStarted(true); velRef.current = 0;
+    aliveRef.current = true;
+  };
+  const jump = () => {
+    if (!aliveRef.current) { start(); return; }
+    if (dinoRef.current === 0) velRef.current = -14;
+  };
+
+  React.useEffect(() => {
+    const t = setInterval(() => {
+      if (!aliveRef.current) return;
+      velRef.current += 0.8;
+      const ny = Math.max(0, dinoRef.current + velRef.current);
+      if (ny === 0 && velRef.current > 0) velRef.current = 0;
+      setDinoY(ny);
+      const speed = 4 + scoreRef.current / 200;
+      scoreRef.current += 1; setScore(s => s + 1);
+      setObstacles(prev => {
+        const moved = prev.map(o => ({ ...o, x: o.x - speed })).filter(o => o.x > -OBS_W);
+        if (moved.length === 0 || moved[moved.length - 1].x < W - 200 - Math.random() * 200)
+          moved.push({ x: W, h: 30 + Math.floor(Math.random() * 30), id: Date.now() });
+        for (const o of moved) {
+          const dinoBottom = ny; // 0 = on ground
+          const clearX = o.x > 50 + DINO_W || o.x + OBS_W < 50;
+          if (!clearX && dinoBottom < o.h) { aliveRef.current = false; setAlive(false); setBest(b => Math.max(b, scoreRef.current)); }
+        }
+        return moved;
+      });
+    }, 16);
+    return () => clearInterval(t);
+  }, []);
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#f5f5dc' }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 10 }}>
+        <Pressable onPress={onExit}><Text style={{ color: '#333', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
+        <Text style={{ color: '#333', fontSize: 18, fontWeight: '900' }}>Score: {Math.floor(score / 10)}  Best: {Math.floor(best / 10)}</Text>
+      </View>
+      <Pressable onPress={jump} style={{ alignSelf: 'center', width: W, height: 240, backgroundColor: '#e8e8c8', borderRadius: 8, overflow: 'hidden', borderWidth: 2, borderColor: '#888' }}>
+        {!started && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}><Text style={{ color: '#333', fontSize: 26, fontWeight: '900' }}>DINO RUN</Text><Text style={{ color: '#666', marginTop: 8 }}>Toca para saltar</Text></View>}
+        {!alive && started && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}><Text style={{ color: '#c00', fontSize: 22, fontWeight: '900' }}>GAME OVER</Text><Text style={{ color: '#333', marginTop: 6 }}>Score: {Math.floor(score / 10)}</Text><Text style={{ color: '#888', marginTop: 4 }}>Toca para reiniciar</Text></View>}
+        {/* Ground */}
+        <View style={{ position: 'absolute', bottom: GROUND - 4, left: 0, right: 0, height: 3, backgroundColor: '#888' }} />
+        {/* Dino */}
+        {(alive || !started) && <Text style={{ position: 'absolute', left: 46, bottom: GROUND + dinoY, fontSize: 34 }}>🦕</Text>}
+        {/* Obstacles */}
+        {obstacles.map(o => <Text key={o.id} style={{ position: 'absolute', left: o.x, bottom: GROUND, fontSize: o.h > 45 ? 36 : 28 }}>🌵</Text>)}
+      </Pressable>
+    </SafeAreaView>
+  );
+}
+// ─────────────────────────────────────────────────────────────────
+// FRUIT TAP
+function FruitTap({ onExit }) {
+  const W = Dimensions.get('window').width;
+  const FRUITS = ['🍎','🍊','🍋','🍇','🍓','🍑','🥝','🍍','🫐','🍒'];
+  const [items, setItems] = React.useState([]);
+  const [score, setScore] = React.useState(0);
+  const [missed, setMissed] = React.useState(0);
+  const [best, setBest] = React.useState(0);
+  const [alive, setAlive] = React.useState(false);
+  const [time, setTime] = React.useState(45);
+  const aliveRef = React.useRef(false);
+  const scoreRef = React.useRef(0);
+  aliveRef.current = alive; scoreRef.current = score;
+
+  const start = () => { setItems([]); setScore(0); setMissed(0); setTime(45); setAlive(true); };
+  const tap = (id) => {
+    setItems(prev => prev.filter(it => it.id !== id));
+    scoreRef.current += 1; setScore(s => s + 1);
+  };
+
+  React.useEffect(() => {
+    const t = setInterval(() => { if (!aliveRef.current) return; setTime(p => { if (p <= 1) { aliveRef.current = false; setAlive(false); setBest(b => Math.max(b, scoreRef.current)); return 0; } return p - 1; }); }, 1000);
+    return () => clearInterval(t);
+  }, []);
+  React.useEffect(() => {
+    const t = setInterval(() => {
+      if (!aliveRef.current) return;
+      const size = 56;
+      setItems(prev => {
+        const now = Date.now();
+        const expired = prev.filter(it => now - it.born > 2200);
+        if (expired.length > 0) setMissed(m => { const nm = m + expired.length; if (nm >= 5) { aliveRef.current = false; setAlive(false); setBest(b => Math.max(b, scoreRef.current)); } return nm; });
+        const alive2 = prev.filter(it => now - it.born <= 2200);
+        if (Math.random() < 0.04 && alive2.length < 10)
+          alive2.push({ id: Date.now() + Math.random(), emoji: FRUITS[Math.floor(Math.random() * FRUITS.length)], x: 20 + Math.random() * (W - size - 40), y: 80 + Math.random() * 360, born: Date.now() });
+        return alive2;
+      });
+    }, 80);
+    return () => clearInterval(t);
+  }, []);
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#001a0a' }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 10 }}>
+        <Pressable onPress={onExit}><Text style={{ color: '#0f0', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
+        <Text style={{ color: '#fff', fontSize: 15, fontWeight: '900' }}>⭐{score} ❌{missed}/5 ⏱{time}s Best:{best}</Text>
+      </View>
+      <View style={{ flex: 1, position: 'relative' }}>
+        {!alive && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', zIndex: 10 }}><Text style={{ color: '#0f0', fontSize: 28, fontWeight: '900' }}>FRUIT TAP</Text>{score > 0 && <Text style={{ color: '#f44', fontSize: 20, marginTop: 8 }}>Game Over · Score: {score}</Text>}{best > 0 && <Text style={{ color: '#ff0', fontSize: 16, marginTop: 4 }}>Mejor: {best}</Text>}<Pressable onPress={start} style={{ backgroundColor: '#0f0', padding: 14, borderRadius: 12, marginTop: 20 }}><Text style={{ color: '#000', fontSize: 20, fontWeight: '900' }}>JUGAR</Text></Pressable></View>}
+        {items.map(it => (
+          <Pressable key={it.id} onPress={() => tap(it.id)} style={{ position: 'absolute', left: it.x, top: it.y }}>
+            <Text style={{ fontSize: 46 }}>{it.emoji}</Text>
+          </Pressable>
+        ))}
+      </View>
+    </SafeAreaView>
+  );
+}
+// ─────────────────────────────────────────────────────────────────
+// PIXEL RPG
+const RPG_MAP = [
+  [3,3,3,3,3,3,3,3,3,3,3,3],
+  [3,4,1,1,0,0,0,3,3,3,3,3],
+  [3,1,3,3,0,0,0,0,0,3,3,3],
+  [3,1,3,3,0,3,3,0,0,3,3,3],
+  [3,1,1,1,1,1,1,0,0,0,3,3],
+  [3,3,3,3,1,3,3,3,0,0,3,3],
+  [3,3,3,3,1,0,0,0,0,0,0,3],
+  [3,3,3,3,1,0,3,3,3,0,0,3],
+  [3,3,3,3,0,0,3,5,3,0,0,3],
+  [3,3,3,3,0,0,0,0,0,0,3,3],
+  [3,3,3,3,3,0,0,0,3,3,3,3],
+  [3,3,3,3,3,3,3,3,3,3,3,3],
+];
+const RPG_TILE = ['🌿','🪨','🌊','🌲','🏘️','⛩️'];
+// 0=grass(battle) 1=path 2=water 3=tree 4=town 5=dungeon
+const RPG_ENEMIES = [
+  { name:'Slime',    emoji:'🟢', hp:12, atk:3,  xp:8,   gold:3  },
+  { name:'Goblin',   emoji:'👺', hp:18, atk:5,  xp:14,  gold:6  },
+  { name:'Lobo',     emoji:'🐺', hp:22, atk:7,  xp:20,  gold:8  },
+  { name:'Orco',     emoji:'👹', hp:35, atk:10, xp:35,  gold:14 },
+  { name:'Dragón',   emoji:'🐉', hp:60, atk:16, xp:80,  gold:40 },
+];
+const RPG_DUNGEON_POOL = [2, 3, 4];
+const RPG_SAVE_KEY = '@rpg_save';
+function makePlayer() { return { hp: 30, maxHp: 30, atk: 8, def: 3, lv: 1, xp: 0, xpNext: 20, gold: 10, potions: 2 }; }
+function PixelRPG({ onExit }) {
+  const TILE = 46;
+  const [pos, setPos] = React.useState({ x: 1, y: 1 });
+  const [player, setPlayer] = React.useState(makePlayer());
+  const [battle, setBattle] = React.useState(null); // { enemy, enemyHp, log, turn }
+  const [msg, setMsg] = React.useState('Bienvenido al pueblo. Explora el mapa.');
+  const [scene, setScene] = React.useState('map'); // map | battle | town | gameover | win
+
+  // Load save
+  React.useEffect(() => {
+    AsyncStorage.getItem(RPG_SAVE_KEY).then(v => {
+      if (v) { try { const s = JSON.parse(v); setPlayer(s.player); setPos(s.pos); setMsg('Partida cargada.'); } catch(e){} }
+    });
+  }, []);
+  const save = (p, po) => AsyncStorage.setItem(RPG_SAVE_KEY, JSON.stringify({ player: p, pos: po }));
+
+  const move = (dx, dy) => {
+    if (scene !== 'map') return;
+    const nx = pos.x + dx, ny = pos.y + dy;
+    if (nx < 0 || nx > 11 || ny < 0 || ny > 11) return;
+    const tile = RPG_MAP[ny][nx];
+    if (tile === 3 || tile === 2) return;
+    const newPos = { x: nx, y: ny };
+    setPos(newPos);
+    if (tile === 4) { setScene('town'); setMsg('Entraste al pueblo. El posadero te cura.'); return; }
+    if (tile === 5) { setMsg('Cueva oscura... hay monstruos más fuertes.'); }
+    // random encounter on grass/dungeon
+    const encounterChance = tile === 0 ? 0.25 : tile === 5 ? 0.40 : 0;
+    if (Math.random() < encounterChance) {
+      const pool = tile === 5 ? RPG_DUNGEON_POOL : [0, 1, 2];
+      const eData = RPG_ENEMIES[pool[Math.floor(Math.random() * pool.length)]];
+      setBattle({ enemy: eData, enemyHp: eData.hp, log: `¡Apareció un ${eData.name}!`, turn: 'player' });
+      setScene('battle');
+    } else {
+      save(player, newPos);
+    }
+  };
+
+  const battleAction = (action) => {
+    if (!battle || battle.turn !== 'player') return;
+    let { enemy, enemyHp, log } = battle;
+    let p = { ...player };
+    if (action === 'attack') {
+      const dmg = Math.max(1, p.atk - Math.floor(Math.random() * 3));
+      enemyHp -= dmg; log = `Atacaste por ${dmg} daño.`;
+    } else if (action === 'magic') {
+      const dmg = Math.max(3, Math.floor(p.atk * 1.6) - Math.floor(Math.random() * 4));
+      enemyHp -= dmg; log = `✨ Magia: ${dmg} daño!`;
+    } else if (action === 'potion') {
+      if (p.potions <= 0) { setBattle({ ...battle, log: 'No tienes pociones.' }); return; }
+      const heal = Math.floor(p.maxHp * 0.4);
+      p.hp = Math.min(p.maxHp, p.hp + heal); p.potions -= 1;
+      log = `Bebiste poción (+${heal} HP).`;
+      setBattle({ ...battle, enemy, enemyHp, log, turn: 'enemy', player: p });
+      setPlayer(p);
+      setTimeout(() => enemyTurn(p, { ...battle, enemyHp }), 700);
+      return;
+    } else if (action === 'run') {
+      if (Math.random() < 0.5) { setScene('map'); setBattle(null); setMsg('Escapaste.'); return; }
+      log = 'No pudiste escapar.';
+      setBattle({ ...battle, log, turn: 'enemy' });
+      setTimeout(() => enemyTurn(p, { ...battle, enemyHp }), 700);
+      return;
+    }
+    if (enemyHp <= 0) {
+      // Victory
+      p.xp += enemy.xp; p.gold += enemy.gold;
+      let levelMsg = '';
+      while (p.xp >= p.xpNext) { p.xp -= p.xpNext; p.lv += 1; p.maxHp += 8; p.hp = p.maxHp; p.atk += 2; p.def += 1; p.xpNext = Math.floor(p.xpNext * 1.5); levelMsg = ` ⬆️ ¡Nivel ${p.lv}!`; }
+      setPlayer(p); save(p, pos); setBattle(null); setScene('map');
+      setMsg(`Derrotaste al ${enemy.name}! +${enemy.xp}XP +${enemy.gold}💰${levelMsg}`);
+      return;
+    }
+    setBattle({ enemy, enemyHp, log, turn: 'enemy' });
+    setTimeout(() => enemyTurn(p, { enemy, enemyHp, log, turn: 'enemy' }), 700);
+  };
+
+  const enemyTurn = (p, bState) => {
+    const { enemy, enemyHp } = bState;
+    const dmg = Math.max(1, enemy.atk - p.def - Math.floor(Math.random() * 3));
+    const newHp = p.hp - dmg;
+    const newP = { ...p, hp: newHp };
+    setPlayer(newP);
+    if (newHp <= 0) { setScene('gameover'); setBattle(null); setMsg(`Fuiste derrotado por ${enemy.name}...`); return; }
+    setBattle({ enemy, enemyHp, log: `${enemy.emoji} ${enemy.name} atacó por ${dmg} daño.`, turn: 'player' });
+  };
+
+  const healTown = () => {
+    const p = { ...player, hp: player.maxHp, potions: player.potions + 1 };
+    setPlayer(p); save(p, pos); setScene('map'); setMsg('La posada te curó. ¡Sigue aventurando!');
+  };
+  const newGame = () => { setPlayer(makePlayer()); setPos({ x: 1, y: 1 }); setScene('map'); setMsg('Nueva partida. ¡Buena suerte!'); AsyncStorage.removeItem(RPG_SAVE_KEY); };
+
+  const visRowStart = Math.max(0, Math.min(pos.y - 3, 12 - 7));
+  const visColStart = Math.max(0, Math.min(pos.x - 3, 12 - 7));
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#0a0a00' }}>
+      {/* Header */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 8, backgroundColor: '#111' }}>
+        <Pressable onPress={onExit}><Text style={{ color: '#fa0', fontSize: 14, fontWeight: 'bold' }}>← Salir</Text></Pressable>
+        <Text style={{ color: '#fff', fontSize: 12, fontWeight: '900' }}>Lv{player.lv} ❤️{player.hp}/{player.maxHp} ⚔️{player.atk} 💰{player.gold} 🧪{player.potions}</Text>
+      </View>
+      {/* Message */}
+      <View style={{ backgroundColor: '#1a1500', padding: 8, minHeight: 36 }}>
+        <Text style={{ color: '#ffd700', fontSize: 13 }}>{msg}</Text>
+      </View>
+
+      {/* MAP */}
+      {scene === 'map' && (
+        <>
+          <View style={{ alignSelf: 'center', marginVertical: 6 }}>
+            {Array.from({ length: 7 }, (_, rowOff) => (
+              <View key={rowOff} style={{ flexDirection: 'row' }}>
+                {Array.from({ length: 7 }, (_, colOff) => {
+                  const r = visRowStart + rowOff, c = visColStart + colOff;
+                  const tile = RPG_MAP[r]?.[c] ?? 3;
+                  const isPlayer = r === pos.y && c === pos.x;
+                  return (
+                    <View key={colOff} style={{ width: TILE, height: TILE, justifyContent: 'center', alignItems: 'center', backgroundColor: tile === 0 ? '#1a3300' : tile === 1 ? '#2a1800' : tile === 2 ? '#001a33' : tile === 3 ? '#0a1a00' : tile === 4 ? '#2a1a00' : '#1a0020' }}>
+                      <Text style={{ fontSize: 26 }}>{isPlayer ? '🧙' : RPG_TILE[tile]}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            ))}
+          </View>
+          {/* D-Pad */}
+          <View style={{ alignItems: 'center', marginTop: 4 }}>
+            <Pressable onPress={() => move(0, -1)} style={{ backgroundColor: '#333', padding: 14, borderRadius: 10, marginBottom: 4 }}><Text style={{ fontSize: 22 }}>⬆️</Text></Pressable>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Pressable onPress={() => move(-1, 0)} style={{ backgroundColor: '#333', padding: 14, borderRadius: 10 }}><Text style={{ fontSize: 22 }}>⬅️</Text></Pressable>
+              <Pressable onPress={() => move(0, 1)} style={{ backgroundColor: '#333', padding: 14, borderRadius: 10 }}><Text style={{ fontSize: 22 }}>⬇️</Text></Pressable>
+              <Pressable onPress={() => move(1, 0)} style={{ backgroundColor: '#333', padding: 14, borderRadius: 10 }}><Text style={{ fontSize: 22 }}>➡️</Text></Pressable>
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 8 }}>
+            <Text style={{ color: '#888', fontSize: 12 }}>XP: {player.xp}/{player.xpNext}  </Text>
+            <Text style={{ color: '#888', fontSize: 12 }}>Pos: ({pos.x},{pos.y})</Text>
+          </View>
+        </>
+      )}
+
+      {/* BATTLE */}
+      {scene === 'battle' && battle && (
+        <View style={{ flex: 1, padding: 16 }}>
+          <View style={{ backgroundColor: '#1a0010', borderRadius: 12, padding: 16, borderWidth: 2, borderColor: '#f0f', alignItems: 'center', marginBottom: 12 }}>
+            <Text style={{ fontSize: 60 }}>{battle.enemy.emoji}</Text>
+            <Text style={{ color: '#fff', fontSize: 22, fontWeight: '900' }}>{battle.enemy.name}</Text>
+            <Text style={{ color: '#f44', fontSize: 16 }}>HP: {battle.enemyHp} / {battle.enemy.hp}</Text>
+            <View style={{ width: 200, height: 10, backgroundColor: '#400', borderRadius: 5, marginTop: 6 }}>
+              <View style={{ width: Math.max(0, 200 * battle.enemyHp / battle.enemy.hp), height: 10, backgroundColor: '#f44', borderRadius: 5 }} />
+            </View>
+          </View>
+          <View style={{ backgroundColor: '#001a10', borderRadius: 10, padding: 10, marginBottom: 12 }}>
+            <Text style={{ color: '#0f0', fontSize: 14 }}>{battle.log}</Text>
+          </View>
+          {battle.turn === 'player' && (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
+              {[['attack','⚔️ Atacar','#c00'],['magic','✨ Magia','#00c'],['potion',`🧪 Poción (${player.potions})`,'#080'],['run','🏃 Huir','#555']].map(([act,lbl,bg])=>(
+                <Pressable key={act} onPress={() => battleAction(act)} style={{ backgroundColor: bg, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10, minWidth: 130, alignItems: 'center' }}>
+                  <Text style={{ color: '#fff', fontSize: 16, fontWeight: '900' }}>{lbl}</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+          {battle.turn === 'enemy' && <Text style={{ color: '#aaa', textAlign: 'center', marginTop: 10 }}>Turno enemigo...</Text>}
+        </View>
+      )}
+
+      {/* TOWN */}
+      {scene === 'town' && (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <Text style={{ fontSize: 60 }}>🏘️</Text>
+          <Text style={{ color: '#fa0', fontSize: 26, fontWeight: '900', marginTop: 10 }}>Pueblo Luminar</Text>
+          <Text style={{ color: '#aaa', textAlign: 'center', marginVertical: 10 }}>El posadero te ofrece descanso y una poción.</Text>
+          <Text style={{ color: '#fff', fontSize: 16, marginBottom: 16 }}>HP: {player.hp}/{player.maxHp}  🧪 {player.potions}</Text>
+          <Pressable onPress={healTown} style={{ backgroundColor: '#2a8', padding: 16, borderRadius: 12, marginBottom: 12, width: 220, alignItems: 'center' }}><Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>Descansar (gratis)</Text></Pressable>
+          <Pressable onPress={() => setScene('map')} style={{ backgroundColor: '#444', padding: 14, borderRadius: 12, width: 220, alignItems: 'center' }}><Text style={{ color: '#fff', fontSize: 16 }}>Volver al mapa</Text></Pressable>
+        </View>
+      )}
+
+      {/* GAME OVER */}
+      {scene === 'gameover' && (
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <Text style={{ fontSize: 60 }}>💀</Text>
+          <Text style={{ color: '#f44', fontSize: 30, fontWeight: '900', marginTop: 10 }}>GAME OVER</Text>
+          <Text style={{ color: '#aaa', marginTop: 8 }}>Llegaste al nivel {player.lv}</Text>
+          <Pressable onPress={newGame} style={{ backgroundColor: '#c00', padding: 16, borderRadius: 12, marginTop: 24, width: 200, alignItems: 'center' }}><Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>Nueva Partida</Text></Pressable>
+        </View>
+      )}
+    </SafeAreaView>
+  );
+}
+// ─────────────────────────────────────────────────────────────────
 
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState('menu');
@@ -6328,6 +6678,15 @@ export default function App() {
   }
   if (currentScreen === 'wordchain') {
     return <WordChain onExit={() => setCurrentScreen('menu')} />;
+  }
+  if (currentScreen === 'dinorun') {
+    return <DinoRun onExit={() => setCurrentScreen('menu')} />;
+  }
+  if (currentScreen === 'fruittap') {
+    return <FruitTap onExit={() => setCurrentScreen('menu')} />;
+  }
+  if (currentScreen === 'pixelrpg') {
+    return <PixelRPG onExit={() => setCurrentScreen('menu')} />;
   }
 
   return (
@@ -6499,6 +6858,21 @@ export default function App() {
       <Pressable style={[styles.menuBtn, { backgroundColor: '#001a00', borderWidth: 2, borderColor: '#0f0' }]} onPress={() => setCurrentScreen('wordchain')}>
         <Text style={[styles.menuBtnTitle, { color: '#0f0' }]}>🔤 WORD CHAIN</Text>
         <Text style={[styles.menuBtnSub, { color: '#007700' }]}>Encadena palabras · Empieza con la última letra</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#e8e8c8', borderWidth: 2, borderColor: '#888' }]} onPress={() => setCurrentScreen('dinorun')}>
+        <Text style={[styles.menuBtnTitle, { color: '#333' }]}>🦕 DINO RUN</Text>
+        <Text style={[styles.menuBtnSub, { color: '#555' }]}>Salta los cactus · Velocidad infinita</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#001a0a', borderWidth: 2, borderColor: '#0f0' }]} onPress={() => setCurrentScreen('fruittap')}>
+        <Text style={[styles.menuBtnTitle, { color: '#0f0' }]}>🍎 FRUIT TAP</Text>
+        <Text style={[styles.menuBtnSub, { color: '#007700' }]}>Toca las frutas antes de que desaparezcan</Text>
+      </Pressable>
+
+      <Pressable style={[styles.menuBtn, { backgroundColor: '#0a0a00', borderWidth: 2, borderColor: '#ffd700' }]} onPress={() => setCurrentScreen('pixelrpg')}>
+        <Text style={[styles.menuBtnTitle, { color: '#ffd700' }]}>🧙 PIXEL RPG</Text>
+        <Text style={[styles.menuBtnSub, { color: '#aa8800' }]}>Explora el mapa · Batallas por turnos · Sube de nivel</Text>
       </Pressable>
       </ScrollView>
     </SafeAreaView>
