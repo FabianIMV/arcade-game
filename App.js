@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
+  Easing,
   PanResponder,
   Platform,
   Pressable,
@@ -14,6 +15,11 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  AREA_H, AREA_W, Bar, Btn, C, Combo, GameScreen, GridBg, Lives, Overlay, Pill, PlayArea, Starfield,
+  alpha, clamp, glow, hx, lerp, makeStars, overlap, pick, rand, randInt, shuffle,
+  useBest, useFX, useForce, useLoop, usePan, useTimeouts,
+} from './utils/kit';
 
 const { width, height } = Dimensions.get('window');
 const GAME_HEIGHT = Math.min(height - 230, 560);
@@ -6555,328 +6561,150 @@ function PixelRPG({ onExit }) {
 }
 // ─────────────────────────────────────────────────────────────────
 
-export default function App() {
-  const [currentScreen, setCurrentScreen] = useState('menu');
+// ═══════════════════════════════════════════════════════════════════
+// REGISTRO DE JUEGOS + MENÚ
+// Para añadir un juego: crea el componente y añade una entrada aquí.
+// ═══════════════════════════════════════════════════════════════════
+const CATEGORIES = [
+  { id: 'all', label: 'TODOS' },
+  { id: 'accion', label: 'ACCIÓN' },
+  { id: 'arcade', label: 'ARCADE' },
+  { id: 'reflejos', label: 'REFLEJOS' },
+  { id: 'puzzle', label: 'PUZZLE' },
+  { id: 'aventura', label: 'AVENTURA' },
+];
 
-  if (currentScreen === 'neon') {
-    return <NeonGalaxy onExit={() => setCurrentScreen('menu')} />;
-  }
+const GAMES = [
+  { id: 'neon', name: 'NEON GALAXY', emoji: '🚀', tag: 'Shooter espacial con jefes y power-ups', color: C.cyan, cat: 'accion', Comp: NeonGalaxy },
+  { id: 'cyber', name: 'CYBER RUN', emoji: '🏃', tag: 'Corre, salta y desliza por la ciudad', color: C.pink, cat: 'accion', Comp: CyberRun },
+  { id: 'pixel', name: 'PIXEL QUEST', emoji: '🍄', tag: 'Plataformas en 30 mundos', color: C.lime, cat: 'aventura', Comp: PixelQuest },
+  { id: 'galactic', name: 'GALACTIC HUNT', emoji: '🛸', tag: 'Caza ovnis antes de que escapen', color: C.violet, cat: 'accion', Comp: GalacticHunt },
+  { id: 'snake', name: 'SNAKE POWER', emoji: '🐍', tag: 'Snake con poderes y combos', color: C.lime, cat: 'arcade', Comp: SnakePower },
+  { id: 'pingpong', name: 'PING PONG', emoji: '🏓', tag: 'Duelo contra la IA a 7 puntos', color: C.blue, cat: 'arcade', Comp: PingPong },
+  { id: 'breakout', name: 'BREAKOUT', emoji: '🧱', tag: 'Rompe ladrillos y atrapa mejoras', color: C.orange, cat: 'arcade', Comp: Breakout },
+  { id: 'void', name: 'VOID CRAWLER', emoji: '☠️', tag: 'Roguelike de 5 pisos', color: C.violet, cat: 'aventura', Comp: VoidCrawler },
+  { id: 'tunnel', name: 'NEON TUNNEL', emoji: '🌀', tag: 'Vuela por el túnel y esquiva', color: C.cyan, cat: 'accion', Comp: NeonTunnel },
+  { id: 'monster', name: 'MONSTER DUEL', emoji: '⚡', tag: 'Captura, evoluciona y combate', color: C.amber, cat: 'aventura', Comp: MonsterDuel },
+  { id: 'gravity', name: 'GRAVITY FLIP', emoji: '🔀', tag: 'Invierte la gravedad', color: C.violet, cat: 'reflejos', Comp: GravityFlip },
+  { id: 'tetris', name: 'NEON TETRIS', emoji: '🧊', tag: 'El clásico con pieza fantasma', color: C.cyan, cat: 'puzzle', Comp: NeonTetris },
+  { id: 'warrior', name: 'NEON WARRIOR', emoji: '🥷', tag: 'Plataformas, doble salto, 3 niveles', color: C.pink, cat: 'accion', Comp: NeonWarrior },
+  { id: 'craft', name: 'PIXEL CRAFT', emoji: '⛏️', tag: 'Mina, construye y sobrevive la noche', color: C.orange, cat: 'aventura', Comp: PixelCraft },
+  { id: 'walljumper', name: 'WALL JUMPER', emoji: '🧗', tag: 'Rebota entre paredes y sube', color: C.orange, cat: 'reflejos', Comp: WallJumper },
+  { id: 'mathrush', name: 'MATH RUSH', emoji: '🧮', tag: 'Calcula rápido y destruye', color: C.pink, cat: 'puzzle', Comp: MathRush },
+  { id: 'neon2048', name: '2048 NEON', emoji: '🟦', tag: 'Fusiona fichas hasta el 2048', color: C.cyan, cat: 'puzzle', Comp: NeonGame2048 },
+  { id: 'whackamole', name: 'WHACK-A-MOLE', emoji: '🐹', tag: 'Golpea topos, evita bombas', color: C.violet, cat: 'reflejos', Comp: WhackAMole },
+  { id: 'rhythm', name: 'RITMO Y COLOR', emoji: '🎵', tag: 'Repite la secuencia', color: C.violet, cat: 'reflejos', Comp: RhythmTap },
+  { id: 'starcatcher', name: 'STAR CATCHER', emoji: '⭐', tag: 'Atrapa estrellas, esquiva bombas', color: C.amber, cat: 'arcade', Comp: StarCatcher },
+  { id: 'wordscramble', name: 'PALABRAS', emoji: '🔤', tag: 'Ordena las letras revueltas', color: C.violet, cat: 'puzzle', Comp: WordScramble },
+  { id: 'crossyroad', name: 'CROSSY ROAD', emoji: '🐸', tag: 'Cruza calles, ríos y vías', color: C.lime, cat: 'arcade', Comp: CR2_CrossyRoad },
+  { id: 'bubbleshooter', name: 'BUBBLE SHOOTER', emoji: '🫧', tag: 'Une 3 burbujas del mismo color', color: C.red, cat: 'puzzle', Comp: BubbleShooter },
+  { id: 'flappyneon', name: 'FLAPPY NEON', emoji: '🐦', tag: 'Toca para volar entre tubos', color: C.amber, cat: 'reflejos', Comp: FlappyNeon },
+  { id: 'memorymatch', name: 'MEMORY MATCH', emoji: '🃏', tag: 'Encuentra los pares', color: C.violet, cat: 'puzzle', Comp: MemoryMatch },
+  { id: 'asteroidodge', name: 'ASTEROID DODGE', emoji: '☄️', tag: 'Esquiva la lluvia de rocas', color: C.cyan, cat: 'accion', Comp: AsteroidDodge },
+  { id: 'towerstack', name: 'TOWER STACK', emoji: '🏗️', tag: 'Apila con precisión perfecta', color: C.amber, cat: 'reflejos', Comp: TowerStack },
+  { id: 'numberpuzzle', name: '15 PUZZLE', emoji: '🧩', tag: 'Desliza y ordena los números', color: C.cyan, cat: 'puzzle', Comp: NumberPuzzle },
+  { id: 'coincollector', name: 'COIN RUSH', emoji: '🪙', tag: 'Recoge monedas en 30 segundos', color: C.amber, cat: 'arcade', Comp: CoinCollector },
+  { id: 'reactiontime', name: 'REFLEJOS', emoji: '⚡', tag: 'Mide tu tiempo de reacción', color: C.pink, cat: 'reflejos', Comp: ReactionTime },
+  { id: 'colorrush', name: 'COLOR RUSH', emoji: '🎨', tag: 'Toca el color, no la palabra', color: C.pink, cat: 'reflejos', Comp: ColorRush },
+  { id: 'pongsolo', name: 'PONG SOLO', emoji: '🎾', tag: 'Rebota la bola contra el muro', color: C.cyan, cat: 'arcade', Comp: PongSolo },
+  { id: 'wordchain', name: 'WORD CHAIN', emoji: '🔗', tag: 'Encadena palabras por la última letra', color: C.lime, cat: 'puzzle', Comp: WordChain },
+  { id: 'dinorun', name: 'DINO RUN', emoji: '🦖', tag: 'Salta cactus, agáchate de las aves', color: C.lime, cat: 'reflejos', Comp: DinoRun },
+  { id: 'fruittap', name: 'FRUIT TAP', emoji: '🍉', tag: 'Corta frutas, evita bombas', color: C.lime, cat: 'reflejos', Comp: FruitTap },
+  { id: 'pixelrpg', name: 'PIXEL RPG', emoji: '🧙', tag: 'Explora, combate y sube de nivel', color: C.amber, cat: 'aventura', Comp: PixelRPG },
+];
 
-  if (currentScreen === 'cyber') {
-    return <CyberRun onExit={() => setCurrentScreen('menu')} />;
-  }
-
-  if (currentScreen === 'pixel') {
-    return <PixelQuest onExit={() => setCurrentScreen('menu')} />;
-  }
-
-  if (currentScreen === 'galactic') {
-    return <GalacticHunt onExit={() => setCurrentScreen('menu')} />;
-  }
-
-  if (currentScreen === 'snake') {
-    return <SnakePower onExit={() => setCurrentScreen('menu')} />;
-  }
-
-  if (currentScreen === 'pingpong') {
-    return <PingPong onExit={() => setCurrentScreen('menu')} />;
-  }
-
-  if (currentScreen === 'breakout') {
-    return <Breakout onExit={() => setCurrentScreen('menu')} />;
-  }
-
-  if (currentScreen === 'void') {
-    return <VoidCrawler onExit={() => setCurrentScreen('menu')} />;
-  }
-
-  if (currentScreen === 'tunnel') {
-    return <NeonTunnel onExit={() => setCurrentScreen('menu')} />;
-  }
-
-  if (currentScreen === 'monster') {
-    return <MonsterDuel onExit={() => setCurrentScreen('menu')} />;
-  }
-
-  if (currentScreen === 'gravity') {
-    return <GravityFlip onExit={() => setCurrentScreen('menu')} />;
-  }
-
-  if (currentScreen === 'tetris') {
-    return <NeonTetris onExit={() => setCurrentScreen('menu')} />;
-  }
-
-  if (currentScreen === 'warrior') {
-    return <NeonWarrior onExit={() => setCurrentScreen('menu')} />;
-  }
-
-  if (currentScreen === 'craft') {
-    return <PixelCraft onExit={() => setCurrentScreen('menu')} />;
-  }
-
-  if (currentScreen === 'walljumper') {
-    return <WallJumper onExit={() => setCurrentScreen('menu')} />;
-  }
-
-  if (currentScreen === 'mathrush') {
-    return <MathRush onExit={() => setCurrentScreen('menu')} />;
-  }
-
-  if (currentScreen === 'neon2048') {
-    return <NeonGame2048 onExit={() => setCurrentScreen('menu')} />;
-  }
-
-  if (currentScreen === 'whackamole') {
-    return <WhackAMole onExit={() => setCurrentScreen('menu')} />;
-  }
-
-  if (currentScreen === 'rhythm') {
-    return <RhythmTap onExit={() => setCurrentScreen('menu')} />;
-  }
-
-  if (currentScreen === 'starcatcher') {
-    return <StarCatcher onExit={() => setCurrentScreen('menu')} />;
-  }
-
-  if (currentScreen === 'wordscramble') {
-    return <WordScramble onExit={() => setCurrentScreen('menu')} />;
-  }
-
-  if (currentScreen === 'crossyroad') {
-    return <CR2_CrossyRoad onExit={() => setCurrentScreen('menu')} />;
-  }
-
-  if (currentScreen === 'bubbleshooter') {
-    return <BubbleShooter onExit={() => setCurrentScreen('menu')} />;
-  }
-  if (currentScreen === 'flappyneon') {
-    return <FlappyNeon onExit={() => setCurrentScreen('menu')} />;
-  }
-  if (currentScreen === 'memorymatch') {
-    return <MemoryMatch onExit={() => setCurrentScreen('menu')} />;
-  }
-  if (currentScreen === 'asteroidodge') {
-    return <AsteroidDodge onExit={() => setCurrentScreen('menu')} />;
-  }
-  if (currentScreen === 'towerstack') {
-    return <TowerStack onExit={() => setCurrentScreen('menu')} />;
-  }
-  if (currentScreen === 'numberpuzzle') {
-    return <NumberPuzzle onExit={() => setCurrentScreen('menu')} />;
-  }
-  if (currentScreen === 'coincollector') {
-    return <CoinCollector onExit={() => setCurrentScreen('menu')} />;
-  }
-  if (currentScreen === 'reactiontime') {
-    return <ReactionTime onExit={() => setCurrentScreen('menu')} />;
-  }
-  if (currentScreen === 'colorrush') {
-    return <ColorRush onExit={() => setCurrentScreen('menu')} />;
-  }
-  if (currentScreen === 'pongsolo') {
-    return <PongSolo onExit={() => setCurrentScreen('menu')} />;
-  }
-  if (currentScreen === 'wordchain') {
-    return <WordChain onExit={() => setCurrentScreen('menu')} />;
-  }
-  if (currentScreen === 'dinorun') {
-    return <DinoRun onExit={() => setCurrentScreen('menu')} />;
-  }
-  if (currentScreen === 'fruittap') {
-    return <FruitTap onExit={() => setCurrentScreen('menu')} />;
-  }
-  if (currentScreen === 'pixelrpg') {
-    return <PixelRPG onExit={() => setCurrentScreen('menu')} />;
-  }
-
+function GameCard({ g, index, best, onPress, cardW }) {
+  const a = useRef(new Animated.Value(0)).current;
+  const s = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    Animated.timing(a, { toValue: 1, duration: 320, delay: Math.min(index, 14) * 35, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const to = v => Animated.spring(s, { toValue: v, useNativeDriver: true, speed: 40, bounciness: 5 }).start();
   return (
-    <SafeAreaView style={styles.menuContainer}>
-      <ScrollView contentContainerStyle={styles.menuScroll} showsVerticalScrollIndicator={false}>
-      <Text style={styles.menuTitle}>ARCADE HUB</Text>
-      <Text style={styles.menuSub}>Select a game</Text>
-      
-      <Pressable style={styles.menuBtn} onPress={() => setCurrentScreen('neon')}>
-        <Text style={styles.menuBtnTitle}>NEON GALAXY</Text>
-        <Text style={styles.menuBtnSub}>Space Shooter</Text>
-      </Pressable>
+    <Pressable testID={`menu-${g.id}`} onPress={onPress} onPressIn={() => to(0.95)} onPressOut={() => to(1)}>
+      <Animated.View style={{
+        width: cardW, height: 128, borderRadius: 20, padding: 12, marginBottom: 12, overflow: 'hidden',
+        backgroundColor: alpha(g.color, 0.09), borderWidth: 1.5, borderColor: alpha(g.color, 0.5),
+        opacity: a, transform: [{ scale: s }, { translateY: a.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
+        ...glow(g.color, 10, 0.35),
+      }}>
+        <View style={{ position: 'absolute', right: -16, top: -16, width: 84, height: 84, borderRadius: 42, backgroundColor: alpha(g.color, 0.12) }} />
+        <Text style={{ fontSize: 34 }}>{g.emoji}</Text>
+        <Text numberOfLines={1} style={{ color: g.color, fontSize: 14, fontWeight: '900', letterSpacing: 1, marginTop: 6 }}>{g.name}</Text>
+        <Text numberOfLines={2} style={{ color: C.dim, fontSize: 11, lineHeight: 15, marginTop: 2 }}>{g.tag}</Text>
+        {best > 0 && (
+          <View style={{ position: 'absolute', right: 8, top: 8, backgroundColor: alpha('#000000', 0.45), borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 }}>
+            <Text style={{ color: C.amber, fontSize: 11, fontWeight: '800' }}>🏆 {best}</Text>
+          </View>
+        )}
+      </Animated.View>
+    </Pressable>
+  );
+}
 
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#f0f' }]} onPress={() => setCurrentScreen('cyber')}>
-        <Text style={styles.menuBtnTitle}>CYBER RUN</Text>
-        <Text style={styles.menuBtnSub}>Platformer</Text>
-      </Pressable>
+function Menu({ onPick }) {
+  const [cat, setCat] = useState('all');
+  const [bests, setBests] = useState({});
+  useEffect(() => {
+    AsyncStorage.multiGet(GAMES.map(g => `@best:${g.id}`)).then(rows => {
+      const o = {};
+      rows.forEach(([k, v]) => { if (v) o[k.slice(6)] = parseFloat(v) || 0; });
+      setBests(o);
+    }).catch(() => {});
+  }, []);
+  const list = GAMES.filter(g => cat === 'all' || g.cat === cat);
+  const cardW = (Math.min(width, 520) - 16 * 2 - 12) / 2;
+  const played = Object.keys(bests).length;
+  const surprise = () => { hx.tap(); onPick(GAMES[Math.floor(Math.random() * GAMES.length)].id); };
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
+      <ScrollView contentContainerStyle={{ alignItems: 'center', paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        <View style={{ width: Math.min(width, 520), paddingHorizontal: 16, paddingTop: 22 }}>
+          <Text style={{ color: C.text, fontSize: 38, fontWeight: '900', letterSpacing: 3, ...glow(C.cyan, 16, 0.9) }}>ARCADE<Text style={{ color: C.cyan }}> HUB</Text></Text>
+          <Text style={{ color: C.dim, fontSize: 13, marginTop: 4, marginBottom: 14 }}>{GAMES.length} juegos · {played} con récord</Text>
 
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#32cd32' }]} onPress={() => setCurrentScreen('pixel')}>
-        <Text style={styles.menuBtnTitle}>PIXEL QUEST</Text>
-        <Text style={styles.menuBtnSub}>30-World Platformer</Text>
-      </Pressable>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ gap: 8 }}>
+              {CATEGORIES.map(c => {
+                const on = cat === c.id;
+                return (
+                  <Pressable key={c.id} testID={`cat-${c.id}`} onPress={() => { hx.tick(); setCat(c.id); }}
+                    style={{ paddingHorizontal: 13, paddingVertical: 7, borderRadius: 16, backgroundColor: on ? C.cyan : C.panel2, borderWidth: 1, borderColor: on ? C.cyan : C.line }}>
+                    <Text style={{ color: on ? '#04040c' : C.dim, fontSize: 12, fontWeight: '900', letterSpacing: 1 }}>{c.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </View>
 
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#7c3aed' }]} onPress={() => setCurrentScreen('galactic')}>
-        <Text style={styles.menuBtnTitle}>GALACTIC HUNT</Text>
-        <Text style={styles.menuBtnSub}>UFO / Duck Shooter</Text>
-      </Pressable>
+          <Pressable testID="surprise" onPress={surprise} style={{ borderRadius: 18, padding: 14, marginBottom: 14, backgroundColor: alpha(C.pink, 0.12), borderWidth: 1.5, borderColor: alpha(C.pink, 0.6), flexDirection: 'row', alignItems: 'center', ...glow(C.pink, 12, 0.4) }}>
+            <Text style={{ fontSize: 26, marginRight: 12 }}>🎲</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: C.pink, fontSize: 15, fontWeight: '900', letterSpacing: 1 }}>SORPRÉNDEME</Text>
+              <Text style={{ color: C.dim, fontSize: 12 }}>Un juego al azar</Text>
+            </View>
+            <Text style={{ color: C.pink, fontSize: 22 }}>›</Text>
+          </Pressable>
 
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#16a34a' }]} onPress={() => setCurrentScreen('snake')}>
-        <Text style={styles.menuBtnTitle}>🐍 SNAKE POWER</Text>
-        <Text style={styles.menuBtnSub}>Snake clásico con poderes</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#0ea5e9' }]} onPress={() => setCurrentScreen('pingpong')}>
-        <Text style={styles.menuBtnTitle}>🏓 PING PONG</Text>
-        <Text style={styles.menuBtnSub}>1 vs IA · primero a 7 gana</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#f97316' }]} onPress={() => setCurrentScreen('breakout')}>
-        <Text style={styles.menuBtnTitle}>🧱 BREAKOUT</Text>
-        <Text style={styles.menuBtnSub}>Rompe todos los ladrillos</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#6644dd' }]} onPress={() => setCurrentScreen('void')}>
-        <Text style={[styles.menuBtnTitle, { color: '#fff' }]}>☠️ VOID CRAWLER</Text>
-        <Text style={[styles.menuBtnSub, { color: '#ccc' }]}>Roguelike • 5 pisos • combate por turnos</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#001a1a', borderWidth:2, borderColor:'#00ffcc' }]} onPress={() => setCurrentScreen('tunnel')}>
-        <Text style={[styles.menuBtnTitle, { color: '#00ffcc' }]}>🌀 NEON TUNNEL 3D</Text>
-        <Text style={[styles.menuBtnSub, { color: '#00aa88' }]}>Vuela por el túnel neon · Esquiva los bloques</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#b45309' }]} onPress={() => setCurrentScreen('monster')}>
-        <Text style={styles.menuBtnTitle}>⚡ MONSTER DUEL</Text>
-        <Text style={styles.menuBtnSub}>Pokémon-style • Captura • Evoluciona • Batalla</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#7c3aed' }]} onPress={() => setCurrentScreen('gravity')}>
-        <Text style={styles.menuBtnTitle}>🔀 GRAVITY FLIP</Text>
-        <Text style={styles.menuBtnSub}>Invierte la gravedad • Evita los pilares</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#0e7490' }]} onPress={() => setCurrentScreen('tetris')}>
-        <Text style={styles.menuBtnTitle}>🧊 NEON TETRIS</Text>
-        <Text style={styles.menuBtnSub}>Tetris clásico con efectos neon + pieza fantasma</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#6d00cc', borderWidth: 2, borderColor: '#f0f' }]} onPress={() => setCurrentScreen('warrior')}>
-        <Text style={[styles.menuBtnTitle, { color: '#fff' }]}>🥷 NEON WARRIOR</Text>
-        <Text style={[styles.menuBtnSub, { color: '#ddd' }]}>Plataformas · Salto doble · Mata enemigos · 3 niveles</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#3d2008', borderWidth: 2, borderColor: '#7a4420' }]} onPress={() => setCurrentScreen('craft')}>
-        <Text style={[styles.menuBtnTitle, { color: '#c8a060' }]}>⛏️ PIXEL CRAFT</Text>
-        <Text style={[styles.menuBtnSub, { color: '#a07840' }]}>Mundo 2D · Mina bloques · Construye · Día y noche</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#1a0a00', borderWidth: 2, borderColor: '#ff6600' }]} onPress={() => setCurrentScreen('walljumper')}>
-        <Text style={[styles.menuBtnTitle, { color: '#ff6600' }]}>🧗 WALL JUMPER</Text>
-        <Text style={[styles.menuBtnSub, { color: '#cc4400' }]}>Rebota entre paredes · Esquiva las púas · Sube alto</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#0a0010', borderWidth: 2, borderColor: '#ff2d78' }]} onPress={() => setCurrentScreen('mathrush')}>
-        <Text style={[styles.menuBtnTitle, { color: '#ff2d78' }]}>🔢 MATH RUSH</Text>
-        <Text style={[styles.menuBtnSub, { color: '#aa1050' }]}>Responde sumas, restas y × · Destruye enemigos</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#0a0010', borderWidth: 2, borderColor: '#00f0ff' }]} onPress={() => setCurrentScreen('neon2048')}>
-        <Text style={[styles.menuBtnTitle, { color: '#00f0ff' }]}>🟦 2048 NEON</Text>
-        <Text style={[styles.menuBtnSub, { color: '#0099aa' }]}>Desliza y fusiona fichas · Llega al 2048</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#1a0a2e', borderWidth: 2, borderColor: '#7c3aed' }]} onPress={() => setCurrentScreen('whackamole')}>
-        <Text style={[styles.menuBtnTitle, { color: '#fff' }]}>🐹 WHACK-A-MOLE</Text>
-        <Text style={[styles.menuBtnSub, { color: '#ccc' }]}>Golpea topos · Evita bombas · 60 segundos</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#0d0d1a', borderWidth: 2, borderColor: '#6c5ce7' }]} onPress={() => setCurrentScreen('rhythm')}>
-        <Text style={[styles.menuBtnTitle, { color: '#a29bfe' }]}>🎵 RITMO Y COLOR</Text>
-        <Text style={[styles.menuBtnSub, { color: '#8888cc' }]}>Simon Says · Repite la secuencia de colores</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#0a0a1a', borderWidth: 2, borderColor: '#00e5ff' }]} onPress={() => setCurrentScreen('starcatcher')}>
-        <Text style={[styles.menuBtnTitle, { color: '#ffe066' }]}>⭐ STAR CATCHER</Text>
-        <Text style={[styles.menuBtnSub, { color: '#ccaa00' }]}>Atrapa estrellas y gemas · Evita bombas · x3 combo</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#0f0f1e', borderWidth: 2, borderColor: '#a855f7' }]} onPress={() => setCurrentScreen('wordscramble')}>
-        <Text style={[styles.menuBtnTitle, { color: '#a855f7' }]}>🔤 PALABRAS</Text>
-        <Text style={[styles.menuBtnSub, { color: '#7733aa' }]}>Ordena letras revueltas · 20 palabras en español</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#0a1a0a', borderWidth: 2, borderColor: '#2ecc71' }]} onPress={() => setCurrentScreen('crossyroad')}>
-        <Text style={[styles.menuBtnTitle, { color: '#2ecc71' }]}>🐸 CROSSY ROAD</Text>
-        <Text style={[styles.menuBtnSub, { color: '#1a8a4a' }]}>Cruza el tráfico · Esquiva coches y camiones</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#0a0a1a', borderWidth: 2, borderColor: '#e74c3c' }]} onPress={() => setCurrentScreen('bubbleshooter')}>
-        <Text style={[styles.menuBtnTitle, { color: '#e74c3c' }]}>🫧 BUBBLE SHOOTER</Text>
-        <Text style={[styles.menuBtnSub, { color: '#aa2222' }]}>Dispara burbujas · Une 3+ del mismo color</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#001', borderWidth: 2, borderColor: '#ff0' }]} onPress={() => setCurrentScreen('flappyneon')}>
-        <Text style={[styles.menuBtnTitle, { color: '#ff0' }]}>🐦 FLAPPY NEON</Text>
-        <Text style={[styles.menuBtnSub, { color: '#aa9900' }]}>Toca para volar · Esquiva los tubos</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#0a001a', borderWidth: 2, borderColor: '#a855f7' }]} onPress={() => setCurrentScreen('memorymatch')}>
-        <Text style={[styles.menuBtnTitle, { color: '#a855f7' }]}>🃏 MEMORY MATCH</Text>
-        <Text style={[styles.menuBtnSub, { color: '#7733aa' }]}>Voltea cartas · Encuentra los pares</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#000005', borderWidth: 2, borderColor: '#0ff' }]} onPress={() => setCurrentScreen('asteroidodge')}>
-        <Text style={[styles.menuBtnTitle, { color: '#0ff' }]}>☄️ ASTEROID DODGE</Text>
-        <Text style={[styles.menuBtnSub, { color: '#0099aa' }]}>Desliza la nave · Esquiva asteroides</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#080818', borderWidth: 2, borderColor: '#fa0' }]} onPress={() => setCurrentScreen('towerstack')}>
-        <Text style={[styles.menuBtnTitle, { color: '#fa0' }]}>🏗️ TOWER STACK</Text>
-        <Text style={[styles.menuBtnSub, { color: '#aa6600' }]}>Apila bloques · ¡Llega lo más alto!</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#001020', borderWidth: 2, borderColor: '#0ff' }]} onPress={() => setCurrentScreen('numberpuzzle')}>
-        <Text style={[styles.menuBtnTitle, { color: '#0ff' }]}>🔢 NUMBER PUZZLE</Text>
-        <Text style={[styles.menuBtnSub, { color: '#0077aa' }]}>Slide puzzle 4×4 · Ordena los números</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#0a0500', borderWidth: 2, borderColor: '#ffd700' }]} onPress={() => setCurrentScreen('coincollector')}>
-        <Text style={[styles.menuBtnTitle, { color: '#ffd700' }]}>🪙 COIN COLLECTOR</Text>
-        <Text style={[styles.menuBtnSub, { color: '#aa8800' }]}>Atrapa monedas · Evita bombas · 30 segundos</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#050005', borderWidth: 2, borderColor: '#f0f' }]} onPress={() => setCurrentScreen('reactiontime')}>
-        <Text style={[styles.menuBtnTitle, { color: '#f0f' }]}>⚡ REACTION TIME</Text>
-        <Text style={[styles.menuBtnSub, { color: '#aa00aa' }]}>¿Qué tan rápido reaccionas? Mide tus reflejos</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#050010', borderWidth: 2, borderColor: '#f0f' }]} onPress={() => setCurrentScreen('colorrush')}>
-        <Text style={[styles.menuBtnTitle, { color: '#f0f' }]}>🎨 COLOR RUSH</Text>
-        <Text style={[styles.menuBtnSub, { color: '#aa00aa' }]}>Toca el color del texto · No te confundas</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#000a0a', borderWidth: 2, borderColor: '#0ff' }]} onPress={() => setCurrentScreen('pongsolo')}>
-        <Text style={[styles.menuBtnTitle, { color: '#0ff' }]}>🏓 PONG SOLO</Text>
-        <Text style={[styles.menuBtnSub, { color: '#007788' }]}>Rebota la bola · No dejes que caiga</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#001a00', borderWidth: 2, borderColor: '#0f0' }]} onPress={() => setCurrentScreen('wordchain')}>
-        <Text style={[styles.menuBtnTitle, { color: '#0f0' }]}>🔤 WORD CHAIN</Text>
-        <Text style={[styles.menuBtnSub, { color: '#007700' }]}>Encadena palabras · Empieza con la última letra</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#e8e8c8', borderWidth: 2, borderColor: '#888' }]} onPress={() => setCurrentScreen('dinorun')}>
-        <Text style={[styles.menuBtnTitle, { color: '#333' }]}>🦕 DINO RUN</Text>
-        <Text style={[styles.menuBtnSub, { color: '#555' }]}>Salta los cactus · Velocidad infinita</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#001a0a', borderWidth: 2, borderColor: '#0f0' }]} onPress={() => setCurrentScreen('fruittap')}>
-        <Text style={[styles.menuBtnTitle, { color: '#0f0' }]}>🍎 FRUIT TAP</Text>
-        <Text style={[styles.menuBtnSub, { color: '#007700' }]}>Toca las frutas antes de que desaparezcan</Text>
-      </Pressable>
-
-      <Pressable style={[styles.menuBtn, { backgroundColor: '#0a0a00', borderWidth: 2, borderColor: '#ffd700' }]} onPress={() => setCurrentScreen('pixelrpg')}>
-        <Text style={[styles.menuBtnTitle, { color: '#ffd700' }]}>🧙 PIXEL RPG</Text>
-        <Text style={[styles.menuBtnSub, { color: '#aa8800' }]}>Explora el mapa · Batallas por turnos · Sube de nivel</Text>
-      </Pressable>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+            {list.map((g, i) => (
+              <GameCard key={g.id + cat} g={g} index={i} cardW={cardW} best={bests[g.id] || 0} onPress={() => { hx.tap(); onPick(g.id); }} />
+            ))}
+          </View>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+export default function App() {
+  const [screen, setScreen] = useState('menu');
+  const g = GAMES.find(x => x.id === screen);
+  if (g) {
+    const G = g.Comp;
+    return <G onExit={() => setScreen('menu')} />;
+  }
+  return <Menu onPick={setScreen} />;
 }
 
 const styles = StyleSheet.create({
