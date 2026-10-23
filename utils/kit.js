@@ -28,6 +28,9 @@ export const C = {
 export const glow = (color, radius = 12, opacity = 0.9) => ({
   shadowColor: color, shadowOpacity: opacity, shadowRadius: radius, shadowOffset: { width: 0, height: 0 },
 });
+export const tglow = (color, radius = 10) => ({
+  textShadowColor: color, textShadowRadius: radius, textShadowOffset: { width: 0, height: 0 },
+});
 export const alpha = (hex, a) => {
   // '#rrggbb' + 0..1 -> rgba()
   const h = hex.replace('#', '');
@@ -42,6 +45,8 @@ export const rand = (a, b) => a + Math.random() * (b - a);
 export const randInt = (a, b) => Math.floor(rand(a, b + 1));
 export const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 export const lerp = (a, b, t) => a + (b - a) * t;
+let _uid = 0;
+export const uid = () => ++_uid;
 export const shuffle = arr => {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
@@ -336,10 +341,14 @@ export function GameScreen({ title, emoji, accent = C.cyan, onExit, score, best,
           <Text style={{ color: C.text, fontSize: 20, fontWeight: '800', marginTop: -2 }}>‹</Text>
         </Pressable>
         <View style={{ flex: 1, marginHorizontal: 10 }}>
-          <Text numberOfLines={1} style={{ color: accent, fontSize: 18, fontWeight: '900', letterSpacing: 1.5, ...glow(accent, 8, 0.8) }}>{emoji} {title}</Text>
+          <Text numberOfLines={1} style={{ color: accent, fontSize: 17, fontWeight: '900', letterSpacing: 1.2, ...tglow(accent, 8, 0.8) }}>{emoji} {title}</Text>
         </View>
-        {score != null && <Pill label={scoreLabel} value={score} color={accent} />}
-        {best != null && <Pill label={bestLabel} value={best} color={C.amber} style={{ marginLeft: 6 }} />}
+        {score != null && (
+          <View style={{ alignItems: 'flex-end', minWidth: 70 }}>
+            <Text style={{ color: accent, fontSize: 24, fontWeight: '900', lineHeight: 26, ...tglow(accent, 8, 0.7) }}>{score}</Text>
+            {best != null && <Text style={{ color: C.amber, fontSize: 11, fontWeight: '800' }}>🏆 {best}</Text>}
+          </View>
+        )}
       </View>
       {hud ? <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, minHeight: 26, marginBottom: 4 }}>{hud}</View> : <View style={{ height: 6 }} />}
       <View style={{ flex: 1, alignItems: 'center' }}>{children}</View>
@@ -363,14 +372,14 @@ export function Overlay({ show, kind = 'start', emoji, title, subtitle, lines, s
     <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(4,4,12,0.82)', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 18 }}>
       <Animated.View style={{ alignItems: 'center', opacity: a, transform: [{ scale: a.interpolate({ inputRange: [0, 1], outputRange: [0.85, 1] }) }] }}>
         {emoji ? <Text style={{ fontSize: 54, marginBottom: 6 }}>{emoji}</Text> : null}
-        <Text style={{ color: accent, fontSize: 30, fontWeight: '900', letterSpacing: 2, textAlign: 'center', ...glow(accent, 14, 0.9) }}>{title}</Text>
+        <Text style={{ color: accent, fontSize: 30, fontWeight: '900', letterSpacing: 2, textAlign: 'center', ...tglow(accent, 14, 0.9) }}>{title}</Text>
         {subtitle ? <Text style={{ color: C.dim, fontSize: 14, marginTop: 6, textAlign: 'center', lineHeight: 20 }}>{subtitle}</Text> : null}
         {over && score != null && (
           <View style={{ alignItems: 'center', marginTop: 16 }}>
             <Text style={{ color: C.dim, fontSize: 11, fontWeight: '800', letterSpacing: 2 }}>{scoreLabel}</Text>
             <Text style={{ color: C.text, fontSize: 46, fontWeight: '900' }}>{score}</Text>
             {isNew ? (
-              <Text style={{ color: C.amber, fontSize: 15, fontWeight: '900', letterSpacing: 1, ...glow(C.amber, 10, 0.9) }}>🏆 ¡NUEVO RÉCORD!</Text>
+              <Text style={{ color: C.amber, fontSize: 15, fontWeight: '900', letterSpacing: 1, ...tglow(C.amber, 10, 0.9) }}>🏆 ¡NUEVO RÉCORD!</Text>
             ) : best != null && best > 0 ? (
               <Text style={{ color: C.dim, fontSize: 13, fontWeight: '700' }}>Récord: {best}</Text>
             ) : null}

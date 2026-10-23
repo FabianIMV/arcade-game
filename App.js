@@ -17,8 +17,8 @@ import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   AREA_H, AREA_W, Bar, Btn, C, Combo, GameScreen, GridBg, Lives, Overlay, Pill, PlayArea, Starfield,
-  alpha, clamp, glow, hx, lerp, makeStars, overlap, pick, rand, randInt, shuffle,
-  useBest, useFX, useForce, useLoop, usePan, useTimeouts,
+  alpha, clamp, glow, tglow, hx, lerp, makeStars, overlap, pick, rand, randInt, shuffle,
+  uid, useBest, useFX, useForce, useLoop, usePan, useTimeouts,
 } from './utils/kit';
 
 const { width, height } = Dimensions.get('window');
@@ -86,599 +86,414 @@ const scoreVibrate = () => {
 // ─────────────────────────────────────────────────────────────────
 
 function NeonGalaxy({ onExit }) {
-  const [running, setRunning] = useState(false);
-  const [score, setScore] = useState(0);
-  const [lives, setLives] = useState(3);
-  const [gameOver, setGameOver] = useState(false);
-  const [, setTick] = useState(0);
+  const SW = 34, SH = 40, SY = AREA_H - 76;
+  const fx = useFX();
+  const [best, submitBest] = useBest('neon');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const stars = useRef(makeStars(44)).current;
+  const initState = () => ({
+    x: AREA_W / 2, tx: AREA_W / 2, score: 0, lives: 3, shield: 0, weapon: 1, fireT: 0,
+    enemies: [], bullets: [], eb: [], items: [], wave: 0, queue: [], spawnT: 0, gap: 0,
+    banner: null, combo: 0, comboT: 0, boss: null, t: 0, inv: 0, kills: 0,
+  });
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
 
-  // Refs for mutable game state (avoids stale closures in the loop)
-  const scoreRef = useRef(0);
-  const livesRef = useRef(3);
-  const highScore = useRef(0);
-
-  // Game objects
-  const playerX = useRef(width / 2 - PLAYER_SIZE / 2);
-  const enemies = useRef([]);
-  const lasers = useRef([]);
-  const powerUps = useRef([]);
-  const lastFire = useRef(0);
-  const lastEnemy = useRef(0);
-
-  // Wave system
-  const killCount = useRef(0);
-
-  // Combo / multiplier system
-  const recentKillTimes = useRef([]);
-  const multiplierActive = useRef(false);
-  const multiplierEndTime = useRef(0);
-
-  // Static starfield – generated once
-  const stars = useRef(
-    Array.from({ length: 40 }, (_, i) => ({
-      id: i,
-      x: Math.random() * (width - 4),
-      y: Math.random() * GAME_HEIGHT,
-      size: Math.random() * 2 + 1,
-    }))
-  ).current;
-
-  const resetGame = () => {
-    scoreRef.current = 0;
-    livesRef.current = 3;
-    setScore(0);
-    setLives(3);
-    setGameOver(false);
-    playerX.current = width / 2 - PLAYER_SIZE / 2;
-    enemies.current = [];
-    lasers.current = [];
-    powerUps.current = [];
-    killCount.current = 0;
-    recentKillTimes.current = [];
-    multiplierActive.current = false;
-    multiplierEndTime.current = 0;
+  const ENEMY = {
+    drone: { hp: 1, w: 34, h: 34, vy: 95, pts: 10, e: '👾', c: C.pink },
+    zig: { hp: 2, w: 34, h: 34, vy: 80, pts: 20, e: '🛸', c: C.cyan },
+    tank: { hp: 6, w: 44, h: 44, vy: 42, pts: 50, e: '🤖', c: C.orange },
+    kami: { hp: 1, w: 30, h: 30, vy: 210, pts: 30, e: '💀', c: C.red },
   };
 
-  const startGame = () => {
-    resetGame();
-    setRunning(true);
+  const nextWave = s => {
+    s.wave += 1;
+    s.gap = 0;
+    if (s.wave % 5 === 0) {
+      s.banner = { text: `⚠ JEFE · OLEADA ${s.wave}`, t: 2 };
+      const hp = 28 + s.wave * 5;
+      s.boss = { x: AREA_W / 2 - 40, y: -90, w: 80, h: 76, hp, max: hp, t: 0, fire: 1.5, e: '👽' };
+      s.queue = [];
+    } else {
+      s.banner = { text: `OLEADA ${s.wave}`, t: 1.6 };
+      const n = 6 + s.wave * 2;
+      const q = [];
+      for (let i = 0; i < n; i++) {
+        const r = Math.random();
+        let type = 'drone';
+        if (s.wave >= 2 && r < 0.3) type = 'zig';
+        if (s.wave >= 3 && r > 0.82) type = 'kami';
+        if (s.wave >= 4 && r > 0.92) type = 'tank';
+        q.push(type);
+      }
+      s.queue = q;
+      s.spawnT = 1.2;
+    }
   };
 
-  useEffect(() => {
+  const start = () => {
+    fx.clear();
+    g.current = initState();
+    nextWave(g.current);
+    setPhase('play');
+  };
 
-    const loop = setInterval(() => {
-      const now = Date.now();
+  const dropItem = (s, x, y, force) => {
+    if (!force && Math.random() > 0.13) return;
+    const r = Math.random();
+    const type = r < 0.38 ? 'W' : r < 0.62 ? 'S' : r < 0.82 ? 'H' : 'B';
+    s.items.push({ id: uid(), x, y, type });
+  };
 
-      // Expire multiplier
-      if (multiplierActive.current && now > multiplierEndTime.current) {
-        multiplierActive.current = false;
+  const hurtPlayer = s => {
+    if (s.inv > 0) return;
+    if (s.shield > 0) {
+      s.shield -= 1; s.inv = 0.8;
+      fx.ring(s.x, SY, C.cyan, 60); fx.shake(4); hx.hit();
+      return;
+    }
+    s.lives -= 1; s.inv = 1.6; s.weapon = Math.max(1, s.weapon - 1);
+    s.combo = 0;
+    fx.burst(s.x, SY, C.red, 18, 220); fx.shake(9); fx.flash(C.red, 0.3); hx.bad();
+    if (s.lives <= 0) {
+      hx.die();
+      const isNew = submitBest(s.score);
+      setRes({ isNew });
+      setPhase('over');
+    }
+  };
+
+  const killEnemy = (s, e, def) => {
+    s.combo += 1; s.comboT = 2; s.kills += 1;
+    const mult = Math.min(8, 1 + Math.floor(s.combo / 4));
+    const pts = (def ? def.pts : 10) * mult;
+    s.score += pts;
+    fx.burst(e.x + e.w / 2, e.y + e.h / 2, def ? def.c : C.pink, 14, 200);
+    fx.pop(e.x + e.w / 2, e.y, `+${pts}`, mult > 1 ? C.amber : C.text, 15);
+    hx.tap();
+    dropItem(s, e.x + e.w / 2, e.y + e.h / 2, def && def.hp >= 6);
+  };
+
+  useLoop(phase === 'play', dt => {
+    const s = g.current;
+    if (phase !== 'play') return;
+    s.t += dt;
+    s.inv = Math.max(0, s.inv - dt);
+    s.x += (s.tx - s.x) * Math.min(1, dt * 16);
+    if (s.banner) { s.banner.t -= dt; if (s.banner.t <= 0) s.banner = null; }
+    if (s.comboT > 0) { s.comboT -= dt; if (s.comboT <= 0) s.combo = 0; }
+
+    // disparo automático
+    s.fireT -= dt;
+    if (s.fireT <= 0) {
+      s.fireT = s.weapon >= 3 ? 0.19 : 0.23;
+      const b = (dx, vx) => s.bullets.push({ id: uid(), x: s.x + dx, y: SY - 8, vx, vy: -560 });
+      if (s.weapon === 1) b(0, 0);
+      else if (s.weapon === 2) { b(-9, 0); b(9, 0); }
+      else { b(0, 0); b(-12, -90); b(12, 90); }
+    }
+
+    // spawns
+    if (s.queue.length) {
+      s.spawnT -= dt;
+      if (s.spawnT <= 0) {
+        const type = s.queue.shift();
+        const d = ENEMY[type];
+        s.enemies.push({ id: uid(), type, x: rand(10, AREA_W - d.w - 10), y: -d.h, w: d.w, h: d.h, hp: d.hp, vy: d.vy + s.wave * 3, ph: Math.random() * 6, fire: rand(0.8, 2), bx: 0 });
+        s.spawnT = Math.max(0.28, 0.75 - s.wave * 0.03);
       }
-
-      // Auto-fire
-      if (now - lastFire.current > 250) {
-        lasers.current.push({
-          id: now + Math.random(),
-          x: playerX.current + PLAYER_SIZE / 2 - LASER_WIDTH / 2,
-          y: GAME_HEIGHT - PLAYER_SIZE - 20,
-        });
-        lastFire.current = now;
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      }
-
-      const spawnRate = Math.max(300, 1200 - scoreRef.current * 15);
-      if (now - lastEnemy.current > spawnRate) {
-        const type = NG_ENEMY_TYPES[Math.floor(Math.random() * NG_ENEMY_TYPES.length)];
-        enemies.current.push({
-          id: now + Math.random(),
-          x: Math.random() * (width - ENEMY_SIZE - 20) + 10,
-          y: -ENEMY_SIZE,
-          speed: 2 + Math.random() * 3 + (scoreRef.current / 100),
-          type,
-        });
-        lastEnemy.current = now;
-      }
-
-      // Move objects
-      lasers.current.forEach(l => { l.y -= 12; });
-      lasers.current = lasers.current.filter(l => l.y > -LASER_HEIGHT);
-      enemies.current.forEach(e => { e.y += e.speed; });
-      powerUps.current.forEach(p => { p.y += 2; });
-      powerUps.current = powerUps.current.filter(p => p.y < GAME_HEIGHT + 40);
-
-      let newScore = scoreRef.current;
-      let newLives = livesRef.current;
-
-      // Power-up collection
-      for (let i = powerUps.current.length - 1; i >= 0; i--) {
-        const p = powerUps.current[i];
-        if (
-          p.y + 30 > GAME_HEIGHT - PLAYER_SIZE - 10 &&
-          p.y < GAME_HEIGHT &&
-          p.x + 30 > playerX.current &&
-          p.x < playerX.current + PLAYER_SIZE
-        ) {
-          newLives = Math.min(newLives + 1, 9);
-          powerUps.current.splice(i, 1);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+    if (s.boss) {
+      const bs = s.boss;
+      bs.t += dt;
+      bs.y = Math.min(54, bs.y + 60 * dt);
+      bs.x = AREA_W / 2 - bs.w / 2 + Math.sin(bs.t * 1.1) * (AREA_W / 2 - bs.w / 2 - 12);
+      bs.fire -= dt;
+      if (bs.fire <= 0 && bs.y >= 50) {
+        bs.fire = Math.max(0.7, 1.3 - s.wave * 0.03);
+        const n = 3 + Math.min(4, Math.floor(s.wave / 5));
+        for (let i = 0; i < n; i++) {
+          const a = Math.PI / 2 + (i - (n - 1) / 2) * 0.28;
+          s.eb.push({ id: uid(), x: bs.x + bs.w / 2, y: bs.y + bs.h, vx: Math.cos(a) * 170, vy: Math.sin(a) * 170, r: 5 });
         }
       }
+    }
+    // mover enemigos
+    for (let i = s.enemies.length - 1; i >= 0; i--) {
+      const e = s.enemies[i];
+      e.y += e.vy * dt;
+      if (e.type === 'zig') e.x += Math.sin(s.t * 3 + e.ph) * 90 * dt;
+      if (e.type === 'kami' && e.y > 20) e.x += clamp(s.x - (e.x + e.w / 2), -1, 1) * 120 * dt;
+      if (e.type === 'tank') {
+        e.fire -= dt;
+        if (e.fire <= 0) { e.fire = 1.7; s.eb.push({ id: uid(), x: e.x + e.w / 2, y: e.y + e.h, vx: 0, vy: 210, r: 5 }); }
+      }
+      e.x = clamp(e.x, 0, AREA_W - e.w);
+      if (e.y > AREA_H + 10) { s.enemies.splice(i, 1); s.combo = 0; }
+    }
+    // balas
+    s.bullets.forEach(b => { b.x += b.vx * dt; b.y += b.vy * dt; });
+    s.bullets = s.bullets.filter(b => b.y > -20 && b.x > -10 && b.x < AREA_W + 10);
+    s.eb.forEach(b => { b.x += b.vx * dt; b.y += b.vy * dt; });
+    s.eb = s.eb.filter(b => b.y < AREA_H + 10 && b.x > -10 && b.x < AREA_W + 10);
+    s.items.forEach(it => { it.y += 90 * dt; });
+    s.items = s.items.filter(it => it.y < AREA_H + 20);
 
-      // Enemy collisions
-      for (let i = enemies.current.length - 1; i >= 0; i--) {
-        const e = enemies.current[i];
-        let enemyDestroyed = false;
-
-        // Hit player
-        if (
-          e.y + ENEMY_SIZE > GAME_HEIGHT - PLAYER_SIZE - 10 &&
-          e.y < GAME_HEIGHT &&
-          e.x + ENEMY_SIZE > playerX.current &&
-          e.x < playerX.current + PLAYER_SIZE
-        ) {
-          newLives -= 1;
-          enemyDestroyed = true;
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    // balas jugador vs enemigos / jefe
+    for (let j = s.bullets.length - 1; j >= 0; j--) {
+      const b = s.bullets[j];
+      let used = false;
+      for (let i = s.enemies.length - 1; i >= 0; i--) {
+        const e = s.enemies[i];
+        if (b.x > e.x && b.x < e.x + e.w && b.y > e.y && b.y < e.y + e.h) {
+          e.hp -= 1; used = true;
+          fx.burst(b.x, b.y, C.cyan, 3, 90, 0.25, 3);
+          if (e.hp <= 0) { killEnemy(s, e, ENEMY[e.type]); s.enemies.splice(i, 1); }
+          break;
         }
-
-        if (!enemyDestroyed) {
-          for (let j = lasers.current.length - 1; j >= 0; j--) {
-            const l = lasers.current[j];
-            if (
-              l.x < e.x + ENEMY_SIZE &&
-              l.x + LASER_WIDTH > e.x &&
-              l.y < e.y + ENEMY_SIZE &&
-              l.y + LASER_HEIGHT > e.y
-            ) {
-              lasers.current.splice(j, 1);
-
-              // Combo tracking
-              recentKillTimes.current = recentKillTimes.current.filter(t => now - t < 2000);
-              recentKillTimes.current.push(now);
-              if (recentKillTimes.current.length >= 3 && !multiplierActive.current) {
-                multiplierActive.current = true;
-                multiplierEndTime.current = now + 5000;
-                celebrateVibrate();
-              }
-
-              const points = multiplierActive.current ? 20 : 10;
-              newScore += points;
-
-              // Wave system: every 5 kills spawn 3 enemies in a row
-              killCount.current += 1;
-              if (killCount.current % 5 === 0) {
-                const waveSpeed = 2.5 + (scoreRef.current / 100);
-                const slot = (width - 60) / 3;
-                for (let w = 0; w < 3; w++) {
-                  const wt = NG_ENEMY_TYPES[Math.floor(Math.random() * NG_ENEMY_TYPES.length)];
-                  enemies.current.push({
-                    id: now + Math.random() + w,
-                    x: 10 + slot * w + Math.random() * (slot - ENEMY_SIZE),
-                    y: -ENEMY_SIZE * (w + 1),
-                    speed: waveSpeed + Math.random(),
-                    type: wt,
-                  });
-                }
-              }
-
-              // Occasional power-up drop
-              if (Math.random() < 0.1) {
-                powerUps.current.push({ id: now + Math.random(), x: e.x, y: e.y, type: 'shield' });
-              }
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-              popVibrate();
-              enemyDestroyed = true;
-              break;
-            }
+      }
+      if (!used && s.boss) {
+        const bs = s.boss;
+        if (b.x > bs.x && b.x < bs.x + bs.w && b.y > bs.y && b.y < bs.y + bs.h) {
+          bs.hp -= 1; used = true;
+          fx.burst(b.x, b.y, C.amber, 3, 100, 0.25, 3);
+          if (bs.hp <= 0) {
+            s.combo += 5; s.comboT = 2;
+            s.score += 500 + s.wave * 50;
+            fx.burst(bs.x + bs.w / 2, bs.y + bs.h / 2, C.amber, 40, 320, 0.9, 7);
+            fx.ring(bs.x + bs.w / 2, bs.y + bs.h / 2, C.amber, 120);
+            fx.pop(bs.x + bs.w / 2, bs.y, `JEFE +${500 + s.wave * 50}`, C.amber, 20);
+            fx.shake(12, 0.5); fx.flash('#ffffff', 0.4); hx.win();
+            dropItem(s, bs.x + bs.w / 2, bs.y + bs.h / 2, true);
+            dropItem(s, bs.x + 10, bs.y + bs.h / 2, true);
+            s.eb = [];
+            s.boss = null;
           }
         }
-
-        if (enemyDestroyed) {
-          enemies.current.splice(i, 1);
-        } else if (e.y > GAME_HEIGHT) {
-          enemies.current.splice(i, 1);
-          newLives -= 1;
+      }
+      if (used) s.bullets.splice(j, 1);
+    }
+    // jugador vs enemigos / balas / items
+    const me = { x: s.x - SW * 0.3, y: SY - SH * 0.3, w: SW * 0.6, h: SH * 0.7 };
+    for (let i = s.enemies.length - 1; i >= 0; i--) {
+      const e = s.enemies[i];
+      if (overlap(me, e)) { fx.burst(e.x + e.w / 2, e.y + e.h / 2, C.red, 10, 160); s.enemies.splice(i, 1); hurtPlayer(s); }
+    }
+    if (s.boss && overlap(me, s.boss)) hurtPlayer(s);
+    for (let i = s.eb.length - 1; i >= 0; i--) {
+      const b = s.eb[i];
+      if (overlap(me, { x: b.x - b.r, y: b.y - b.r, w: b.r * 2, h: b.r * 2 })) { s.eb.splice(i, 1); hurtPlayer(s); }
+    }
+    for (let i = s.items.length - 1; i >= 0; i--) {
+      const it = s.items[i];
+      if (overlap(me, { x: it.x - 14, y: it.y - 14, w: 28, h: 28 })) {
+        s.items.splice(i, 1);
+        hx.good();
+        if (it.type === 'W') { s.weapon = Math.min(3, s.weapon + 1); fx.pop(it.x, it.y, 'ARMA +', C.amber, 16); }
+        if (it.type === 'S') { s.shield = Math.min(3, s.shield + 1); fx.pop(it.x, it.y, 'ESCUDO', C.cyan, 16); }
+        if (it.type === 'H') { s.lives = Math.min(5, s.lives + 1); fx.pop(it.x, it.y, '+1 VIDA', C.red, 16); }
+        if (it.type === 'B') {
+          fx.ring(s.x, SY, C.orange, 260); fx.flash(C.orange, 0.35); fx.shake(8);
+          s.eb = [];
+          s.enemies.forEach(e => { e.hp -= 4; });
+          for (let k = s.enemies.length - 1; k >= 0; k--) if (s.enemies[k].hp <= 0) { killEnemy(s, s.enemies[k], ENEMY[s.enemies[k].type]); s.enemies.splice(k, 1); }
+          if (s.boss) s.boss.hp -= 12;
         }
       }
+    }
+    // siguiente oleada
+    if (!s.queue.length && !s.enemies.length && !s.boss) {
+      s.gap += dt;
+      if (s.gap > 1.2) { s.score += 100 * s.wave; fx.pop(AREA_W / 2, AREA_H / 2 - 40, `OLEADA SUPERADA +${100 * s.wave}`, C.lime, 16); nextWave(s); }
+    }
+  });
 
-      scoreRef.current = newScore;
-      livesRef.current = newLives;
-      setScore(newScore);
-      setLives(newLives);
+  const pan = usePan(fx, {
+    down: x => { g.current.tx = clamp(x, SW / 2, AREA_W - SW / 2); },
+    move: x => { g.current.tx = clamp(x, SW / 2, AREA_W - SW / 2); },
+  });
 
-      if (newLives <= 0) {
-        if (newScore > highScore.current) {
-          highScore.current = newScore;
-          AsyncStorage.setItem('ngHighScore', String(newScore)).catch(() => {});
-        }
-        setRunning(false);
-        setGameOver(true);
-        deathVibrate();
-      }
-
-      setTick(t => t + 1);
-    }, 16);
-
-    return () => clearInterval(loop);
-  }, [running]);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderMove: (_, gs) => {
-        playerX.current = Math.max(0, Math.min(width - PLAYER_SIZE, gs.moveX - PLAYER_SIZE / 2));
-      },
-    })
-  ).current;
-
+  const s = g.current;
+  const mult = Math.min(8, 1 + Math.floor(s.combo / 4));
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={onExit} style={styles.backBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}><Text style={styles.backText}>← BACK</Text></Pressable>
-        <Text style={styles.title}>NEON GALAXY</Text>
-        <View style={styles.stats}>
-          <Text style={styles.statText}>SCORE: {score}</Text>
-          <Text style={[styles.statText, { fontSize: 11, opacity: 0.7 }]}>LIVES: {lives} {multiplierActive.current ? '⚡2×' : ''}</Text>
-        </View>
-      </View>
-
-      <View style={styles.gameArea} {...panResponder.panHandlers}>
-        {/* Stars */}
-        {stars.map(star => (
-          <View key={star.id} style={{
-            position: 'absolute', left: star.x, top: star.y,
-            width: star.size, height: star.size,
-            backgroundColor: '#fff', borderRadius: star.size / 2, opacity: 0.6,
-          }} />
+    <GameScreen title="NEON GALAXY" emoji="🚀" accent={C.cyan} onExit={onExit} score={s.score} best={best}
+      hud={<>
+        <Lives n={s.lives} max={Math.max(3, s.lives)} />
+        <Text style={{ color: C.cyan, fontWeight: '800', fontSize: 12 }}>{s.shield > 0 ? `🛡️×${s.shield}  ` : ''}⚡ Nv.{s.weapon}</Text>
+        <View style={{ minWidth: 70, alignItems: 'flex-end' }}>{mult > 1 ? <Combo n={mult} /> : <Text style={{ color: C.dim, fontSize: 12 }}>Oleada {s.wave}</Text>}</View>
+      </>}>
+      <PlayArea fx={fx} bg="#04040e" {...pan}>
+        <Starfield stars={stars} offset={s.t * 70} />
+        {s.items.map(it => (
+          <View key={it.id} style={{ position: 'absolute', left: it.x - 15, top: it.y - 15, width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: alpha(C.amber, 0.15), borderWidth: 1, borderColor: C.amber, ...glow(C.amber, 8, 0.7) }}>
+            <Text style={{ fontSize: 15 }}>{it.type === 'W' ? '⚡' : it.type === 'S' ? '🛡️' : it.type === 'H' ? '❤️' : '💣'}</Text>
+          </View>
         ))}
-
-        {/* Lasers */}
-        {lasers.current.map(l => (
-          <View key={l.id} style={[styles.laser, { left: l.x, top: l.y }]} />
+        {s.enemies.map(e => (
+          <Text key={e.id} style={{ position: 'absolute', left: e.x - 4, top: e.y - 2, width: e.w + 8, height: e.h + 4, fontSize: e.w - 4, lineHeight: e.h + 4, textAlign: 'center' }}>{ENEMY[e.type].e}</Text>
         ))}
-
-        {/* Power-ups */}
-        {powerUps.current.map(p => (
-          <Text key={p.id} style={{ position: 'absolute', left: p.x, top: p.y, fontSize: 24 }}>🛡️</Text>
-        ))}
-
-        {/* Enemies */}
-        {enemies.current.map(e => (
-          <Text key={e.id} style={{
-            position: 'absolute',
-            left: e.x,
-            top: e.y,
-            fontSize: ENEMY_SIZE,
-            lineHeight: ENEMY_SIZE,
-          }}>
-            {e.type}
-          </Text>
-        ))}
-
-        {/* Player ship */}
-        <Text style={{
-          position: 'absolute',
-          left: playerX.current,
-          top: GAME_HEIGHT - PLAYER_SIZE - 10,
-          fontSize: PLAYER_SIZE - 4,
-          lineHeight: PLAYER_SIZE,
-        }}>
-          🚀
-        </Text>
-
-        {!running && (
-          <View style={styles.overlay}>
-            <Text style={styles.overlayTitle}>
-              {gameOver ? 'GAME OVER' : 'DEFEND THE GALAXY'}
-            </Text>
-            {gameOver && (
-              <Text style={styles.overlaySub}>BEST: {highScore.current}</Text>
-            )}
-            <Text style={styles.overlaySub}>
-              {gameOver
-                ? 'Collect 🛡️ for extra lives. Kill fast for 2× combo!'
-                : 'Drag to move. Auto-fire enabled. Collect 🛡️ shields!'}
-            </Text>
-            <Pressable style={styles.btn} onPress={startGame} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
-              <Text style={styles.btnText}>{gameOver ? 'RETRY' : 'START'}</Text>
-            </Pressable>
+        {s.boss && (
+          <View style={{ position: 'absolute', left: s.boss.x, top: s.boss.y, width: s.boss.w, height: s.boss.h, alignItems: 'center' }}>
+            <Text style={{ fontSize: 66, lineHeight: 72, ...tglow(C.amber, 16, 0.9) }}>{s.boss.e}</Text>
+            <Bar value={s.boss.hp} max={s.boss.max} color={C.red} h={6} w={s.boss.w} />
           </View>
         )}
-      </View>
-    </SafeAreaView>
+        {s.bullets.map(b => <View key={b.id} style={{ position: 'absolute', left: b.x - 2.5, top: b.y - 9, width: 5, height: 18, borderRadius: 3, backgroundColor: C.cyan, ...glow(C.cyan, 6, 1) }} />)}
+        {s.eb.map(b => <View key={b.id} style={{ position: 'absolute', left: b.x - b.r, top: b.y - b.r, width: b.r * 2, height: b.r * 2, borderRadius: b.r, backgroundColor: C.pink, ...glow(C.pink, 8, 1) }} />)}
+        {/* nave */}
+        {(s.lives > 0 || phase === 'ready') && (
+          <View style={{ position: 'absolute', left: s.x - SW / 2, top: SY - SH / 2, width: SW, height: SH, alignItems: 'center', opacity: s.inv > 0 && Math.floor(s.t * 14) % 2 ? 0.35 : 1 }}>
+            <View style={{ width: 0, height: 0, borderLeftWidth: SW / 2, borderRightWidth: SW / 2, borderBottomWidth: SH - 6, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: C.cyan }} />
+            <View style={{ position: 'absolute', top: 14, width: 8, height: 14, borderRadius: 4, backgroundColor: '#06101c' }} />
+            <View style={{ width: 8, height: 8 + (Math.floor(s.t * 30) % 3) * 3, marginTop: -2, borderRadius: 4, backgroundColor: C.orange, ...glow(C.orange, 8, 1) }} />
+            {s.shield > 0 && <View style={{ position: 'absolute', left: -9, top: -6, width: SW + 18, height: SW + 18, borderRadius: (SW + 18) / 2, borderWidth: 2, borderColor: alpha(C.cyan, 0.8), backgroundColor: alpha(C.cyan, 0.1) }} />}
+          </View>
+        )}
+        {s.banner && <Text style={{ position: 'absolute', top: AREA_H * 0.3, width: AREA_W, textAlign: 'center', color: C.text, fontSize: 24, fontWeight: '900', letterSpacing: 3, opacity: Math.min(1, s.banner.t), ...tglow(C.cyan, 12, 1) }}>{s.banner.text}</Text>}
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🚀" title={phase === 'over' ? 'FIN DEL VIAJE' : 'NEON GALAXY'}
+          subtitle={phase === 'over' ? `Llegaste a la oleada ${s.wave}` : 'Defiende la galaxia'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.cyan} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Arrastra para mover · disparo automático', '⚡ mejora el arma · 🛡️ escudo · ❤️ vida · 💣 bomba', 'Encadena bajas para subir el multiplicador'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 
 function CyberRun({ onExit }) {
-  const [running, setRunning] = useState(false);
-  const [score, setScore] = useState(0);
-  const [gameOver, setGameOver] = useState(false);
-  const [, setTick] = useState(0);
-  const [perfectBonus, setPerfectBonus] = useState(null);
+  const HOR = 74, SY = AREA_H - 104;
+  const LW = AREA_W * 0.32;
+  const fx = useFX();
+  const [best, submitBest] = useBest('cyber');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const initState = () => ({ lane: 1, lx: 1, jump: 0, slide: 0, t: 0, speed: 0.5, dist: 0, objs: [], next: 0, coins: 0, mag: 0, x2: 0, scroll: 0, score: 0, gx: 0, gy: 0, used: false });
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
+  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
+  const px = (lane, z) => AREA_W / 2 + (lane - 1) * LW * (0.16 + 0.84 * z);
+  const py = z => HOR + (SY - HOR) * z;
+  const sc = z => 0.22 + 0.78 * z;
 
-  const playerY = useRef(GAME_HEIGHT - CR_GROUND_HEIGHT - CR_PLAYER_SIZE);
-  const velocityY = useRef(0);
-  const jumpsLeft = useRef(2);
-  const obstacles = useRef([]);
-  const coins = useRef([]);
-  const lastObstacle = useRef(0);
-  const lastCoin = useRef(0);
-  const scoreRef = useRef(0);
-  const highScore = useRef(0);
-  const perfectBonusTimer = useRef(null);
-
-  const getSpeed = () => 6 + (scoreRef.current / 100);
-
-  const getBgColor = () => {
-    const t = Math.min((getSpeed() - 6) / 5, 1);
-    const r = Math.round(20 + t * 180);
-    const g = Math.round(20 - t * 10);
-    const b = Math.round(40 - t * 30);
-    return `rgb(${r},${g},${b})`;
+  const spawnRow = s => {
+    const r = Math.random();
+    const z = 0.02;
+    const free = randInt(0, 2);
+    if (r < 0.30) { // vagones: deja un carril libre
+      for (let l = 0; l < 3; l++) if (l !== free) s.objs.push({ id: uid(), k: 'wall', lane: l, z });
+      s.objs.push({ id: uid(), k: 'coin', lane: free, z }); s.objs.push({ id: uid(), k: 'coin', lane: free, z: z - 0.08 }); s.objs.push({ id: uid(), k: 'coin', lane: free, z: z - 0.16 });
+    } else if (r < 0.48) { for (let l = 0; l < 3; l++) s.objs.push({ id: uid(), k: 'low', lane: l, z }); } // saltar
+    else if (r < 0.64) { for (let l = 0; l < 3; l++) s.objs.push({ id: uid(), k: 'high', lane: l, z }); } // deslizar
+    else if (r < 0.74) { s.objs.push({ id: uid(), k: Math.random() < 0.5 ? 'low' : 'high', lane: free, z }); const o = (free + 1 + randInt(0, 1)) % 3; s.objs.push({ id: uid(), k: 'wall', lane: o, z }); }
+    else if (r < 0.80) s.objs.push({ id: uid(), k: Math.random() < 0.5 ? 'mag' : 'x2', lane: free, z });
+    else { for (let i = 0; i < 6; i++) s.objs.push({ id: uid(), k: 'coin', lane: free, z: z - i * 0.07 }); }
   };
 
-  const resetGame = () => {
-    setScore(0);
-    scoreRef.current = 0;
-    setGameOver(false);
-    setPerfectBonus(null);
-    playerY.current = GAME_HEIGHT - CR_GROUND_HEIGHT - CR_PLAYER_SIZE;
-    velocityY.current = 0;
-    jumpsLeft.current = 2;
-    obstacles.current = [];
-    coins.current = [];
-    lastCoin.current = 0;
-    if (perfectBonusTimer.current) clearTimeout(perfectBonusTimer.current);
+  const crash = s => {
+    fx.burst(px(s.lane, 1), SY, C.pink, 28, 300, 0.8, 6); fx.shake(12, 0.4); fx.flash(C.red, 0.35); hx.die();
+    setRes({ isNew: submitBest(s.score) });
+    setPhase('over');
   };
 
-  const startGame = () => { resetGame(); setRunning(true); };
-
-  const jump = () => {
-    if (!running) return;
-    if (jumpsLeft.current > 0) {
-      const isDoubleJump = jumpsLeft.current === 1;
-      velocityY.current = isDoubleJump ? CR_JUMP_FORCE * 0.7 : CR_JUMP_FORCE;
-      jumpsLeft.current -= 1;
-      Haptics.impactAsync(isDoubleJump ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light);
+  useLoop(phase === 'play', dt => {
+    const s = g.current;
+    s.t += dt;
+    s.speed = Math.min(1.05, 0.5 + s.t * 0.009);
+    s.dist += s.speed * dt * 60;
+    s.scroll += s.speed * dt;
+    s.lx += (s.lane - s.lx) * Math.min(1, dt * 16);
+    if (s.jump > 0) s.jump = Math.max(0, s.jump - dt);
+    if (s.slide > 0) s.slide = Math.max(0, s.slide - dt);
+    if (s.mag > 0) s.mag -= dt;
+    if (s.x2 > 0) s.x2 -= dt;
+    s.next -= s.speed * dt;
+    if (s.next <= 0) { spawnRow(s); s.next = Math.max(0.3, 0.55 - s.t * 0.002); }
+    s.objs.forEach(o => { o.z += s.speed * dt; });
+    s.objs = s.objs.filter(o => o.z < 1.2 && !o.gone);
+    const jumping = s.jump > 0.12;       // en el aire (no al despegar/aterrizar justo)
+    const sliding = s.slide > 0.1;
+    for (const o of s.objs) {
+      if (o.gone) continue;
+      const near = o.z > 0.92 && o.z < 1.06;
+      if ((o.k === 'coin' || o.k === 'mag' || o.k === 'x2')) {
+        const inLane = o.lane === s.lane || (o.k === 'coin' && s.mag > 0 && o.z > 0.8 && o.z < 1.08);
+        if (inLane && o.z > 0.9 && o.z < 1.08) {
+          o.gone = true; hx.tick();
+          const x = px(o.lane, 1);
+          if (o.k === 'coin') { s.coins += 1; fx.burst(x, SY - 20, C.amber, 6, 120, 0.35, 3); }
+          else { if (o.k === 'mag') { s.mag = 7; fx.pop(x, SY - 50, 'IMÁN', C.cyan, 16); } else { s.x2 = 8; fx.pop(x, SY - 50, 'PUNTOS ×2', C.lime, 16); } fx.ring(x, SY, C.lime, 50); hx.good(); }
+        }
+        continue;
+      }
+      if (!near || o.lane !== s.lane) continue;
+      if (o.k === 'wall' || (o.k === 'low' && !jumping) || (o.k === 'high' && !sliding)) { crash(s); return; }
     }
-  };
+    s.score = Math.floor(s.dist / 4 + s.coins * 3) * (s.x2 > 0 ? 2 : 1);
+  });
 
-  useEffect(() => {
-    if (!running) return;
+  const pan = usePan(fx, {
+    down: () => { const s = g.current; s.used = false; },
+    move: (x, y, gs) => {
+      const s = g.current;
+      if (phase !== 'play' || s.used) return;
+      const dx = gs.dx, dy = gs.dy;
+      if (Math.abs(dx) > 26 && Math.abs(dx) > Math.abs(dy)) { s.lane = clamp(s.lane + (dx > 0 ? 1 : -1), 0, 2); s.used = true; hx.tick(); }
+      else if (dy < -26) { if (s.jump <= 0) { s.jump = 0.62; s.slide = 0; hx.tap(); fx.burst(px(s.lane, 1), SY + 10, C.pink, 6, 100, 0.3, 3); } s.used = true; }
+      else if (dy > 26) { if (s.slide <= 0) { s.slide = 0.6; s.jump = 0; hx.tap(); } s.used = true; }
+    },
+    up: (x, y, gs) => {
+      const s = g.current;
+      if (phase !== 'play' || s.used) return;
+      if (Math.abs(gs.dx) < 8 && Math.abs(gs.dy) < 8) { if (s.jump <= 0) { s.jump = 0.62; s.slide = 0; hx.tap(); } }   // un toque = saltar
+    },
+  });
 
-    const loop = setInterval(() => {
-      const now = Date.now();
-      const currentSpeed = getSpeed();
-
-      velocityY.current += CR_GRAVITY;
-      playerY.current += velocityY.current;
-
-      const groundY = GAME_HEIGHT - CR_GROUND_HEIGHT - CR_PLAYER_SIZE;
-      if (playerY.current >= groundY) {
-        playerY.current = groundY;
-        velocityY.current = 0;
-        jumpsLeft.current = 2;
-      }
-
-      // Spawn obstacles
-      const spawnRate = Math.max(800, 2000 - scoreRef.current * 20);
-      if (now - lastObstacle.current > spawnRate) {
-        const roll = Math.random();
-        let obsHeight, obsWidth, emoji;
-        if (roll < 0.4) {
-          obsHeight = 60 + Math.random() * 20;
-          obsWidth = CR_OBSTACLE_WIDTH;
-          emoji = '🌵';
-        } else if (roll < 0.7) {
-          obsHeight = 30 + Math.random() * 10;
-          obsWidth = CR_OBSTACLE_WIDTH + 10;
-          emoji = '🚧';
-        } else {
-          obsHeight = 20 + Math.random() * 10;
-          obsWidth = CR_OBSTACLE_WIDTH + 20;
-          emoji = '⬛';
-        }
-        obstacles.current.push({
-          id: now,
-          x: width,
-          y: GAME_HEIGHT - CR_GROUND_HEIGHT - obsHeight,
-          width: obsWidth,
-          height: obsHeight,
-          passed: false,
-          emoji,
-        });
-        lastObstacle.current = now;
-      }
-
-      // Spawn coins
-      const coinSpawnRate = Math.max(1200, 3000 - scoreRef.current * 10);
-      if (now - lastCoin.current > coinSpawnRate) {
-        const floatHeights = [
-          GAME_HEIGHT - CR_GROUND_HEIGHT - CR_PLAYER_SIZE - 20,
-          GAME_HEIGHT - CR_GROUND_HEIGHT - CR_PLAYER_SIZE - 60,
-          GAME_HEIGHT - CR_GROUND_HEIGHT - CR_PLAYER_SIZE - 110,
-        ];
-        const coinY = floatHeights[Math.floor(Math.random() * floatHeights.length)];
-        coins.current.push({ id: now + 1, x: width + 50, y: coinY, size: 30, collected: false });
-        lastCoin.current = now;
-      }
-
-      let hit = false;
-      const playerRect = {
-        left: 50,
-        right: 50 + CR_PLAYER_SIZE,
-        top: playerY.current,
-        bottom: playerY.current + CR_PLAYER_SIZE,
-      };
-
-      // Update obstacles
-      for (let i = obstacles.current.length - 1; i >= 0; i--) {
-        const obs = obstacles.current[i];
-        obs.x -= currentSpeed;
-        const obsRect = { left: obs.x, right: obs.x + obs.width, top: obs.y, bottom: obs.y + obs.height };
-
-        if (
-          playerRect.left < obsRect.right &&
-          playerRect.right > obsRect.left &&
-          playerRect.top < obsRect.bottom &&
-          playerRect.bottom > obsRect.top
-        ) {
-          hit = true;
-        }
-
-        if (!obs.passed && obs.x + obs.width < playerRect.left) {
-          obs.passed = true;
-          scoreRef.current += 10;
-          setScore(scoreRef.current);
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-          // Perfect dodge: obstacle edge passed within 5px of player edge
-          const gap = playerRect.left - (obs.x + obs.width);
-          if (gap <= 5) {
-            scoreRef.current += 5;
-            setScore(scoreRef.current);
-            setPerfectBonus('+5 PERFECT!');
-            if (perfectBonusTimer.current) clearTimeout(perfectBonusTimer.current);
-            perfectBonusTimer.current = setTimeout(() => setPerfectBonus(null), 1000);
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-          }
-        }
-
-        if (obs.x + obs.width < 0) { obstacles.current.splice(i, 1); }
-      }
-
-      // Update coins
-      for (let i = coins.current.length - 1; i >= 0; i--) {
-        const coin = coins.current[i];
-        if (coin.collected) { coins.current.splice(i, 1); continue; }
-        coin.x -= currentSpeed;
-        const coinRect = { left: coin.x, right: coin.x + coin.size, top: coin.y, bottom: coin.y + coin.size };
-        if (
-          playerRect.left < coinRect.right &&
-          playerRect.right > coinRect.left &&
-          playerRect.top < coinRect.bottom &&
-          playerRect.bottom > coinRect.top
-        ) {
-          coin.collected = true;
-          scoreRef.current += 25;
-          setScore(scoreRef.current);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 60);
-        }
-        if (coin.x + coin.size < 0) { coins.current.splice(i, 1); }
-      }
-
-      if (hit) {
-        if (scoreRef.current > highScore.current) { highScore.current = scoreRef.current; }
-        setRunning(false);
-        setGameOver(true);
-        deathVibrate();
-      }
-
-      setTick(t => t + 1);
-    }, 16);
-
-    return () => clearInterval(loop);
-  }, [running]);
-
-  const isOnGround = playerY.current >= GAME_HEIGHT - CR_GROUND_HEIGHT - CR_PLAYER_SIZE - 1;
-  const bgColor = getBgColor();
-
+  const s = g.current;
+  const jumpH = s.jump > 0 ? Math.sin((1 - s.jump / 0.62) * Math.PI) * 78 : 0;
+  const sliding = s.slide > 0;
+  const cx = AREA_W / 2 + (s.lx - 1) * LW;
+  const lines = [-1.5, -0.5, 0.5, 1.5];
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={onExit} style={styles.backBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}><Text style={styles.backText}>← BACK</Text></Pressable>
-        <Text style={styles.title}>CYBER RUN</Text>
-        <View style={styles.stats}>
-          <Text style={styles.statText}>SCORE: {score}</Text>
-          <Text style={[styles.statText, { fontSize: 11, opacity: 0.7 }]}>BEST: {highScore.current}</Text>
+    <GameScreen title="CYBER RUN" emoji="🏃" accent={C.pink} onExit={onExit} score={s.score} best={best}
+      hud={<><Text style={{ color: C.dim, fontSize: 12 }}>🪙 <Text style={{ color: C.amber, fontWeight: '800' }}>{s.coins}</Text></Text><Text style={{ color: C.cyan, fontSize: 12, fontWeight: '800' }}>{s.mag > 0 ? `🧲 ${Math.ceil(s.mag)}s  ` : ''}{s.x2 > 0 ? `×2 ${Math.ceil(s.x2)}s` : ''}</Text><Text style={{ color: C.dim, fontSize: 12 }}>{Math.floor(s.dist)} m</Text></>}>
+      <PlayArea fx={fx} bg="#07030f" {...pan}>
+        <View style={{ position: 'absolute', left: 0, right: 0, top: 0, height: HOR, backgroundColor: alpha(C.pink, 0.08) }} />
+        <View style={{ position: 'absolute', left: 0, right: 0, top: HOR - 1, height: 2, backgroundColor: alpha(C.pink, 0.8), ...glow(C.pink, 8, 0.9) }} />
+        {/* líneas de carril en perspectiva */}
+        {lines.map(b => {
+          const x0 = AREA_W / 2 + b * LW * 0.16, x1 = AREA_W / 2 + b * LW;
+          const dx = x1 - x0, dy = AREA_H - HOR, len = Math.hypot(dx, dy);
+          return <View key={b} style={{ position: 'absolute', left: (x0 + x1) / 2 - 1, top: HOR + dy / 2 - len / 2, width: 2, height: len, backgroundColor: alpha(C.pink, 0.45), transform: [{ rotate: `${Math.atan2(-dx, dy)}rad` }] }} />;
+        })}
+        {Array.from({ length: 9 }, (_, i) => {
+          const z = ((i / 9 + s.scroll * 0.5) % 1);
+          const y = py(z * z + 0.001);
+          return <View key={i} style={{ position: 'absolute', left: 0, right: 0, top: y, height: 1, backgroundColor: alpha(C.pink, 0.14 + z * 0.1) }} />;
+        })}
+        {[...s.objs].sort((a, b) => a.z - b.z).map(o => {
+          const z = Math.min(1.15, Math.max(0, o.z));
+          if (z <= 0.01 || o.gone) return null;
+          const x = px(o.lane, z), y = py(z), k = sc(z);
+          if (o.k === 'wall') return <View key={o.id} style={{ position: 'absolute', left: x - 34 * k, top: y - 80 * k, width: 68 * k, height: 80 * k, borderRadius: 6 * k, backgroundColor: '#1a1030', borderWidth: 2, borderColor: C.violet, ...glow(C.violet, 10, 0.6) }}><View style={{ margin: 5 * k, height: 8 * k, backgroundColor: alpha(C.cyan, 0.6) }} /></View>;
+          if (o.k === 'low') return <View key={o.id} style={{ position: 'absolute', left: x - 30 * k, top: y - 22 * k, width: 60 * k, height: 22 * k, borderRadius: 4, backgroundColor: alpha(C.amber, 0.25), borderWidth: 2, borderColor: C.amber, ...glow(C.amber, 8, 0.6) }} />;
+          if (o.k === 'high') return <View key={o.id} style={{ position: 'absolute', left: x - 34 * k, top: y - 70 * k, width: 68 * k, height: 22 * k, borderRadius: 4, backgroundColor: alpha(C.red, 0.28), borderWidth: 2, borderColor: C.red, ...glow(C.red, 8, 0.6) }} />;
+          const emo = o.k === 'coin' ? '🪙' : o.k === 'mag' ? '🧲' : '⚡';
+          return <Text key={o.id} style={{ position: 'absolute', left: x - 14 * k, top: y - 40 * k, fontSize: 26 * k, lineHeight: 30 * k }}>{emo}</Text>;
+        })}
+        {/* sombra + corredor */}
+        <View style={{ position: 'absolute', left: cx - 18, top: SY + 4, width: 36, height: 9, borderRadius: 5, backgroundColor: '#000', opacity: 0.5 - jumpH / 260 }} />
+        <View style={{ position: 'absolute', left: cx - 14, top: SY - (sliding ? 30 : 56) - jumpH, width: 28, height: sliding ? 30 : 56, alignItems: 'center' }}>
+          <View style={{ width: 18, height: 18, borderRadius: 9, backgroundColor: '#ffd9c2' }}><View style={{ marginTop: 5, marginHorizontal: 2, height: 5, borderRadius: 3, backgroundColor: C.pink, ...glow(C.pink, 6, 1) }} /></View>
+          <View style={{ width: 26, flex: 1, marginTop: 1, borderRadius: 9, backgroundColor: C.pink, borderWidth: 2, borderColor: '#fff', ...glow(C.pink, 14, 0.9) }} />
+          {s.mag > 0 && <View style={{ position: 'absolute', left: -20, top: -10, width: 68, height: 68, borderRadius: 34, borderWidth: 1, borderColor: alpha(C.cyan, 0.5) }} />}
         </View>
-      </View>
-
-      <Pressable style={[styles.gameArea, { backgroundColor: bgColor }]} onPress={jump}>
-        <View style={[styles.ground, { height: CR_GROUND_HEIGHT }]} />
-
-        {/* Player emoji — 🏃 on ground, 🤖 in air */}
-        <Text style={{
-          position: 'absolute',
-          left: 46,
-          top: playerY.current - 4,
-          fontSize: CR_PLAYER_SIZE,
-          lineHeight: CR_PLAYER_SIZE + 8,
-        }}>
-          {isOnGround ? '🏃' : '🤖'}
-        </Text>
-
-        {/* Obstacles */}
-        {obstacles.current.map(obs => (
-          <Text key={obs.id} style={{
-            position: 'absolute',
-            left: obs.x,
-            top: obs.y,
-            fontSize: obs.height * 0.85,
-            lineHeight: obs.height + 4,
-            width: obs.width + 8,
-            textAlign: 'center',
-          }}>
-            {obs.emoji}
-          </Text>
-        ))}
-
-        {/* Coins */}
-        {coins.current.map(coin => (
-          <Text key={coin.id} style={{
-            position: 'absolute',
-            left: coin.x,
-            top: coin.y,
-            fontSize: coin.size,
-            lineHeight: coin.size + 4,
-          }}>
-            🪙
-          </Text>
-        ))}
-
-        {/* Perfect dodge flash */}
-        {perfectBonus && (
-          <Text style={{
-            position: 'absolute',
-            left: 100,
-            top: playerY.current - 32,
-            color: '#FFD700',
-            fontWeight: 'bold',
-            fontSize: 16,
-          }}>
-            {perfectBonus}
-          </Text>
-        )}
-
-        {/* Double jump indicator */}
-        {running && jumpsLeft.current === 1 && (
-          <Text style={{
-            position: 'absolute',
-            left: 52,
-            top: playerY.current - 20,
-            fontSize: 12,
-            color: '#00ffcc',
-            opacity: 0.9,
-          }}>▲</Text>
-        )}
-
-        {!running && (
-          <View style={styles.overlay}>
-            <Text style={styles.overlayTitle}>{gameOver ? '💥 CRASHED' : '🤖 CYBER RUN'}</Text>
-            <Text style={styles.overlaySub}>Tap to jump • Tap again mid-air for double jump</Text>
-            {gameOver && (
-              <Text style={[styles.overlaySub, { color: '#FFD700', marginBottom: 4 }]}>
-                BEST: {highScore.current}
-              </Text>
-            )}
-            <Pressable style={styles.btn} onPress={startGame} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
-              <Text style={styles.btnText}>{gameOver ? 'RETRY' : 'START'}</Text>
-            </Pressable>
-          </View>
-        )}
-      </Pressable>
-    </SafeAreaView>
+        {phase === 'play' && s.t < 4 && <Text pointerEvents="none" style={{ position: 'absolute', bottom: 8, width: AREA_W, textAlign: 'center', color: alpha('#ffffff', 0.4), fontSize: 11, fontWeight: '800', letterSpacing: 1 }}>◀ ▶ CARRIL · ▲ SALTAR · ▼ DESLIZAR</Text>}
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🏃" title={phase === 'over' ? 'SISTEMA CAÍDO' : 'CYBER RUN'}
+          subtitle={phase === 'over' ? `${Math.floor(s.dist)} m · ${s.coins} monedas` : 'Corre por la ciudad neón'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.pink} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Desliza ◀ ▶ para cambiar de carril', '▲ saltar barreras bajas · ▼ deslizarte bajo las altas', '🧲 imán · ⚡ puntos ×2'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 
@@ -2622,349 +2437,107 @@ function Breakout({ onExit }) {
 
 // ==========================================
 function GalacticHunt({ onExit }) {
-  const [gameState, setGameState] = useState('idle'); // 'idle' | 'playing' | 'roundEnd' | 'gameOver'
-  const [score, setScore] = useState(0);
-  const [round, setRound] = useState(1);
-  const [ammo, setAmmo] = useState(10);
-  const [timeLeft, setTimeLeft] = useState(30);
-  const [targets, setTargets] = useState([]);
-  const [crosshair, setCrosshair] = useState(null);   // { x, y }
-  const [splatters, setSplatters] = useState([]);      // [{ id, x, y, anim, dots }]
+  const MAG = 8;
+  const fx = useFX();
+  const [best, submitBest] = useBest('galactic');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const stars = useRef(makeStars(50)).current;
+  const initState = () => ({ time: 45, t: 0, score: 0, combo: 0, best: 0, ammo: MAG, reload: 0, targets: [], spawn: 0.4, hits: 0, shots: 0, marks: [], pending: null });
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
+  const TYPES = {
+    ufo: { e: '🛸', size: 46, pts: 20, spd: 150 },
+    alien: { e: '👽', size: 44, pts: 10, spd: 105 },
+    gem: { e: '💎', size: 34, pts: 50, spd: 270 },
+    bomb: { e: '💣', size: 40, pts: 0, spd: 120 },
+    clock: { e: '⏱️', size: 38, pts: 0, spd: 140 },
+  };
+  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
 
-  const targetsRef = useRef([]);
-  const ammoRef = useRef(10);
-  const scoreRef = useRef(0);
-  const timeRef = useRef(30);
-  const roundRef = useRef(1);
-  const gameStateRef = useRef('idle');
-  const nextIdRef = useRef(0);
-  const gameLoopRef = useRef(null);
-  const timerRef = useRef(null);
-  const spawnTimeoutRef = useRef(null);
-  const crosshairTimer = useRef(null);
-  const splatterIdRef = useRef(0);
-
-  const stars = useRef(
-    Array.from({ length: 60 }, (_, i) => ({
-      id: i,
-      x: Math.random() * width,
-      y: Math.random() * GAME_HEIGHT,
-      size: Math.random() * 2.5 + 1,
-      opacity: 0.4 + Math.random() * 0.6,
-    }))
-  ).current;
-
-  const TARGET_TYPES = [
-    { emoji: '🦆', points: 10, baseSpeed: 2.5, size: 44 },
-    { emoji: '🛸', points: 20, baseSpeed: 3.5, size: 44 },
-    { emoji: '💎', points: 50, baseSpeed: 5.0, size: 36 },
-    { emoji: '🦆', points: 10, baseSpeed: 2.5, size: 44 },
-    { emoji: '🛸', points: 20, baseSpeed: 3.5, size: 44 },
-  ];
-
-  const cleanup = () => {
-    clearInterval(gameLoopRef.current);
-    clearInterval(timerRef.current);
-    clearTimeout(spawnTimeoutRef.current);
+  const spawn = s => {
+    const r = Math.random();
+    const type = r < 0.38 ? 'ufo' : r < 0.66 ? 'alien' : r < 0.78 ? 'gem' : r < 0.9 ? 'bomb' : 'clock';
+    const d = TYPES[type];
+    const side = Math.random() < 0.5 ? 1 : -1;
+    const spd = d.spd * (1 + Math.min(0.8, s.t / 70)) * rand(0.85, 1.2);
+    s.targets.push({
+      id: uid(), type, size: d.size, x: side > 0 ? -d.size : AREA_W + d.size, y: rand(60, AREA_H - 170),
+      vx: spd * side, vy: rand(-30, 30), ph: Math.random() * 6, wob: type === 'alien' ? 70 : type === 'gem' ? 20 : 35,
+    });
   };
 
-  const spawnTarget = () => {
-    const type = TARGET_TYPES[Math.floor(Math.random() * TARGET_TYPES.length)];
-    const speed = type.baseSpeed * (0.8 + Math.random() * 0.5);
-    const side = Math.floor(Math.random() * 3); // 0=left, 1=right, 2=top
-    let x, y, vx, vy;
-    if (side === 0) {
-      x = -type.size;
-      y = 60 + Math.random() * (GAME_HEIGHT - 120);
-      vx = speed;
-      vy = (Math.random() - 0.5) * speed * 0.7;
-    } else if (side === 1) {
-      x = width + type.size;
-      y = 60 + Math.random() * (GAME_HEIGHT - 120);
-      vx = -speed;
-      vy = (Math.random() - 0.5) * speed * 0.7;
-    } else {
-      x = type.size + Math.random() * (width - type.size * 2);
-      y = -type.size;
-      vx = (Math.random() - 0.5) * speed * 0.7;
-      vy = speed;
+  const shoot = (x, y) => {
+    const s = g.current;
+    if (phase !== 'play') return;
+    if (s.reload > 0) { fx.pop(x, y - 20, 'RECARGANDO', C.dim, 12); return; }
+    s.ammo -= 1; s.shots += 1;
+    fx.ring(x, y, C.cyan, 26);
+    let hit = null;
+    for (let i = s.targets.length - 1; i >= 0; i--) {
+      const t = s.targets[i];
+      if (Math.hypot(t.x + t.size / 2 - x, t.y + t.size / 2 - y) < t.size / 2 + 14) { hit = i; break; }
     }
-    targetsRef.current = [...targetsRef.current, {
-      id: nextIdRef.current++,
-      x, y, vx, vy,
-      emoji: type.emoji,
-      points: type.points,
-      size: type.size,
-      active: true,
-    }];
-  };
-
-  const scheduleSpawn = () => {
-    if (gameStateRef.current !== 'playing') return;
-    spawnTimeoutRef.current = setTimeout(() => {
-      if (gameStateRef.current === 'playing') {
-        spawnTarget();
-        scheduleSpawn();
+    if (hit == null) {
+      s.combo = 0; hx.tap();
+    } else {
+      const t = s.targets.splice(hit, 1)[0];
+      const cx = t.x + t.size / 2; const cy = t.y + t.size / 2;
+      s.hits += 1;
+      if (t.type === 'bomb') {
+        s.time = Math.max(0, s.time - 5); s.combo = 0;
+        fx.burst(cx, cy, C.red, 22, 260); fx.shake(9); fx.flash(C.red, 0.3); fx.pop(cx, cy, '-5s', C.red, 22); hx.bad();
+      } else if (t.type === 'clock') {
+        s.time += 4;
+        fx.burst(cx, cy, C.lime, 14, 200); fx.pop(cx, cy, '+4s', C.lime, 22); hx.good();
+      } else {
+        s.combo += 1; s.best = Math.max(s.best, s.combo);
+        const mult = 1 + Math.floor(s.combo / 3);
+        const pts = TYPES[t.type].pts * mult;
+        s.score += pts;
+        fx.burst(cx, cy, t.type === 'gem' ? C.cyan : C.pink, 14, 220); fx.pop(cx, cy, `+${pts}`, mult > 1 ? C.amber : C.text, 18);
+        hx.hit();
       }
-    }, 800 + Math.random() * 1200);
+    }
+    if (s.ammo <= 0) s.reload = 1.1;
   };
 
-  const endRound = () => {
-    if (gameStateRef.current !== 'playing') return;
-    gameStateRef.current = 'roundEnd';
-    cleanup();
-    setGameState('roundEnd');
-  };
-
-  const startRound = () => {
-    targetsRef.current = [];
-    ammoRef.current = 10;
-    timeRef.current = 30;
-    gameStateRef.current = 'playing';
-    setTargets([]);
-    setAmmo(10);
-    setTimeLeft(30);
-    setGameState('playing');
-
-    gameLoopRef.current = setInterval(() => {
-      targetsRef.current = targetsRef.current.map(t => {
-        if (!t.active) return t;
-        let nx = t.x + t.vx;
-        let ny = t.y + t.vy;
-        let nvx = t.vx;
-        let nvy = t.vy;
-        if (nx <= 0 || nx >= width - t.size) { nvx = -nvx; nx = Math.max(0, Math.min(width - t.size, nx)); }
-        if (ny <= 0 || ny >= GAME_HEIGHT - t.size) { nvy = -nvy; ny = Math.max(0, Math.min(GAME_HEIGHT - t.size, ny)); }
-        return { ...t, x: nx, y: ny, vx: nvx, vy: nvy };
-      }).filter(t => t.active);
-      setTargets([...targetsRef.current]);
-    }, 16);
-
-    timerRef.current = setInterval(() => {
-      timeRef.current -= 1;
-      setTimeLeft(timeRef.current);
-      if (timeRef.current <= 0) endRound();
-    }, 1000);
-
-    scheduleSpawn();
-  };
-
-  const showCrosshair = (x, y) => {
-    setCrosshair({ x, y });
-    if (crosshairTimer.current) clearTimeout(crosshairTimer.current);
-    crosshairTimer.current = setTimeout(() => setCrosshair(null), 350);
-  };
-
-  const addSplatter = (x, y) => {
-    const id = splatterIdRef.current++;
-    const anim = new Animated.Value(1);
-    const dots = Array.from({ length: 8 }, (_, i) => {
-      const angle = (i / 8) * Math.PI * 2 + (i * 0.3);
-      const r = 6 + (i % 3) * 9;
-      const size = 5 + (i % 4) * 3;
-      return { dx: Math.cos(angle) * r, dy: Math.sin(angle) * r, size };
-    });
-    setSplatters(prev => [...prev, { id, x, y, anim, dots }]);
-    Animated.timing(anim, { toValue: 0, duration: 600, useNativeDriver: true }).start(() => {
-      setSplatters(prev => prev.filter(s => s.id !== id));
-    });
-  };
-
-  const handleTargetHit = (targetId, points, cx, cy) => {
-    if (ammoRef.current <= 0 || gameStateRef.current !== 'playing') return;
-    ammoRef.current -= 1;
-    scoreRef.current += points;
-    targetsRef.current = targetsRef.current.filter(t => t.id !== targetId);
-    setAmmo(ammoRef.current);
-    setScore(scoreRef.current);
-    setTargets([...targetsRef.current]);
-    showCrosshair(cx, cy);
-    addSplatter(cx, cy);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    if (ammoRef.current <= 0) endRound();
-  };
-
-  const handleMiss = (lx, ly) => {
-    if (ammoRef.current <= 0 || gameStateRef.current !== 'playing') return;
-    ammoRef.current -= 1;
-    setAmmo(ammoRef.current);
-    showCrosshair(lx, ly);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (ammoRef.current <= 0) endRound();
-  };
-
-  const nextRound = () => {
-    roundRef.current += 1;
-    setRound(roundRef.current);
-    startRound();
-  };
-
-  const resetGame = () => {
-    cleanup();
-    scoreRef.current = 0;
-    roundRef.current = 1;
-    targetsRef.current = [];
-    gameStateRef.current = 'idle';
-    setScore(0);
-    setRound(1);
-    setTargets([]);
-    setGameState('idle');
-  };
-
-  useEffect(() => () => cleanup(), []);
-
-  const ammoBar = Array.from({ length: 10 }, (_, i) => (i < ammo ? '🔫' : '▫️')).join('');
-
+  useLoop(phase === 'play', dt => {
+    const s = g.current;
+    s.t += dt; s.time -= dt;
+    if (s.reload > 0) { s.reload -= dt; if (s.reload <= 0) { s.ammo = MAG; hx.tick(); } }
+    s.spawn -= dt;
+    if (s.spawn <= 0) { spawn(s); s.spawn = Math.max(0.35, 1.0 - s.t * 0.012) * rand(0.6, 1.2); }
+    s.targets.forEach(t => { t.x += t.vx * dt; t.y += t.vy * dt + Math.sin(s.t * 3 + t.ph) * t.wob * dt; });
+    s.targets = s.targets.filter(t => t.x > -80 && t.x < AREA_W + 80 && t.y > -40 && t.y < AREA_H);
+    if (s.time <= 0) {
+      s.time = 0; hx.win();
+      setRes({ isNew: submitBest(s.score) });
+      setPhase('over');
+    }
+  });
+  const pan = usePan(fx, { down: shoot });
+  const s = g.current;
+  const mult = 1 + Math.floor(s.combo / 3);
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: '#070720' }]}>
-      <View style={[styles.header, { backgroundColor: 'rgba(0,0,20,0.85)', paddingTop: 6, paddingBottom: 6 }]}>
-        <Pressable onPress={() => { cleanup(); onExit(); }} style={styles.backBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
-          <Text style={styles.backText}>← BACK</Text>
-        </Pressable>
-        <Text style={[styles.title, { color: '#a78bfa' }]}>GALACTIC HUNT</Text>
-        <View style={styles.stats}>
-          <Text style={styles.statText}>⭐ {score}</Text>
-          <Text style={[styles.statText, { marginLeft: 12 }]}>R{round}/3</Text>
-        </View>
-      </View>
-
-      <Pressable style={[styles.gameArea, { backgroundColor: '#070720', borderColor: '#2e1065' }]}
-        onPress={e => handleMiss(e.nativeEvent.locationX, e.nativeEvent.locationY)}>
-        {/* Starfield */}
-        {stars.map(star => (
-          <View
-            key={star.id}
-            style={{
-              position: 'absolute', left: star.x, top: star.y,
-              width: star.size, height: star.size,
-              borderRadius: star.size / 2,
-              backgroundColor: '#ffffff',
-              opacity: star.opacity,
-            }}
-          />
+    <GameScreen title="GALACTIC HUNT" emoji="🛸" accent={C.violet} onExit={onExit} score={s.score} best={best}
+      hud={<>
+        <Text style={{ color: s.time < 10 ? C.red : C.text, fontWeight: '900', fontSize: 15 }}>⏱ {Math.ceil(s.time)}s</Text>
+        <View style={{ flexDirection: 'row' }}>{Array.from({ length: MAG }, (_, i) => <View key={i} style={{ width: 7, height: 14, marginHorizontal: 1.5, borderRadius: 2, backgroundColor: s.reload > 0 ? C.dim : i < s.ammo ? C.amber : alpha(C.amber, 0.15) }} />)}</View>
+        <View style={{ minWidth: 70, alignItems: 'flex-end' }}>{mult > 1 ? <Combo n={mult} /> : <Text style={{ color: C.dim, fontSize: 12 }}>{s.reload > 0 ? 'Recargando…' : ' '}</Text>}</View>
+      </>}>
+      <PlayArea fx={fx} bg="#05030f" {...pan}>
+        <Starfield stars={stars} offset={s.t * 20} />
+        <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 70, backgroundColor: alpha(C.violet, 0.1), borderTopWidth: 1, borderTopColor: alpha(C.violet, 0.5) }} />
+        {s.targets.map(t => (
+          <Text key={t.id} style={{ position: 'absolute', left: t.x, top: t.y, width: t.size, textAlign: 'center', fontSize: t.size - 6, lineHeight: t.size }}>{TYPES[t.type].e}</Text>
         ))}
-
-        {/* HUD: ammo + timer */}
-        {gameState === 'playing' && (
-          <View style={{ position: 'absolute', top: 8, left: 12, right: 12, zIndex: 10 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ color: '#c4b5fd', fontSize: 13, letterSpacing: 1 }}>{ammoBar}</Text>
-              <Text style={{ color: timeLeft <= 10 ? '#f87171' : '#e2e8f0', fontSize: 16, fontWeight: 'bold' }}>
-                ⏱ {timeLeft}s
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* Blood splatters */}
-        {splatters.map(s => (
-          <Animated.View key={s.id} pointerEvents="none" style={{ position: 'absolute', left: s.x, top: s.y, opacity: s.anim, zIndex: 16 }}>
-            {s.dots.map((d, i) => (
-              <View key={i} style={{
-                position: 'absolute',
-                left: d.dx - d.size / 2,
-                top: d.dy - d.size / 2,
-                width: d.size,
-                height: d.size,
-                borderRadius: d.size / 2,
-                backgroundColor: i % 2 === 0 ? '#cc0000' : '#ff2222',
-              }} />
-            ))}
-            <View style={{ position: 'absolute', left: -5, top: -5, width: 10, height: 10, borderRadius: 5, backgroundColor: '#ff0000' }} />
-          </Animated.View>
-        ))}
-
-        {/* Crosshair */}
-        {crosshair && (
-          <View pointerEvents="none" style={{ position: 'absolute', left: crosshair.x - 22, top: crosshair.y - 22, width: 44, height: 44, zIndex: 17 }}>
-            <View style={{ position: 'absolute', top: 21, left: 0, width: 44, height: 2, backgroundColor: '#ffff00', opacity: 0.9 }} />
-            <View style={{ position: 'absolute', left: 21, top: 0, width: 2, height: 44, backgroundColor: '#ffff00', opacity: 0.9 }} />
-            <View style={{ position: 'absolute', top: 7, left: 7, width: 30, height: 30, borderRadius: 15, borderWidth: 2, borderColor: '#ffff00', backgroundColor: 'transparent', opacity: 0.8 }} />
-          </View>
-        )}
-
-        {/* Targets */}
-        {gameState === 'playing' && targets.map(target => (
-          <Pressable
-            key={target.id}
-            onPress={e => {
-              e.stopPropagation();
-              handleTargetHit(target.id, target.points, target.x + target.size / 2, target.y + target.size / 2);
-            }}
-            style={{
-              position: 'absolute',
-              left: target.x,
-              top: target.y,
-              width: target.size,
-              height: target.size,
-              justifyContent: 'center',
-              alignItems: 'center',
-            }}
-            hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-          >
-            <Text style={{ fontSize: target.size * 0.76, lineHeight: target.size }}>{target.emoji}</Text>
-          </Pressable>
-        ))}
-
-        {/* Idle overlay */}
-        {gameState === 'idle' && (
-          <View style={[styles.overlay, { backgroundColor: 'rgba(7,7,32,0.93)' }]}>
-            <Text style={[styles.overlayTitle, { color: '#a78bfa', fontSize: 30, marginBottom: 6 }]}>🛸 GALACTIC HUNT 🛸</Text>
-            <Text style={styles.overlaySub}>Tap targets before they escape!</Text>
-            <Text style={[styles.overlaySub, { fontSize: 14, color: '#c4b5fd', marginBottom: 2 }]}>🦆 Duck = 10 pts  •  🛸 UFO = 20 pts</Text>
-            <Text style={[styles.overlaySub, { fontSize: 14, color: '#c4b5fd', marginBottom: 2 }]}>💎 Gem = 50 pts</Text>
-            <Text style={[styles.overlaySub, { fontSize: 13, color: '#94a3b8', marginBottom: 28 }]}>10 shots  •  30 seconds  •  3 rounds</Text>
-            <Pressable style={[styles.btn, { backgroundColor: '#7c3aed' }]} onPress={startRound} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
-              <Text style={[styles.btnText, { color: '#fff' }]}>START GAME</Text>
-            </Pressable>
-            <Pressable style={[styles.btn, { backgroundColor: '#374151', marginTop: 14 }]} onPress={() => { cleanup(); onExit(); }} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
-              <Text style={[styles.btnText, { color: '#fff' }]}>BACK TO MENU</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {/* Round-end overlay */}
-        {gameState === 'roundEnd' && (
-          <View style={[styles.overlay, { backgroundColor: 'rgba(7,7,32,0.93)' }]}>
-            <Text style={[styles.overlayTitle, { color: '#fbbf24' }]}>ROUND {round} CLEAR!</Text>
-            <Text style={[styles.overlaySub, { fontSize: 22, color: '#fff', marginBottom: 6 }]}>Score: {score}</Text>
-            <Text style={[styles.overlaySub, { marginBottom: 28 }]}>
-              {round < 3 ? `Round ${round + 1} of 3 up next!` : 'All rounds complete!'}
-            </Text>
-            {round < 3 ? (
-              <Pressable style={[styles.btn, { backgroundColor: '#7c3aed' }]} onPress={nextRound} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
-                <Text style={[styles.btnText, { color: '#fff' }]}>NEXT ROUND ▶</Text>
-              </Pressable>
-            ) : (
-              <Pressable style={[styles.btn, { backgroundColor: '#7c3aed' }]} onPress={() => {
-                gameStateRef.current = 'gameOver';
-                setGameState('gameOver');
-              }} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
-                <Text style={[styles.btnText, { color: '#fff' }]}>SEE RESULTS</Text>
-              </Pressable>
-            )}
-            <Pressable style={[styles.btn, { backgroundColor: '#374151', marginTop: 14 }]} onPress={() => { cleanup(); onExit(); }} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
-              <Text style={[styles.btnText, { color: '#fff' }]}>QUIT</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {/* Game-over overlay */}
-        {gameState === 'gameOver' && (
-          <View style={[styles.overlay, { backgroundColor: 'rgba(7,7,32,0.93)' }]}>
-            <Text style={[styles.overlayTitle, { color: '#f472b6', fontSize: 34 }]}>GAME OVER</Text>
-            <Text style={[styles.overlaySub, { fontSize: 24, color: '#fbbf24', marginBottom: 4 }]}>Final Score</Text>
-            <Text style={{ fontSize: 56, fontWeight: '900', color: '#fff', marginBottom: 28 }}>{score}</Text>
-            <Pressable style={[styles.btn, { backgroundColor: '#7c3aed' }]} onPress={resetGame} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
-              <Text style={[styles.btnText, { color: '#fff' }]}>PLAY AGAIN</Text>
-            </Pressable>
-            <Pressable style={[styles.btn, { backgroundColor: '#374151', marginTop: 14 }]} onPress={() => { cleanup(); onExit(); }} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
-              <Text style={[styles.btnText, { color: '#fff' }]}>BACK TO MENU</Text>
-            </Pressable>
-          </View>
-        )}
-      </Pressable>
-    </SafeAreaView>
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🛸" title={phase === 'over' ? '¡TIEMPO!' : 'GALACTIC HUNT'}
+          subtitle={phase === 'over' ? `Precisión ${s.shots ? Math.round((s.hits / s.shots) * 100) : 0}% · Mejor racha ${s.best}` : '45 segundos de caza'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.violet} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Toca los objetivos para dispararles', '🛸 20 · 👽 10 · 💎 50 · ⏱️ +4s · 💣 -5s', 'Cargador de 8 balas · fallar rompe la racha'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 
@@ -3826,203 +3399,114 @@ function VoidCrawler({ onExit }) {
 const NT_LANES = 8;
 
 function NeonTunnel({ onExit }) {
-  const [phase, setPhase] = useState('idle');
-  const [, setTick] = useState(0);
+  const N = 8;
+  const CX = AREA_W / 2, CY = AREA_H * 0.46;
+  const MAXR = Math.min(AREA_W, AREA_H) * 0.5;
+  const PR = MAXR * 0.86;
+  const fx = useFX();
+  const [best, submitBest] = useBest('tunnel');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const initState = () => ({ lane: 0, ang: 0, rings: [], t: 0, dist: 0, speed: 0.55, since: 0, passed: 0, streak: 0, gems: 0, score: 0, spin: 0 });
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
 
-  const phaseRef  = useRef('idle');
-  const scoreRef  = useRef(0);
-  const bestRef   = useRef(0);
-  const laneRef   = useRef(0);
-  const ringsRef  = useRef([]);
-  const ringIdRef = useRef(0);
-  const speedRef  = useRef(2);
-  const frameRef  = useRef(0);
-
-  const CX = width / 2;
-  const CY = GAME_HEIGHT * 0.5;
-  const MAX_R = Math.min(width, GAME_HEIGHT) * 0.42;
-  const PLAYER_R = MAX_R * 0.88;
-  const SPAWN_GAP = MAX_R * 0.3;
-
-  useEffect(() => {
-    AsyncStorage.getItem('ntBest').then(v => {
-      if (v) { bestRef.current = +v; setTick(t => t + 1); }
-    }).catch(() => {});
-  }, []);
-
-  const spawnRing = () => {
-    const nFree = 3;
-    const freeStart = Math.floor(Math.random() * NT_LANES);
-    const free = new Set(Array.from({ length: nFree }, (_, i) => (freeStart + i) % NT_LANES));
-    ringsRef.current.push({ id: ringIdRef.current++, r: 0, free, hue: (ringIdRef.current * 43) % 360, checked: false });
+  const spawnRing = s => {
+    const nFree = s.passed > 40 ? 2 : 3;
+    const f0 = randInt(0, N - 1);
+    const free = []; for (let i = 0; i < nFree; i++) free.push((f0 + i) % N);
+    s.rings.push({ id: uid(), z: 0.02, free, hue: (s.passed * 23) % 360, gem: Math.random() < 0.45 ? free[randInt(0, nFree - 1)] : -1, done: false });
   };
-
-  const startGame = () => {
-    ringsRef.current = [];
-    frameRef.current = 0;
-    scoreRef.current = 0;
-    speedRef.current = 2;
-    laneRef.current = 0;
-    ringIdRef.current = 0;
-    phaseRef.current = 'running';
-    setPhase('running');
-    spawnRing();
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+  const start = () => { fx.clear(); g.current = initState(); spawnRing(g.current); setPhase('play'); hx.hit(); };
+  const shift = d => {
+    const s = g.current;
+    if (phase !== 'play') return;
+    s.lane = (s.lane + d + N) % N; hx.tick();
   };
+  const pos = (lane, r, spin) => { const a = (lane / N) * Math.PI * 2 - Math.PI / 2 + spin; return { x: CX + Math.cos(a) * r, y: CY + Math.sin(a) * r, a }; };
 
-  const shiftLane = (dir) => {
-    if (phaseRef.current !== 'running') return;
-    laneRef.current = (laneRef.current + dir + NT_LANES) % NT_LANES;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-  };
-
-  useEffect(() => {
-    if (phase !== 'running') return;
-    const loop = setInterval(() => {
-      if (phaseRef.current !== 'running') return;
-      frameRef.current++;
-      speedRef.current = Math.min(4.5, 2 + frameRef.current * 0.001);
-      scoreRef.current = Math.floor(frameRef.current * 0.6);
-
-      for (const ring of ringsRef.current) ring.r += speedRef.current;
-
-      const last = ringsRef.current[ringsRef.current.length - 1];
-      if (!last || last.r > SPAWN_GAP) spawnRing();
-
-      for (let i = ringsRef.current.length - 1; i >= 0; i--) {
-        const ring = ringsRef.current[i];
-        if (!ring.checked && ring.r >= PLAYER_R - 5 && ring.r <= PLAYER_R + 5) {
-          ring.checked = true;
-          if (!ring.free.has(laneRef.current)) {
-            phaseRef.current = 'dead';
-            setPhase('dead');
-            deathVibrate();
-            if (scoreRef.current > bestRef.current) {
-              bestRef.current = scoreRef.current;
-              AsyncStorage.setItem('ntBest', String(scoreRef.current)).catch(() => {});
-            }
-            return;
-          } else {
-            popVibrate();
-          }
+  useLoop(phase === 'play', dt => {
+    const s = g.current;
+    s.t += dt;
+    s.speed = Math.min(1.5, 0.55 + s.t * 0.012);
+    s.dist += s.speed * dt;
+    s.since += s.speed * dt;
+    if (s.since > 0.27) { s.since = 0; spawnRing(s); }
+    // ángulo suave hacia el carril
+    const target = s.lane;
+    let cur = s.ang; let diff = ((target - cur) % N + N) % N; if (diff > N / 2) diff -= N;
+    s.ang = cur + diff * Math.min(1, dt * 22);
+    for (let i = s.rings.length - 1; i >= 0; i--) {
+      const r = s.rings[i];
+      r.z += s.speed * dt;
+      if (!r.done && r.z >= 1) {
+        r.done = true;
+        if (!r.free.includes(s.lane)) {
+          const p = pos(s.lane, PR, 0);
+          fx.burst(p.x, p.y, C.red, 26, 280, 0.8, 6); fx.shake(11, 0.4); fx.flash(C.red, 0.35); hx.die();
+          setRes({ isNew: submitBest(s.score) });
+          setPhase('over');
+          return;
         }
-        if (ring.r > MAX_R + 30) ringsRef.current.splice(i, 1);
+        s.passed += 1; s.streak += 1;
+        const mult = 1 + Math.floor(s.streak / 8);
+        s.score += 10 * mult;
+        if (r.gem === s.lane) { s.gems += 1; s.score += 25 * mult; const p = pos(s.lane, PR, 0); fx.burst(p.x, p.y, C.amber, 12, 180); fx.pop(p.x, p.y - 20, `+${25 * mult}`, C.amber, 16); hx.good(); }
+        else hx.tap();
+        if (s.streak % 8 === 0) { fx.ring(CX, CY, C.lime, 120); fx.pop(CX, CY - 50, `RACHA ×${1 + s.streak / 8}`, C.lime, 20); }
       }
-      setTick(t => t + 1);
-    }, 16);
-    return () => clearInterval(loop);
-  }, [phase]);
-
-  const getLanePos = (lane, r) => {
-    const angle = (lane / NT_LANES) * Math.PI * 2 - Math.PI / 2;
-    return { x: CX + Math.cos(angle) * r, y: CY + Math.sin(angle) * r };
-  };
-
-  const playerPos = getLanePos(laneRef.current, PLAYER_R);
-
+      if (r.z > 1.25) s.rings.splice(i, 1);
+    }
+  });
+  const pan = usePan(fx, { down: x => shift(x < AREA_W / 2 ? -1 : 1) });
+  const s = g.current;
+  const mult = 1 + Math.floor(s.streak / 8);
+  const dang = z => z > 0.72;
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: '#000010' }]}>
-      <View style={styles.header}>
-        <Pressable onPress={onExit} style={styles.backBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}><Text style={styles.backText}>← BACK</Text></Pressable>
-        <Text style={[styles.title, { color: '#00ffcc', fontSize: 18 }]}>🌀 NEON TUNNEL</Text>
-        <Text style={{ color: '#ffd700', fontSize: 14, fontWeight: 'bold' }}>⭐ {bestRef.current}</Text>
-      </View>
-
-      <View style={{ flex: 1, backgroundColor: '#000010', position: 'relative', overflow: 'hidden' }}>
-        {phase === 'running' && (
-          <Text style={{ position: 'absolute', top: 8, left: 0, right: 0, textAlign: 'center', color: '#00ffcc', fontSize: 24, fontWeight: 'bold', zIndex: 10 }}>
-            {scoreRef.current}
-          </Text>
-        )}
-
-        {/* Tunnel rings */}
-        {ringsRef.current.map(ring => {
-          const sz = ring.r * 2;
-          const col = `hsl(${ring.hue}, 100%, 55%)`;
-          const op = Math.max(0.08, 0.9 - (ring.r / MAX_R) * 0.75);
+    <GameScreen title="NEON TUNNEL" emoji="🌀" accent={C.cyan} onExit={onExit} score={s.score} best={best}
+      hud={<><Text style={{ color: C.dim, fontSize: 12 }}>Anillos: <Text style={{ color: C.cyan, fontWeight: '800' }}>{s.passed}</Text></Text><Combo n={mult} color={C.lime} /><Text style={{ color: C.dim, fontSize: 12 }}>💎 <Text style={{ color: C.amber, fontWeight: '800' }}>{s.gems}</Text></Text></>}>
+      <PlayArea fx={fx} bg="#00000f" {...pan}>
+        {s.rings.map(r => {
+          const rad = MAXR * Math.pow(r.z, 1.7);
+          if (rad < 3) return null;
+          const col = `hsl(${r.hue}, 100%, 58%)`;
+          const op = Math.min(1, 0.15 + r.z * 0.9) * (r.z > 1.05 ? Math.max(0, (1.25 - r.z) / 0.2) : 1);
+          const bw = (2 * Math.PI * rad / N) * 0.84, bh = Math.max(3, rad * 0.13);
           return (
-            <View key={ring.id} style={{
-              position: 'absolute', left: CX - ring.r, top: CY - ring.r,
-              width: sz, height: sz, borderRadius: ring.r,
-              borderWidth: 1.5, borderColor: col, opacity: op,
-            }} />
+            <React.Fragment key={r.id}>
+              <View style={{ position: 'absolute', left: CX - rad, top: CY - rad, width: rad * 2, height: rad * 2, borderRadius: rad, borderWidth: 1, borderColor: col, opacity: op * 0.5 }} />
+              {Array.from({ length: N }, (_, lane) => {
+                if (r.free.includes(lane)) {
+                  if (r.gem === lane && !r.done) { const p = pos(lane, rad, 0); return <Text key={lane} style={{ position: 'absolute', left: p.x - 10, top: p.y - 11, fontSize: Math.max(8, 8 + rad * 0.06), opacity: op }}>💎</Text>; }
+                  return null;
+                }
+                const p = pos(lane, rad, 0);
+                return <View key={lane} style={{ position: 'absolute', left: p.x - bw / 2, top: p.y - bh / 2, width: bw, height: bh, borderRadius: 3, backgroundColor: dang(r.z) ? C.red : col, opacity: op, transform: [{ rotate: `${p.a + Math.PI / 2}rad` }], ...glow(dang(r.z) ? C.red : col, 6, 0.7) }} />;
+              })}
+            </React.Fragment>
           );
         })}
-
-        {/* Obstacle blocks */}
-        {ringsRef.current.flatMap(ring => {
-          const danger = ring.r > PLAYER_R * 0.7;
-          return Array.from({ length: NT_LANES }, (_, lane) => {
-            if (ring.free.has(lane)) return null;
-            const pos = getLanePos(lane, ring.r);
-            return (
-              <View key={`${ring.id}-${lane}`} style={{
-                position: 'absolute', left: pos.x - 10, top: pos.y - 10,
-                width: 20, height: 20, borderRadius: 5,
-                backgroundColor: danger ? '#ff0044' : `hsl(${ring.hue}, 100%, 60%)`,
-                opacity: Math.max(0.2, 1 - ring.r / MAX_R * 0.5),
-              }} />
-            );
-          }).filter(Boolean);
+        {Array.from({ length: N }, (_, lane) => {
+          const p = pos(lane, PR + 26, 0);
+          const on = lane === s.lane;
+          return <View key={lane} style={{ position: 'absolute', left: p.x - 3, top: p.y - 3, width: 6, height: 6, borderRadius: 3, backgroundColor: on ? C.cyan : alpha(C.cyan, 0.25) }} />;
         })}
-
-        {/* Lane guide dots */}
-        {Array.from({ length: NT_LANES }, (_, lane) => {
-          const pos = getLanePos(lane, PLAYER_R + 22);
-          return (
-            <View key={lane} style={{
-              position: 'absolute', left: pos.x - 4, top: pos.y - 4,
-              width: 8, height: 8, borderRadius: 4,
-              backgroundColor: lane === laneRef.current ? '#00ffcc' : 'transparent',
-              borderWidth: 1, borderColor: '#00ffcc55',
-            }} />
-          );
-        })}
-
-        {/* Player */}
-        <View style={{
-          position: 'absolute', left: playerPos.x - 13, top: playerPos.y - 13,
-          width: 26, height: 26, borderRadius: 13,
-          backgroundColor: '#00ffcc', borderWidth: 2, borderColor: '#fff',
-          elevation: 10,
-        }} />
-
-        {/* Overlay */}
-        {phase !== 'running' && (
-          <View style={[styles.overlay, { backgroundColor: 'rgba(0,0,16,0.88)' }]}>
-            <Text style={[styles.overlayTitle, { color: '#00ffcc' }]}>
-              {phase === 'dead' ? '💥 CRASH!' : '🌀 NEON TUNNEL'}
-            </Text>
-            <Text style={[styles.overlaySub, { textAlign: 'center' }]}>
-              {phase === 'dead'
-                ? `Score: ${scoreRef.current}\n🏆 Mejor: ${bestRef.current}\n\n◀ ▶ para cambiar de carril`
-                : 'Vuela por el túnel neon\nEsquiva los bloques rojos\n3 carriles libres por anillo\n◀ ▶ para moverte'}
-            </Text>
-            <Pressable style={[styles.btn, { backgroundColor: '#00ffcc', marginTop: 12 }]} onPress={startGame} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
-              <Text style={[styles.btnText, { color: '#000' }]}>{phase === 'dead' ? 'REINTENTAR' : '🚀 VOLAR'}</Text>
-            </Pressable>
-          </View>
-        )}
-      </View>
-
-      {/* Controls */}
-      <View style={{ flexDirection: 'row', backgroundColor: 'rgba(0,0,16,0.8)', paddingVertical: 14, paddingHorizontal: 20, gap: 16 }}>
-        <View onTouchStart={() => shiftLane(-1)} onTouchEnd={() => {}} onTouchCancel={() => {}}
-          style={{ flex: 1, height: 72, backgroundColor: '#00ffcc18', borderRadius: 16, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#00ffcc44' }}>
-          <Text style={{ color: '#00ffcc', fontSize: 32, fontWeight: 'bold' }}>◀</Text>
-        </View>
-        <View style={{ alignItems: 'center', justifyContent: 'center', width: 80 }}>
-          <Text style={{ color: '#00ffcc66', fontSize: 11 }}>CARRIL</Text>
-          <Text style={{ color: '#00ffcc', fontSize: 16, fontWeight: 'bold' }}>{laneRef.current + 1}/{NT_LANES}</Text>
-        </View>
-        <View onTouchStart={() => shiftLane(1)} onTouchEnd={() => {}} onTouchCancel={() => {}}
-          style={{ flex: 1, height: 72, backgroundColor: '#00ffcc18', borderRadius: 16, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#00ffcc44' }}>
-          <Text style={{ color: '#00ffcc', fontSize: 32, fontWeight: 'bold' }}>▶</Text>
-        </View>
-      </View>
-    </SafeAreaView>
+        {(() => {
+          const a = (s.ang / N) * Math.PI * 2 - Math.PI / 2;
+          const px = CX + Math.cos(a) * PR; const py = CY + Math.sin(a) * PR;
+          return <View style={{ position: 'absolute', left: px - 14, top: py - 14, width: 28, height: 28, borderRadius: 8, backgroundColor: C.cyan, borderWidth: 2, borderColor: '#fff', transform: [{ rotate: `${a + Math.PI / 2}rad` }], ...glow(C.cyan, 14, 1) }} />;
+        })()}
+        {phase === 'play' && <View pointerEvents="none" style={{ position: 'absolute', bottom: 12, left: 0, right: 0, flexDirection: 'row' }}>
+          <Text style={{ flex: 1, textAlign: 'center', color: alpha(C.cyan, 0.4), fontSize: 26, fontWeight: '900' }}>◀</Text>
+          <Text style={{ flex: 1, textAlign: 'center', color: alpha(C.cyan, 0.4), fontSize: 26, fontWeight: '900' }}>▶</Text>
+        </View>}
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🌀" title={phase === 'over' ? 'CHOQUE' : 'NEON TUNNEL'}
+          subtitle={phase === 'over' ? `${s.passed} anillos cruzados` : 'Atraviesa los huecos del túnel'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.cyan} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Toca izquierda o derecha para girar de carril', 'Cruza por los huecos libres', '💎 da bonus · las rachas multiplican'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
-
 }
 
 // ==========================================
@@ -4321,128 +3805,103 @@ const GF_PW     = 26;
 const GF_PH     = 26;
 
 function GravityFlip({ onExit }) {
-  const [running, setRunning] = useState(false);
-  const [score,   setScore]   = useState(0);
-  const [best,    setBest]    = useState(0);
-  const [dead,    setDead]    = useState(false);
-  const [,        setTick]    = useState(0);
-
-  const pRef      = useRef({ y: GAME_HEIGHT/2 - GF_PH/2, vy:0, grav:1 });
-  const pillars   = useRef([]);
-  const camRef    = useRef(0);
-  const scoreRef  = useRef(0);
-  const frameRef  = useRef(0);
-  const bestRef   = useRef(0);
-  const stars     = useRef(Array.from({length:30},()=>({x:Math.random()*width,y:Math.random()*GAME_HEIGHT,r:Math.random()*1.5+0.5})));
-
-  useEffect(()=>{ AsyncStorage.getItem('gfBest').then(v=>{if(v){bestRef.current=+v;setBest(+v);}}).catch(()=>{}); },[]);
-
+  const CEIL = 48, FLOOR = AREA_H - 48, PS = 28, PX = 84;
+  const fx = useFX();
+  const [best, submitBest] = useBest('gravity');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const initState = () => ({ y: FLOOR - PS, vy: 0, dir: 1, t: 0, dist: 0, speed: 280, obs: [], orbs: [], next: 1.0, scroll: 0, flips: 0, score: 0, trail: [], bonus: 0 });
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
+  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
   const flip = () => {
-    if (!running) return;
-    pRef.current.grav *= -1;
-    pRef.current.vy   = pRef.current.grav * -3;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const s = g.current;
+    if (phase !== 'play') return;
+    s.dir *= -1; s.vy = s.dir * 120; s.flips += 1;
+    fx.ring(PX + PS / 2, s.y + PS / 2, C.violet, 36); hx.tap();
   };
-
-  const startGame = () => {
-    pRef.current   = { y:GAME_HEIGHT/2-GF_PH/2, vy:0, grav:1 };
-    pillars.current = [];
-    camRef.current  = 0; scoreRef.current = 0; frameRef.current = 0;
-    setScore(0); setDead(false); setRunning(true);
+  const addPattern = s => {
+    const x = AREA_W + 40;
+    const r = Math.random();
+    const pw = rand(26, 42);
+    if (r < 0.28) s.obs.push({ id: uid(), k: 'spike', side: 1, x, w: pw * (1 + Math.floor(Math.random() * 2)), h: 30 });
+    else if (r < 0.52) s.obs.push({ id: uid(), k: 'spike', side: -1, x, w: pw * (1 + Math.floor(Math.random() * 2)), h: 30 });
+    else if (r < 0.74) { const h = rand(90, 190); const side = Math.random() < 0.5 ? 1 : -1; s.obs.push({ id: uid(), k: 'block', side, x, w: rand(28, 40), h }); }
+    else if (r < 0.9) { s.obs.push({ id: uid(), k: 'spike', side: 1, x, w: 60, h: 30 }); s.obs.push({ id: uid(), k: 'spike', side: -1, x: x + 150, w: 60, h: 30 }); }
+    else { const side = Math.random() < 0.5 ? 1 : -1; s.obs.push({ id: uid(), k: 'block', side, x, w: 30, h: 150 }); s.obs.push({ id: uid(), k: 'block', side: -side, x: x + 170, w: 30, h: 150 }); }
+    if (Math.random() < 0.55) s.orbs.push({ id: uid(), x: x + rand(40, 120), y: rand(CEIL + 50, FLOOR - 50), got: false });
   };
-
-  const die = () => {
-    deathVibrate(); setRunning(false); setDead(true);
-    if (scoreRef.current > bestRef.current) {
-      bestRef.current = scoreRef.current; setBest(scoreRef.current);
-      AsyncStorage.setItem('gfBest', String(scoreRef.current)).catch(()=>{});
+  useLoop(phase === 'play', dt => {
+    const s = g.current;
+    s.t += dt;
+    s.speed = Math.min(560, 280 + s.t * 6);
+    s.dist += s.speed * dt * 0.05;
+    s.scroll += s.speed * dt;
+    s.vy += s.dir * 4200 * dt;
+    s.y += s.vy * dt;
+    if (s.y >= FLOOR - PS) { s.y = FLOOR - PS; s.vy = 0; }
+    if (s.y <= CEIL) { s.y = CEIL; s.vy = 0; }
+    s.trail.push({ x: PX, y: s.y, a: 0.5 });
+    s.trail.forEach(p => { p.x -= s.speed * dt; p.a -= dt * 2.2; });
+    s.trail = s.trail.filter(p => p.a > 0);
+    s.next -= dt;
+    if (s.next <= 0) { addPattern(s); s.next = Math.max(0.55, 1.35 - s.t * 0.012) * (280 / s.speed) + 0.35; }
+    s.obs.forEach(o => { o.x -= s.speed * dt; });
+    s.orbs.forEach(o => { o.x -= s.speed * dt; });
+    s.obs = s.obs.filter(o => o.x > -100);
+    s.orbs = s.orbs.filter(o => o.x > -30);
+    const me = { x: PX + 4, y: s.y + 4, w: PS - 8, h: PS - 8 };
+    for (const o of s.obs) {
+      const box = o.side === 1
+        ? { x: o.x + (o.k === 'spike' ? 6 : 0), y: FLOOR - o.h + (o.k === 'spike' ? 8 : 0), w: o.w - (o.k === 'spike' ? 12 : 0), h: o.h }
+        : { x: o.x + (o.k === 'spike' ? 6 : 0), y: CEIL, w: o.w - (o.k === 'spike' ? 12 : 0), h: o.h - (o.k === 'spike' ? 8 : 0) };
+      if (overlap(me, box)) {
+        fx.burst(PX + PS / 2, s.y + PS / 2, C.violet, 26, 280, 0.8, 6); fx.shake(11, 0.4); fx.flash(C.red, 0.3); hx.die();
+        setRes({ isNew: submitBest(Math.floor(s.dist) + s.bonus) });
+        setPhase('over');
+        return;
+      }
     }
+    for (const o of s.orbs) {
+      if (!o.got && Math.hypot(o.x - (PX + PS / 2), o.y - (s.y + PS / 2)) < 26) {
+        o.got = true; s.bonus += 10;
+        fx.burst(o.x, o.y, C.amber, 10, 170); fx.pop(o.x, o.y - 14, '+10', C.amber, 15); hx.good();
+      }
+    }
+  });
+  const pan = usePan(fx, { down: flip });
+  const s = g.current;
+  const score = Math.floor(s.dist) + s.bonus;
+  const tri = (o, i) => {
+    // fila de triángulos
+    const n = Math.max(1, Math.round(o.w / 22)); const tw = o.w / n;
+    return Array.from({ length: n }, (_, k) => (
+      <View key={`${o.id}-${k}`} style={{ position: 'absolute', left: o.x + k * tw, top: o.side === 1 ? FLOOR - o.h : CEIL, width: 0, height: 0, borderLeftWidth: tw / 2, borderRightWidth: tw / 2, borderLeftColor: 'transparent', borderRightColor: 'transparent', [o.side === 1 ? 'borderBottomWidth' : 'borderTopWidth']: o.h, [o.side === 1 ? 'borderBottomColor' : 'borderTopColor']: C.pink }} />
+    ));
   };
-
-  useEffect(() => {
-    if (!running) return;
-    const loop = setInterval(() => {
-      const p = pRef.current;
-      frameRef.current++;
-      const spawnEvery = Math.max(55, 105 - Math.floor(scoreRef.current / 8));
-      if (frameRef.current % spawnEvery === 0) {
-        const gapY = GF_WALL + 10 + Math.floor(Math.random() * (GAME_HEIGHT - GF_WALL*2 - GF_GAP - 20));
-        pillars.current.push({ x: camRef.current + width + 40, gapY, w:26 });
-      }
-      camRef.current += GF_SPD + Math.min(2.5, scoreRef.current / 40);
-      scoreRef.current = Math.floor(camRef.current / 55);
-      setScore(scoreRef.current);
-
-      p.vy += GF_GRAV * p.grav;
-      p.vy  = Math.max(-13, Math.min(13, p.vy));
-      p.y  += p.vy;
-
-      if (p.y < GF_WALL || p.y + GF_PH > GAME_HEIGHT - GF_WALL) { die(); return; }
-
-      const px = width / 3;
-      for (const pl of pillars.current) {
-        const plx = pl.x - camRef.current;
-        if (px + GF_PW > plx && px < plx + pl.w) {
-          if (p.y < pl.gapY || p.y + GF_PH > pl.gapY + GF_GAP) { die(); return; }
-        }
-      }
-      pillars.current = pillars.current.filter(pl => pl.x > camRef.current - 60);
-      setTick(t => t+1);
-    }, 16);
-    return () => clearInterval(loop);
-  }, [running]);
-
   return (
-    <SafeAreaView style={[styles.container,{backgroundColor:'#06010f'}]}>
-      <View style={styles.header}>
-        <Pressable onPress={onExit} style={styles.backBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}><Text style={styles.backText}>← BACK</Text></Pressable>
-        <Text style={[styles.title,{fontSize:20,color:'#a855f7'}]}>🔀 GRAVITY FLIP</Text>
-        <Text style={{color:'#ffd700',fontSize:14}}>⭐{best}</Text>
-      </View>
-      <Pressable onPress={running ? flip : startGame} activeOpacity={1}
-        style={[styles.gameArea,{height:GAME_HEIGHT,flex:0,backgroundColor:'#06010f',borderColor:'#a855f7aa',overflow:'hidden',position:'relative'}]}>
-        {/* Stars */}
-        {stars.current.map((s,i)=>(
-          <View key={i} style={{position:'absolute',left:((s.x+(camRef.current*0.2))%width+width)%width,top:s.y,width:s.r*2,height:s.r*2,borderRadius:s.r,backgroundColor:'#fff6'}}/>
-        ))}
-        {/* Walls */}
-        <View style={{position:'absolute',top:0,left:0,right:0,height:GF_WALL,backgroundColor:'#7c3aed',borderBottomWidth:2,borderBottomColor:'#c084fc'}}/>
-        <View style={{position:'absolute',bottom:0,left:0,right:0,height:GF_WALL,backgroundColor:'#7c3aed',borderTopWidth:2,borderTopColor:'#c084fc'}}/>
-        {/* Pillars */}
-        {pillars.current.map((pl,i) => {
-          const plx = pl.x - camRef.current;
-          return (
-            <View key={i}>
-              <View style={{position:'absolute',left:plx,top:GF_WALL,width:pl.w,height:pl.gapY-GF_WALL,backgroundColor:'#6d28d9',borderRightWidth:2,borderLeftWidth:2,borderColor:'#c084fc66'}}/>
-              <View style={{position:'absolute',left:plx,top:pl.gapY+GF_GAP,width:pl.w,height:GAME_HEIGHT-GF_WALL-(pl.gapY+GF_GAP),backgroundColor:'#6d28d9',borderRightWidth:2,borderLeftWidth:2,borderColor:'#c084fc66'}}/>
-            </View>
-          );
-        })}
-        {/* Player */}
-        <View style={{
-          position:'absolute', left:width/3, top:pRef.current.y,
-          width:GF_PW, height:GF_PH, borderRadius:6,
-          backgroundColor: pRef.current.grav < 0 ? '#f0abfc' : '#d8b4fe',
-          transform:[{rotate: pRef.current.grav < 0 ? '180deg' : '0deg'}],
-          shadowColor:'#a855f7', shadowOpacity:1, shadowRadius:10,
-        }}/>
-        {/* Score */}
-        <Text style={{position:'absolute',top:GF_WALL+8,right:12,color:'#fff',fontSize:22,fontWeight:'bold'}}>{score}</Text>
-        {/* Overlay */}
-        {!running && (
-          <View style={styles.overlay}>
-            <Text style={[styles.overlayTitle,{color:'#a855f7'}]}>🔀 GRAVITY FLIP</Text>
-            <Text style={[styles.overlaySub,{textAlign:'center',lineHeight:22}]}>
-              {dead ? `¡Chocaste! Score: ${score}\n🏆 Mejor: ${best}` : 'Toca la pantalla para\ninvertir la gravedad.\nEvita las columnas.'}
-            </Text>
-            <Pressable style={[styles.btn,{backgroundColor:'#7c3aed',marginTop:10}]} onPress={startGame} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
-              <Text style={styles.btnText}>{dead?'OTRA VEZ':'START'}</Text>
-            </Pressable>
-          </View>
-        )}
-      </Pressable>
-      {running && <Text style={{color:'#a855f766',textAlign:'center',fontSize:12,marginTop:6}}>TAP = voltear gravedad 🔀</Text>}
-    </SafeAreaView>
+    <GameScreen title="GRAVITY FLIP" emoji="🔀" accent={C.violet} onExit={onExit} score={score} best={best}
+      hud={<><Text style={{ color: C.dim, fontSize: 12 }}>Giros: <Text style={{ color: C.violet, fontWeight: '800' }}>{s.flips}</Text></Text><Text style={{ color: C.dim, fontSize: 12 }}>Vel. {Math.round(s.speed / 28)}</Text></>}>
+      <PlayArea fx={fx} bg="#07041a" {...pan}>
+        <GridBg color={C.violet} offset={-s.scroll} step={44} />
+        <View style={{ position: 'absolute', left: 0, right: 0, top: CEIL - 3, height: 3, backgroundColor: C.violet, ...glow(C.violet, 10, 0.9) }} />
+        <View style={{ position: 'absolute', left: 0, right: 0, top: FLOOR, height: 3, backgroundColor: C.violet, ...glow(C.violet, 10, 0.9) }} />
+        <View style={{ position: 'absolute', left: 0, right: 0, top: 0, height: CEIL - 3, backgroundColor: alpha(C.violet, 0.08) }} />
+        <View style={{ position: 'absolute', left: 0, right: 0, top: FLOOR + 3, bottom: 0, backgroundColor: alpha(C.violet, 0.08) }} />
+        {s.orbs.map(o => !o.got && <View key={o.id} style={{ position: 'absolute', left: o.x - 9, top: o.y - 9, width: 18, height: 18, borderRadius: 9, backgroundColor: C.amber, ...glow(C.amber, 10, 1) }} />)}
+        {s.obs.map(o => o.k === 'block'
+          ? <View key={o.id} style={{ position: 'absolute', left: o.x, width: o.w, top: o.side === 1 ? FLOOR - o.h : CEIL, height: o.h, backgroundColor: alpha(C.pink, 0.16), borderWidth: 2, borderColor: C.pink, borderRadius: 4, ...glow(C.pink, 10, 0.7) }} />
+          : tri(o))}
+        {s.trail.map((p, i) => <View key={i} style={{ position: 'absolute', left: p.x, top: p.y, width: PS, height: PS, borderRadius: 6, backgroundColor: C.violet, opacity: Math.max(0, p.a * 0.5) }} />)}
+        <View style={{ position: 'absolute', left: PX, top: s.y, width: PS, height: PS, borderRadius: 7, backgroundColor: C.cyan, borderWidth: 2, borderColor: '#fff', alignItems: 'center', justifyContent: s.dir === 1 ? 'flex-start' : 'flex-end', paddingVertical: 5, ...glow(C.cyan, 14, 1) }}>
+          <View style={{ flexDirection: 'row', gap: 5 }}><View style={{ width: 4, height: 6, borderRadius: 2, backgroundColor: '#04040c' }} /><View style={{ width: 4, height: 6, borderRadius: 2, backgroundColor: '#04040c' }} /></View>
+        </View>
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🔀" title={phase === 'over' ? 'APLASTADO' : 'GRAVITY FLIP'}
+          subtitle={phase === 'over' ? `${Math.floor(s.dist)} m · ${s.flips} giros` : 'Invierte la gravedad para sobrevivir'}
+          score={score} best={best} isNew={res.isNew} accent={C.violet} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Toca para cambiar entre suelo y techo', 'Esquiva púas y bloques', 'Las esferas doradas dan +10'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 
@@ -5348,270 +4807,102 @@ const WJ_BOUNCE_VY = -11;     // rebote al tocar pared
 const WJ_OBSTACLE_INTERVAL = 260; // px entre obstáculos
 
 function WallJumper({ onExit }) {
-  const stateRef = useRef({
-    phase: 'idle', // idle | playing | dead
-    px: WJ_W / 2,
-    py: WJ_H * 0.4,
-    vx: WJ_JUMP_VX,
-    vy: 0,
-    scrollY: 0,
-    score: 0,
-    speed: WJ_SCROLL_SPEED_INIT,
-    obstacles: [],   // { y, gapY, side }  side=0→left wall spike, 1→right
-    nextObstY: WJ_H * 0.5,
-    frame: 0,
+  const WALL = 26, PS = 26, PY = AREA_H * 0.68;
+  const LX = WALL, RX = AREA_W - WALL - PS;       // x de reposo (pegado a cada pared)
+  const fx = useFX();
+  const [best, submitBest] = useBest('walljumper');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const initState = () => ({ side: 0, x: LX, air: 0, from: LX, to: RX, t: 0, speed: 210, rows: [], next: 0.9, scroll: 0, score: 0, coins: 0, near: 0, shield: 0 });
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
+  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
+  const jump = () => {
+    const s = g.current;
+    if (phase !== 'play' || s.air > 0) return;
+    s.air = 0.0001; s.from = s.x; s.to = s.side === 0 ? RX : LX; s.side = s.side === 0 ? 1 : 0;
+    fx.burst(s.from + PS / 2, PY + PS / 2, C.orange, 6, 110, 0.35, 4); hx.tap();
+  };
+  const addRow = s => {
+    const r = Math.random();
+    const y = -40;
+    if (r < 0.34) s.rows.push({ id: uid(), y, k: 'spike', side: Math.random() < 0.5 ? 0 : 1, h: 34 });
+    else if (r < 0.58) s.rows.push({ id: uid(), y, k: 'spike2', side: 2, h: 34 });         // ambas paredes: hay que estar en el aire
+    else if (r < 0.74) s.rows.push({ id: uid(), y, k: 'mine', side: 2, h: 30, mx: AREA_W / 2 });   // mina al centro: hay que estar pegado
+    else if (r < 0.9) s.rows.push({ id: uid(), y, k: 'coins', side: Math.random() < 0.5 ? 0 : 1, h: 30, got: false });
+    else s.rows.push({ id: uid(), y, k: 'shield', side: Math.random() < 0.5 ? 0 : 1, h: 30, got: false });
+  };
+  useLoop(phase === 'play', dt => {
+    const s = g.current;
+    s.t += dt;
+    s.speed = Math.min(430, 210 + s.t * 5);
+    s.scroll += s.speed * dt;
+    s.score = Math.floor(s.scroll / 12) + s.coins * 5 + s.near * 3;
+    if (s.air > 0) {
+      s.air += dt / 0.36;
+      if (s.air >= 1) { s.air = 0; s.x = s.to; fx.burst(s.x + PS / 2, PY + PS / 2, C.orange, 5, 90, 0.3, 3); }
+      else { const k = s.air; const e = k * k * (3 - 2 * k); s.x = s.from + (s.to - s.from) * e; }
+    }
+    s.next -= dt;
+    if (s.next <= 0) { addRow(s); s.next = Math.max(0.5, 1.15 - s.t * 0.01) * (210 / s.speed) + 0.28; }
+    s.rows.forEach(r => { r.y += s.speed * dt; });
+    s.rows = s.rows.filter(r => r.y < AREA_H + 50);
+    const cx = s.x + PS / 2;
+    for (const r of s.rows) {
+      if (r.dead) continue;
+      const overlapY = r.y + r.h > PY + 4 && r.y < PY + PS - 4;
+      if (!overlapY) { if (r.near === undefined && r.y > PY + PS && r.k !== 'coins' && r.k !== 'shield') { r.near = true; } continue; }
+      let hurt = false;
+      const midAir = s.air > 0.22 && s.air < 0.78;
+      if (r.k === 'spike' && !midAir && s.side === r.side) hurt = true;
+      if (r.k === 'spike2' && !midAir) hurt = true;
+      if (r.k === 'mine' && midAir) hurt = true;
+      if (hurt) {
+        if (s.shield > 0) { s.shield -= 1; r.dead = true; fx.ring(cx, PY, C.cyan, 60); fx.burst(cx, PY, C.cyan, 14, 200); fx.shake(5); hx.hit(); continue; }
+        fx.burst(cx, PY + PS / 2, C.orange, 26, 280, 0.8, 6); fx.shake(11, 0.4); fx.flash(C.red, 0.3); hx.die();
+        setRes({ isNew: submitBest(s.score) });
+        setPhase('over');
+        return;
+      }
+      if ((r.k === 'coins' || r.k === 'shield') && !r.got && (s.side === r.side || s.air > 0.3 && s.air < 0.7)) {
+        r.got = true;
+        if (r.k === 'coins') { s.coins += 1; fx.pop(cx, PY - 20, '+5', C.amber, 16); fx.burst(cx, PY, C.amber, 10, 170); hx.good(); }
+        else { s.shield = Math.min(2, s.shield + 1); fx.pop(cx, PY - 20, 'ESCUDO', C.cyan, 15); fx.ring(cx, PY, C.cyan, 50); hx.good(); }
+      }
+    }
   });
-  const [render, setRender] = useState(0);
-  const rafRef = useRef(null);
-  const [bestScore, setBestScore] = useState(0);
-
-  useEffect(() => {
-    AsyncStorage.getItem('wj_best').then(v => { if (v) setBestScore(parseInt(v)); });
-    return () => cancelAnimationFrame(rafRef.current);
-  }, []);
-
-  const initState = () => {
-    const s = stateRef.current;
-    s.phase = 'playing';
-    s.px = WJ_W / 2;
-    s.py = WJ_H * 0.35;
-    s.vx = WJ_JUMP_VX;
-    s.vy = 0;
-    s.scrollY = 0;
-    s.score = 0;
-    s.speed = WJ_SCROLL_SPEED_INIT;
-    s.obstacles = [];
-    s.nextObstY = -WJ_H * 0.5;
-    s.frame = 0;
+  const pan = usePan(fx, { down: jump });
+  const s = g.current;
+  const spikeRow = (r, side) => {
+    const n = 3;
+    return Array.from({ length: n }, (_, i) => (
+      <View key={`${r.id}-${side}-${i}`} style={{ position: 'absolute', top: r.y + i * 11, left: side === 0 ? WALL : AREA_W - WALL - 22, width: 0, height: 0, borderTopWidth: 6, borderBottomWidth: 6, borderTopColor: 'transparent', borderBottomColor: 'transparent', [side === 0 ? 'borderLeftWidth' : 'borderRightWidth']: 22, [side === 0 ? 'borderLeftColor' : 'borderRightColor']: C.red }} />
+    ));
   };
-
-  const startGame = () => {
-    initState();
-    cancelAnimationFrame(rafRef.current);
-    loop();
-  };
-
-  const loop = () => {
-    rafRef.current = requestAnimationFrame(() => {
-      const s = stateRef.current;
-      if (s.phase !== 'playing') return;
-
-      s.frame++;
-      s.speed = WJ_SCROLL_SPEED_INIT + s.score * 0.012;
-
-      // Gravity
-      s.vy += WJ_GRAVITY;
-      s.py += s.vy;
-      s.px += s.vx;
-
-      // Wall bounce
-      if (s.px - WJ_PLAYER_R <= WJ_WALL_W) {
-        s.px = WJ_WALL_W + WJ_PLAYER_R;
-        s.vx = WJ_JUMP_VX;
-        s.vy = WJ_BOUNCE_VY;
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      }
-      if (s.px + WJ_PLAYER_R >= WJ_W - WJ_WALL_W) {
-        s.px = WJ_W - WJ_WALL_W - WJ_PLAYER_R;
-        s.vx = -WJ_JUMP_VX;
-        s.vy = WJ_BOUNCE_VY;
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      }
-
-      // Scroll
-      s.scrollY += s.speed;
-
-      // Camera follow: keep player in upper 35% of screen so it never goes off top
-      const CAM_TARGET = WJ_H * 0.35;
-      if (s.py < CAM_TARGET) {
-        s.scrollY += CAM_TARGET - s.py;
-        s.py = CAM_TARGET;
-      }
-
-      s.score = Math.floor(s.scrollY / 10);
-
-      // Generate obstacles
-      if (-s.scrollY < s.nextObstY + WJ_OBSTACLE_INTERVAL) {
-        // alternate sides or random
-        const side = s.obstacles.length % 2;
-        const gapY = WJ_GAP_H * 0.2 + Math.random() * (WJ_H - WJ_GAP_H * 1.4);
-        s.obstacles.push({ y: s.nextObstY - WJ_OBSTACLE_INTERVAL, gapY, side });
-        s.nextObstY -= WJ_OBSTACLE_INTERVAL;
-      }
-
-      // Remove off-screen obstacles
-      s.obstacles = s.obstacles.filter(o => o.y + s.scrollY < WJ_H + 40);
-
-      // Collision with obstacles (spikes on walls)
-      const spikeW = WJ_WALL_W;
-      const spikeH = 30;
-      for (const o of s.obstacles) {
-        const screenY = o.y + s.scrollY;
-        // Top spike block
-        const topH = o.gapY;
-        const botH = WJ_H - o.gapY - WJ_GAP_H;
-        const wallX = o.side === 0 ? 0 : WJ_W - spikeW;
-
-        // Check top part
-        if (
-          s.px + WJ_PLAYER_R > wallX &&
-          s.px - WJ_PLAYER_R < wallX + spikeW &&
-          s.py + WJ_PLAYER_R > screenY &&
-          s.py - WJ_PLAYER_R < screenY + topH
-        ) { die(s); return; }
-
-        // Check bottom part
-        if (
-          s.px + WJ_PLAYER_R > wallX &&
-          s.px - WJ_PLAYER_R < wallX + spikeW &&
-          s.py + WJ_PLAYER_R > screenY + o.gapY + WJ_GAP_H &&
-          s.py - WJ_PLAYER_R < screenY + o.gapY + WJ_GAP_H + botH
-        ) { die(s); return; }
-      }
-
-      // Fall off bottom
-      if (s.py > WJ_H + 40) { die(s); return; }
-
-      setRender(r => r + 1);
-      loop();
-    });
-  };
-
-  const die = (s) => {
-    s.phase = 'dead';
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    if (s.score > bestScore) {
-      setBestScore(s.score);
-      AsyncStorage.setItem('wj_best', String(s.score));
-    }
-    setRender(r => r + 1);
-  };
-
-  const handleTap = (side) => {
-    const s = stateRef.current;
-    if (s.phase === 'idle' || s.phase === 'dead') { startGame(); return; }
-    // Tap gives a boost toward the opposite wall
-    if (side === 'left') {
-      s.vx = -Math.abs(s.vx);
-      s.vy = WJ_BOUNCE_VY * 0.7;
-    } else {
-      s.vx = Math.abs(s.vx);
-      s.vy = WJ_BOUNCE_VY * 0.7;
-    }
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
-
-  const s = stateRef.current;
-
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#000820' }}>
-      {/* Header */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 }}>
-        <Pressable onPress={onExit} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          style={{ position: 'absolute', left: 16, zIndex: 10 }}>
-          <Text style={{ color: '#ff6600', fontSize: 16, fontWeight: 'bold' }}>← SALIR</Text>
-        </Pressable>
-        <Text style={{ flex: 1, textAlign: 'center', color: '#ff6600', fontSize: 20, fontWeight: '900', letterSpacing: 2 }}>🧗 WALL JUMPER</Text>
-      </View>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-around', paddingBottom: 4 }}>
-        <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>Altura: {s.score}</Text>
-        <Text style={{ color: '#ffaa44', fontSize: 16 }}>Récord: {bestScore}</Text>
-      </View>
-
-      {/* Game area */}
-      <View style={{ width: WJ_W, height: WJ_H, overflow: 'hidden', position: 'relative', backgroundColor: '#000d30' }}>
-
-        {/* Left wall */}
-        <View style={{ position: 'absolute', left: 0, top: 0, width: WJ_WALL_W, height: WJ_H, backgroundColor: '#1a0a00', borderRightWidth: 3, borderRightColor: '#ff6600' }} />
-        {/* Right wall */}
-        <View style={{ position: 'absolute', right: 0, top: 0, width: WJ_WALL_W, height: WJ_H, backgroundColor: '#1a0a00', borderLeftWidth: 3, borderLeftColor: '#ff6600' }} />
-
-        {/* Obstacles */}
-        {s.obstacles.map((o, i) => {
-          const screenY = o.y + s.scrollY;
-          const wallX = o.side === 0 ? 0 : WJ_W - WJ_WALL_W;
-          const topH = o.gapY;
-          const botH = WJ_H - o.gapY - WJ_GAP_H;
-          return (
-            <React.Fragment key={i}>
-              {topH > 0 && screenY < WJ_H && screenY + topH > 0 && (
-                <View style={{ position: 'absolute', left: wallX, top: screenY, width: WJ_WALL_W, height: topH, backgroundColor: '#550000', borderWidth: 1, borderColor: '#ff2200' }}>
-                  <Text style={{ color: '#ff2200', fontSize: 18, textAlign: 'center', marginTop: topH - 22 }}>▼</Text>
-                </View>
-              )}
-              {botH > 0 && screenY + o.gapY + WJ_GAP_H < WJ_H && (
-                <View style={{ position: 'absolute', left: wallX, top: screenY + o.gapY + WJ_GAP_H, width: WJ_WALL_W, height: botH, backgroundColor: '#550000', borderWidth: 1, borderColor: '#ff2200' }}>
-                  <Text style={{ color: '#ff2200', fontSize: 18, textAlign: 'center' }}>▲</Text>
-                </View>
-              )}
-            </React.Fragment>
-          );
+    <GameScreen title="WALL JUMPER" emoji="🧗" accent={C.orange} onExit={onExit} score={s.score} best={best}
+      hud={<><Text style={{ color: C.dim, fontSize: 12 }}>Monedas: <Text style={{ color: C.amber, fontWeight: '800' }}>{s.coins}</Text></Text><Text style={{ color: C.cyan, fontSize: 12, fontWeight: '800' }}>{s.shield > 0 ? `🛡️×${s.shield}` : ''}</Text><Text style={{ color: C.dim, fontSize: 12 }}>Altura {Math.floor(s.scroll / 12)}</Text></>}>
+      <PlayArea fx={fx} bg="#0b0504" {...pan}>
+        <GridBg color={C.orange} offset={s.scroll} step={48} />
+        <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: WALL, backgroundColor: alpha(C.orange, 0.2), borderRightWidth: 3, borderRightColor: C.orange, ...glow(C.orange, 10, 0.6) }} />
+        <View style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: WALL, backgroundColor: alpha(C.orange, 0.2), borderLeftWidth: 3, borderLeftColor: C.orange, ...glow(C.orange, 10, 0.6) }} />
+        {s.rows.map(r => {
+          if (r.k === 'spike') return <React.Fragment key={r.id}>{spikeRow(r, r.side)}</React.Fragment>;
+          if (r.k === 'spike2') return <React.Fragment key={r.id}>{spikeRow(r, 0)}{spikeRow(r, 1)}</React.Fragment>;
+          if (r.k === 'mine') return <Text key={r.id} style={{ position: 'absolute', left: r.mx - 17, top: r.y - 4, fontSize: 32, ...glow(C.red, 10, 0.8) }}>💣</Text>;
+          if (r.got) return null;
+          const x = r.side === 0 ? WALL + 6 : AREA_W - WALL - 6 - 28;
+          return <Text key={r.id} style={{ position: 'absolute', left: x, top: r.y, fontSize: 26 }}>{r.k === 'coins' ? '🪙' : '🛡️'}</Text>;
         })}
-
-        {/* Player */}
-        {s.phase !== 'idle' && (
-          <View style={{
-            position: 'absolute',
-            left: s.px - WJ_PLAYER_R,
-            top: s.py - WJ_PLAYER_R,
-            width: WJ_PLAYER_R * 2,
-            height: WJ_PLAYER_R * 2,
-            borderRadius: WJ_PLAYER_R,
-            backgroundColor: '#ff6600',
-            shadowColor: '#ff6600',
-            shadowOpacity: 1,
-            shadowRadius: 10,
-            justifyContent: 'center',
-            alignItems: 'center',
-          }}>
-            <Text style={{ fontSize: 18 }}>{s.vx > 0 ? '➡' : '⬅'}</Text>
-          </View>
-        )}
-
-        {/* Tap zones */}
-        <View style={{ position: 'absolute', left: 0, top: 0, width: WJ_W / 2, height: WJ_H }}
-          onTouchStart={() => handleTap('left')} />
-        <View style={{ position: 'absolute', left: WJ_W / 2, top: 0, width: WJ_W / 2, height: WJ_H }}
-          onTouchStart={() => handleTap('right')} />
-
-        {/* Idle overlay */}
-        {s.phase === 'idle' && (
-          <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' }}>
-            <Text style={{ fontSize: 50 }}>🧗</Text>
-            <Text style={{ color: '#ff6600', fontSize: 28, fontWeight: '900', marginTop: 10 }}>WALL JUMPER</Text>
-            <Text style={{ color: '#fff', fontSize: 16, marginTop: 10, textAlign: 'center', paddingHorizontal: 30 }}>
-              La bola rebota entre las paredes sola.{'\n'}Toca ◀ o ▶ para darle impulso y esquivar las púas rojas.
-            </Text>
-            <Text style={{ color: '#ffaa44', fontSize: 20, marginTop: 30, fontWeight: 'bold' }}>Toca para empezar</Text>
-          </View>
-        )}
-
-        {/* Dead overlay */}
-        {s.phase === 'dead' && (
-          <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center' }}>
-            <Text style={{ fontSize: 50 }}>💥</Text>
-            <Text style={{ color: '#ff2200', fontSize: 30, fontWeight: '900', marginTop: 10 }}>GAME OVER</Text>
-            <Text style={{ color: '#fff', fontSize: 20, marginTop: 8 }}>Altura: {s.score}</Text>
-            {s.score >= bestScore && bestScore > 0 && (
-              <Text style={{ color: '#ffd700', fontSize: 16, marginTop: 4 }}>¡Nuevo récord!</Text>
-            )}
-            <Text style={{ color: '#ffaa44', fontSize: 18, marginTop: 24, fontWeight: 'bold' }}>Toca para reintentar</Text>
-          </View>
-        )}
-      </View>
-
-      {/* Controls hint */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 8 }}>
-        <Pressable onPress={() => handleTap('left')} hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
-          style={{ width: (WJ_W - 50) / 2, paddingVertical: 14, backgroundColor: '#1a0a00', borderRadius: 12, borderWidth: 2, borderColor: '#ff6600', alignItems: 'center' }}>
-          <Text style={{ color: '#ff6600', fontSize: 26, fontWeight: 'bold' }}>◀</Text>
-        </Pressable>
-        <Pressable onPress={() => handleTap('right')} hitSlop={{ top: 5, bottom: 5, left: 5, right: 5 }}
-          style={{ width: (WJ_W - 50) / 2, paddingVertical: 14, backgroundColor: '#1a0a00', borderRadius: 12, borderWidth: 2, borderColor: '#ff6600', alignItems: 'center' }}>
-          <Text style={{ color: '#ff6600', fontSize: 26, fontWeight: 'bold' }}>▶</Text>
-        </Pressable>
-      </View>
-    </SafeAreaView>
+        <View style={{ position: 'absolute', left: s.x, top: PY, width: PS, height: PS, borderRadius: 8, backgroundColor: C.orange, borderWidth: 2, borderColor: '#fff', transform: [{ rotate: `${s.air > 0 ? (s.side === 1 ? 1 : -1) * s.air * 6.28 : 0}rad` }], ...glow(C.orange, 14, 1) }}>
+          {s.shield > 0 && <View style={{ position: 'absolute', left: -9, top: -9, width: PS + 14, height: PS + 14, borderRadius: (PS + 14) / 2, borderWidth: 2, borderColor: alpha(C.cyan, 0.9) }} />}
+        </View>
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🧗" title={phase === 'over' ? 'TE PINCHASTE' : 'WALL JUMPER'}
+          subtitle={phase === 'over' ? `Altura ${Math.floor(s.scroll / 12)}` : 'Salta de pared en pared'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.orange} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Toca para saltar a la pared contraria', 'Púas en una pared: cambia de lado', 'Púas en ambas: salta justo cuando pasan', '💣 en el centro: quédate pegado a la pared'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 // ─────────────────────────────────────────────────────────────────
@@ -5622,77 +4913,106 @@ const FB_PIPE_W = 60;
 const FB_GAP = 160;
 const FB_SPEED = 3;
 function FlappyNeon({ onExit }) {
-  const [birdY, setBirdY] = React.useState(300);
-  const [vel, setVel] = React.useState(0);
-  const [pipes, setPipes] = React.useState([{ x: 400, top: 150 }]);
-  const [score, setScore] = React.useState(0);
-  const [best, setBest] = React.useState(0);
-  const [alive, setAlive] = React.useState(false);
-  const [started, setStarted] = React.useState(false);
-  const birdRef = React.useRef(birdY);
-  const velRef = React.useRef(vel);
-  const pipesRef = React.useRef(pipes);
-  const scoreRef = React.useRef(score);
-  const aliveRef = React.useRef(false);
-  birdRef.current = birdY; velRef.current = vel; pipesRef.current = pipes; scoreRef.current = score;
-  const W = Dimensions.get('window').width - 20;
-  const H = 500;
-  const BIRD_SIZE = 28;
+  const BX = 96, PW = 60, GROUND = 36;
+  const fx = useFX();
+  const [best, submitBest] = useBest('flappy');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false, medal: '' });
+  const initState = () => ({ y: AREA_H * 0.42, vy: 0, t: 0, pipes: [], next: 260, score: 0, coins: 0, scroll: 0, started: false });
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
 
-  const loop = React.useRef(null);
+  const addPipe = (s, x) => {
+    const gap = Math.max(122, 158 - s.score * 1.6);
+    const moving = s.score >= 8 && Math.random() < 0.5;
+    s.pipes.push({ id: uid(), x, gapY: rand(gap / 2 + 50, AREA_H - GROUND - gap / 2 - 50), gap, moving, ph: Math.random() * 6, passed: false, coin: Math.random() < 0.55, got: false });
+  };
   const start = () => {
-    setBirdY(300); setVel(0); setPipes([{ x: W, top: 150 }]); setScore(0); setAlive(true); setStarted(true);
-    aliveRef.current = true;
+    fx.clear();
+    const s = initState();
+    addPipe(s, AREA_W + 40);
+    g.current = s;
+    s.started = true; s.vy = -400;
+    setPhase('play');
   };
-  const jump = () => {
-    if (!started) { start(); return; }
-    if (!aliveRef.current) { start(); return; }
-    setVel(FB_JUMP);
+  const flap = () => {
+    const s = g.current;
+    if (phase !== 'play') return;
+    s.vy = -415;
+    fx.burst(BX - 10, s.y + 8, C.amber, 4, 70, 0.35, 3);
+    hx.tap();
+  };
+  const crash = s => {
+    fx.burst(BX, s.y, C.amber, 24, 260, 0.8, 5); fx.shake(9, 0.35); fx.flash('#ffffff', 0.35); hx.die();
+    const medal = s.score >= 40 ? '🥇' : s.score >= 20 ? '🥈' : s.score >= 10 ? '🥉' : '';
+    setRes({ isNew: submitBest(s.score), medal });
+    setPhase('over');
   };
 
-  React.useEffect(() => {
-    loop.current = setInterval(() => {
-      if (!aliveRef.current) return;
-      const newVel = velRef.current + FB_GRAVITY;
-      const newBird = birdRef.current + newVel;
-      setVel(newVel);
-      setBirdY(newBird);
-      const newPipes = pipesRef.current.map(p => ({ ...p, x: p.x - FB_SPEED })).filter(p => p.x > -FB_PIPE_W);
-      if (newPipes.length === 0 || newPipes[newPipes.length - 1].x < W - 220) {
-        newPipes.push({ x: W, top: 80 + Math.random() * 180 });
+  useLoop(phase === 'play', dt => {
+    const s = g.current;
+    s.t += dt;
+    const speed = Math.min(215, 150 + s.score * 2.2);
+    s.vy += 1450 * dt;
+    s.y += s.vy * dt;
+    s.scroll += speed * dt;
+    s.next -= speed * dt;
+    if (s.next <= 0) { addPipe(s, AREA_W + 20); s.next = rand(205, 235); }
+    s.pipes.forEach(p => {
+      p.x -= speed * dt;
+      if (p.moving) p.cy = p.gapY + Math.sin(s.t * 1.8 + p.ph) * 44; else p.cy = p.gapY;
+    });
+    s.pipes = s.pipes.filter(p => p.x > -PW - 10);
+    if (s.y < 10) { s.y = 10; if (s.vy < 0) s.vy = 0; }
+    if (s.y > AREA_H - GROUND - 12) { s.y = AREA_H - GROUND - 12; crash(s); return; }
+    for (const p of s.pipes) {
+      const cy = p.cy != null ? p.cy : p.gapY;
+      if (BX + 11 > p.x && BX - 11 < p.x + PW) {
+        if (s.y - 11 < cy - p.gap / 2 || s.y + 11 > cy + p.gap / 2) { crash(s); return; }
       }
-      setPipes(newPipes);
-      let hit = newBird < 0 || newBird > H - BIRD_SIZE;
-      for (const p of newPipes) {
-        if (p.x < 80 + BIRD_SIZE && p.x + FB_PIPE_W > 80) {
-          if (newBird < p.top || newBird + BIRD_SIZE > p.top + FB_GAP) hit = true;
-        }
-        if (p.x + FB_PIPE_W < 80 && !p.scored) { p.scored = true; scoreRef.current += 1; setScore(s => s + 1); }
+      if (!p.passed && p.x + PW < BX - 11) {
+        p.passed = true; s.score += 1;
+        hx.tick();
+        if (s.score % 10 === 0) { fx.ring(BX, s.y, C.lime, 90); fx.pop(AREA_W / 2, AREA_H * 0.3, `¡${s.score}!`, C.lime, 28); hx.good(); }
       }
-      if (hit) { aliveRef.current = false; setAlive(false); setBest(b => Math.max(b, scoreRef.current)); }
-    }, 16);
-    return () => clearInterval(loop.current);
-  }, []);
-
+      if (p.coin && !p.got && Math.abs(p.x + PW / 2 - BX) < 22 && Math.abs(s.y - cy) < 26) {
+        p.got = true; s.score += 2; s.coins += 1;
+        fx.burst(BX, s.y, C.amber, 10, 160); fx.pop(BX + 30, s.y - 20, '+2', C.amber, 16); hx.good();
+      }
+    }
+  });
+  const pan = usePan(fx, { down: flap });
+  const s = g.current;
+  const rot = clamp(s.vy / 600, -0.5, 1.1);
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#001' }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 10 }}>
-        <Pressable onPress={onExit}><Text style={{ color: '#0ff', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
-        <Text style={{ color: '#ff0', fontSize: 20, fontWeight: '900' }}>Score: {score}  Best: {best}</Text>
-      </View>
-      <Pressable onPress={jump} style={{ alignSelf: 'center', width: W, height: H, backgroundColor: '#000d1a', borderRadius: 12, overflow: 'hidden', borderWidth: 2, borderColor: '#0ff' }}>
-        {!started && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}><Text style={{ color: '#0ff', fontSize: 28, fontWeight: '900' }}>FLAPPY NEON</Text><Text style={{ color: '#aaa', marginTop: 10 }}>Toca para comenzar</Text></View>}
-        {!alive && started && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}><Text style={{ color: '#f44', fontSize: 32, fontWeight: '900' }}>GAME OVER</Text><Text style={{ color: '#fff', marginTop: 8 }}>Score: {score}</Text><Text style={{ color: '#aaa', marginTop: 6 }}>Toca para reiniciar</Text></View>}
-        <View style={{ position: 'absolute', left: 80, top: birdY, width: BIRD_SIZE, height: BIRD_SIZE, backgroundColor: '#ff0', borderRadius: 14, shadowColor: '#ff0', shadowOpacity: 1, shadowRadius: 8 }} />
-        {pipes.map((p, i) => (
-          <React.Fragment key={i}>
-            <View style={{ position: 'absolute', left: p.x, top: 0, width: FB_PIPE_W, height: p.top, backgroundColor: '#0a0', borderBottomWidth: 4, borderColor: '#0f0' }} />
-            <View style={{ position: 'absolute', left: p.x, top: p.top + FB_GAP, width: FB_PIPE_W, height: H - p.top - FB_GAP, backgroundColor: '#0a0', borderTopWidth: 4, borderColor: '#0f0' }} />
-          </React.Fragment>
-        ))}
-        <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 10, backgroundColor: '#0f0' }} />
-      </Pressable>
-    </SafeAreaView>
+    <GameScreen title="FLAPPY NEON" emoji="🐦" accent={C.amber} onExit={onExit} score={s.score} best={best}
+      hud={<><Text style={{ color: C.dim, fontSize: 12 }}>Monedas: <Text style={{ color: C.amber, fontWeight: '800' }}>{s.coins}</Text></Text><Text style={{ color: C.dim, fontSize: 12 }}>Toca para volar</Text></>}>
+      <PlayArea fx={fx} bg="#07061a" {...pan}>
+        <GridBg color={C.amber} offset={-s.scroll} step={44} />
+        {s.pipes.map(p => {
+          const cy = p.cy != null ? p.cy : p.gapY;
+          const topH = cy - p.gap / 2;
+          const botY = cy + p.gap / 2;
+          const col = p.moving ? C.pink : C.lime;
+          const body = { position: 'absolute', left: p.x, width: PW, backgroundColor: alpha(col, 0.14), borderColor: col, borderWidth: 2, ...glow(col, 10, 0.6) };
+          return (
+            <React.Fragment key={p.id}>
+              <View style={[body, { top: -4, height: topH + 4, borderBottomLeftRadius: 6, borderBottomRightRadius: 6 }]} />
+              <View style={[body, { top: botY, height: AREA_H - botY, borderTopLeftRadius: 6, borderTopRightRadius: 6 }]} />
+              {p.coin && !p.got && <Text style={{ position: 'absolute', left: p.x + PW / 2 - 13, top: cy - 15, fontSize: 24 }}>⭐</Text>}
+            </React.Fragment>
+          );
+        })}
+        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: GROUND, backgroundColor: '#12102a', borderTopWidth: 2, borderTopColor: C.amber, ...glow(C.amber, 8, 0.5) }}>
+          {Array.from({ length: 12 }, (_, i) => <View key={i} style={{ position: 'absolute', top: 6, left: ((i * 44 - s.scroll) % (AREA_W + 44) + AREA_W + 44) % (AREA_W + 44) - 20, width: 22, height: 4, borderRadius: 2, backgroundColor: alpha(C.amber, 0.3) }} />)}
+        </View>
+        <Text style={{ position: 'absolute', left: BX - 17, top: s.y - 17 + (phase === 'ready' ? Math.sin(Date.now() / 250) * 6 : 0), fontSize: 30, lineHeight: 34, transform: [{ rotate: `${rot}rad` }], ...tglow(C.amber, 10, 0.8) }}>🐤</Text>
+        <Overlay show={phase !== 'play'} kind={phase} emoji={phase === 'over' ? (res.medal || '🐤') : '🐤'} title={phase === 'over' ? 'ESTRELLADO' : 'FLAPPY NEON'}
+          subtitle={phase === 'over' ? 'Cada tubo cuenta' : 'Vuela entre los tubos'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.amber} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Toca para aletear', '⭐ da +2 · tubos rosas se mueven', '🥉 10 · 🥈 20 · 🥇 40 puntos'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 // ─────────────────────────────────────────────────────────────────
@@ -5752,55 +5072,120 @@ function MemoryMatch({ onExit }) {
 const AD_SHIP_W = 36;
 const AD_ASTER_SIZE = 30;
 function AsteroidDodge({ onExit }) {
-  const W = Dimensions.get('window').width;
-  const H = 520;
-  const [shipX, setShipX] = React.useState(W / 2 - AD_SHIP_W / 2);
-  const [asteroids, setAsteroids] = React.useState([]);
-  const [score, setScore] = React.useState(0);
-  const [best, setBest] = React.useState(0);
-  const [alive, setAlive] = React.useState(false);
-  const shipRef = React.useRef(W / 2 - AD_SHIP_W / 2);
-  const aliveRef = React.useRef(false);
-  const scoreRef = React.useRef(0);
-  shipRef.current = shipX; aliveRef.current = alive; scoreRef.current = score;
+  const SY = AREA_H - 84;
+  const fx = useFX();
+  const [best, submitBest] = useBest('asteroid');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const stars = useRef(makeStars(50)).current;
+  const initState = () => ({ x: AREA_W / 2, tx: AREA_W / 2, t: 0, bonus: 0, rocks: [], items: [], spawn: 1, slow: 0, shield: 0, near: 0, shower: 18, showerLeft: 0, banner: null });
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
+  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
 
-  const start = () => { setShipX(W / 2 - AD_SHIP_W / 2); setAsteroids([]); setScore(0); setAlive(true); };
-  const handleMove = (e) => {
-    if (!aliveRef.current) return;
-    const x = e.nativeEvent.locationX - AD_SHIP_W / 2;
-    setShipX(Math.max(0, Math.min(W - AD_SHIP_W, x)));
+  const die = s => {
+    fx.burst(s.x, SY, C.orange, 30, 280, 0.8, 6); fx.shake(12, 0.4); fx.flash(C.red, 0.4); hx.die();
+    const score = Math.floor(s.t * 10) + s.bonus;
+    setRes({ isNew: submitBest(score) });
+    setPhase('over');
   };
 
-  React.useEffect(() => {
-    const t = setInterval(() => {
-      if (!aliveRef.current) return;
-      scoreRef.current += 1; setScore(s => s + 1);
-      setAsteroids(prev => {
-        const moved = prev.map(a => ({ ...a, y: a.y + 5 + scoreRef.current / 100 })).filter(a => a.y < H);
-        if (Math.random() < 0.04) moved.push({ x: Math.random() * (W - AD_ASTER_SIZE), y: -AD_ASTER_SIZE, id: Date.now() });
-        for (const a of moved) {
-          if (a.y + AD_ASTER_SIZE > H - 70 && a.x < shipRef.current + AD_SHIP_W && a.x + AD_ASTER_SIZE > shipRef.current) {
-            aliveRef.current = false; setAlive(false); setBest(b => Math.max(b, scoreRef.current));
-          }
+  useLoop(phase === 'play', rawDt => {
+    const s = g.current;
+    const k = s.slow > 0 ? 0.45 : 1;
+    const dt = rawDt * k;
+    s.t += rawDt;
+    if (s.slow > 0) s.slow -= rawDt;
+    if (s.banner) { s.banner.t -= rawDt; if (s.banner.t <= 0) s.banner = null; }
+    s.x += (s.tx - s.x) * Math.min(1, rawDt * 18);
+    const diff = Math.min(1, s.t / 90);
+    // spawns
+    s.spawn -= dt;
+    if (s.spawn <= 0) {
+      const r = rand(12, 20 + diff * 16);
+      s.rocks.push({ id: uid(), x: rand(r, AREA_W - r), y: -r - 10, r, vy: rand(150, 230) + diff * 220, vx: rand(-40, 40), rot: 0, vr: rand(-3, 3), g: false });
+      s.spawn = Math.max(0.16, 0.62 - diff * 0.42) * (s.showerLeft > 0 ? 0.35 : 1);
+      if (Math.random() < 0.07) s.items.push({ id: uid(), x: rand(20, AREA_W - 20), y: -20, type: pick(['slow', 'shield', 'star', 'star']) });
+    }
+    s.shower -= rawDt;
+    if (s.shower <= 0) { s.shower = 22; s.showerLeft = 4; s.banner = { text: '☄️ ¡LLUVIA DE METEORITOS!', t: 1.8 }; hx.warn(); }
+    if (s.showerLeft > 0) s.showerLeft -= rawDt;
+    s.rocks.forEach(r => { r.y += r.vy * dt; r.x += r.vx * dt; r.rot += r.vr * dt; });
+    s.items.forEach(it => { it.y += 110 * dt; });
+    s.rocks = s.rocks.filter(r => r.y < AREA_H + 50);
+    s.items = s.items.filter(it => it.y < AREA_H + 30);
+    // colisiones
+    for (let i = s.rocks.length - 1; i >= 0; i--) {
+      const r = s.rocks[i];
+      const d = Math.hypot(r.x - s.x, r.y - (SY + 4));
+      if (d < r.r + 10) {
+        if (s.shield > 0) {
+          s.shield -= 1; s.rocks.splice(i, 1);
+          fx.burst(r.x, r.y, C.cyan, 12, 180); fx.ring(s.x, SY, C.cyan, 60); fx.shake(5); hx.hit();
+          continue;
         }
-        return moved;
-      });
-    }, 16);
-    return () => clearInterval(t);
-  }, []);
+        die(s);
+        return;
+      }
+      if (!r.g && d < r.r + 30 && r.y > SY - 4) {
+        r.g = true; s.near += 1; s.bonus += 15;
+        fx.pop(s.x, SY - 28, 'CERCA +15', C.amber, 13); hx.tick();
+      }
+    }
+    for (let i = s.items.length - 1; i >= 0; i--) {
+      const it = s.items[i];
+      if (Math.hypot(it.x - s.x, it.y - SY) < 26) {
+        s.items.splice(i, 1); hx.good();
+        fx.ring(it.x, it.y, C.lime, 44);
+        if (it.type === 'slow') { s.slow = 5; fx.pop(it.x, it.y, 'CÁMARA LENTA', C.violet, 14); }
+        else if (it.type === 'shield') { s.shield = Math.min(2, s.shield + 1); fx.pop(it.x, it.y, 'ESCUDO', C.cyan, 14); }
+        else { s.bonus += 50; fx.pop(it.x, it.y, '+50', C.amber, 16); }
+      }
+    }
+  });
 
+  const pan = usePan(fx, {
+    down: x => { g.current.tx = clamp(x, 16, AREA_W - 16); },
+    move: x => { g.current.tx = clamp(x, 16, AREA_W - 16); },
+  });
+  const s = g.current;
+  const score = Math.floor(s.t * 10) + s.bonus;
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#000005' }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 10 }}>
-        <Pressable onPress={onExit}><Text style={{ color: '#0ff', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
-        <Text style={{ color: '#0ff', fontSize: 18, fontWeight: '900' }}>Score: {score}  Best: {best}</Text>
-      </View>
-      <Pressable onPress={!alive ? start : undefined} onTouchMove={handleMove} style={{ alignSelf: 'center', width: W, height: H, backgroundColor: '#000010', overflow: 'hidden' }}>
-        {!alive && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}><Text style={{ color: '#0ff', fontSize: 28, fontWeight: '900' }}>ASTEROID DODGE</Text><Text style={{ color: score > 0 ? '#f44' : '#aaa', fontSize: 18, marginTop: 8 }}>{score > 0 ? `Game Over · Score: ${score}` : 'Toca para comenzar'}</Text><Text style={{ color: '#888', marginTop: 6 }}>Desliza para mover la nave</Text></View>}
-        {asteroids.map(a => <View key={a.id} style={{ position: 'absolute', left: a.x, top: a.y, width: AD_ASTER_SIZE, height: AD_ASTER_SIZE, borderRadius: 8, backgroundColor: '#888', shadowColor: '#fff', shadowOpacity: 0.5, shadowRadius: 4 }}><Text style={{ fontSize: 22, textAlign: 'center' }}>☄️</Text></View>)}
-        {alive && <View style={{ position: 'absolute', left: shipX, top: H - 70, width: AD_SHIP_W, height: 40, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 28 }}>🚀</Text></View>}
-      </Pressable>
-    </SafeAreaView>
+    <GameScreen title="ASTEROID DODGE" emoji="☄️" accent={C.cyan} onExit={onExit} score={score} best={best}
+      hud={<>
+        <Text style={{ color: C.dim, fontSize: 12 }}>Cerca: <Text style={{ color: C.amber, fontWeight: '800' }}>{s.near}</Text></Text>
+        <Text style={{ color: C.violet, fontSize: 12, fontWeight: '800' }}>{s.slow > 0 ? `⏳ ${s.slow.toFixed(1)}s` : ''}{s.shield > 0 ? `  🛡️×${s.shield}` : ''}</Text>
+        <Text style={{ color: C.dim, fontSize: 12 }}>{Math.floor(s.t)}s</Text>
+      </>}>
+      <PlayArea fx={fx} bg="#03030c" {...pan}>
+        <Starfield stars={stars} offset={s.t * (s.slow > 0 ? 40 : 140)} />
+        {s.slow > 0 && <View pointerEvents="none" style={{ ...StyleSheet.absoluteFillObject, backgroundColor: alpha(C.violet, 0.08) }} />}
+        {s.items.map(it => (
+          <View key={it.id} style={{ position: 'absolute', left: it.x - 15, top: it.y - 15, width: 30, height: 30, borderRadius: 15, backgroundColor: alpha(C.lime, 0.15), borderWidth: 1, borderColor: C.lime, alignItems: 'center', justifyContent: 'center', ...glow(C.lime, 8, 0.7) }}>
+            <Text style={{ fontSize: 15 }}>{it.type === 'slow' ? '⏳' : it.type === 'shield' ? '🛡️' : '⭐'}</Text>
+          </View>
+        ))}
+        {s.rocks.map(r => (
+          <View key={r.id} style={{ position: 'absolute', left: r.x - r.r, top: r.y - r.r, width: r.r * 2, height: r.r * 2, borderRadius: r.r * 0.9, backgroundColor: '#3a2f2a', borderWidth: 2, borderColor: '#8a6a55', transform: [{ rotate: `${r.rot}rad` }], ...glow('#ff7a3d', 8, 0.35) }}>
+            <View style={{ position: 'absolute', left: r.r * 0.35, top: r.r * 0.3, width: r.r * 0.5, height: r.r * 0.4, borderRadius: r.r * 0.25, backgroundColor: '#26201c' }} />
+            <View style={{ position: 'absolute', left: r.r * 1.1, top: r.r * 1.1, width: r.r * 0.4, height: r.r * 0.3, borderRadius: r.r * 0.2, backgroundColor: '#26201c' }} />
+          </View>
+        ))}
+        {phase !== 'over' && (
+          <View style={{ position: 'absolute', left: s.x - 17, top: SY - 20, width: 34, height: 40, alignItems: 'center' }}>
+            <View style={{ width: 0, height: 0, borderLeftWidth: 17, borderRightWidth: 17, borderBottomWidth: 34, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: C.cyan }} />
+            <View style={{ position: 'absolute', top: 12, width: 8, height: 12, borderRadius: 4, backgroundColor: '#06101c' }} />
+            <View style={{ width: 8, height: 8 + (Math.floor(s.t * 30) % 3) * 3, borderRadius: 4, backgroundColor: C.orange, ...glow(C.orange, 8, 1) }} />
+            {s.shield > 0 && <View style={{ position: 'absolute', left: -8, top: -8, width: 50, height: 50, borderRadius: 25, borderWidth: 2, borderColor: alpha(C.cyan, 0.8), backgroundColor: alpha(C.cyan, 0.1) }} />}
+          </View>
+        )}
+        {s.banner && <Text style={{ position: 'absolute', top: AREA_H * 0.25, width: AREA_W, textAlign: 'center', color: C.orange, fontSize: 20, fontWeight: '900', letterSpacing: 2, ...tglow(C.orange, 12, 1) }}>{s.banner.text}</Text>}
+        <Overlay show={phase !== 'play'} kind={phase} emoji="☄️" title={phase === 'over' ? 'IMPACTO' : 'ASTEROID DODGE'}
+          subtitle={phase === 'over' ? `Sobreviviste ${Math.floor(s.t)} segundos` : 'Sobrevive el mayor tiempo posible'}
+          score={score} best={best} isNew={res.isNew} accent={C.cyan} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Desliza el dedo para mover la nave', 'Roza las rocas para ganar bonus "CERCA"', '⏳ cámara lenta · 🛡️ escudo · ⭐ puntos'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 // ─────────────────────────────────────────────────────────────────
@@ -6212,70 +5597,106 @@ function WordChain({ onExit }) {
 // ─────────────────────────────────────────────────────────────────
 // DINO RUN
 function DinoRun({ onExit }) {
-  const W = Dimensions.get('window').width - 20;
-  const GROUND = 80, DINO_W = 36, DINO_H = 44, OBS_W = 22;
-  const [dinoY, setDinoY] = React.useState(0);
-  const [obstacles, setObstacles] = React.useState([]);
-  const [score, setScore] = React.useState(0);
-  const [best, setBest] = React.useState(0);
-  const [alive, setAlive] = React.useState(false);
-  const [started, setStarted] = React.useState(false);
-  const velRef = React.useRef(0);
-  const dinoRef = React.useRef(0);
-  const aliveRef = React.useRef(false);
-  const scoreRef = React.useRef(0);
-  dinoRef.current = dinoY; aliveRef.current = alive; scoreRef.current = score;
+  const GY = AREA_H - 90;      // línea de suelo
+  const DX = 70;
+  const fx = useFX();
+  const [best, submitBest] = useBest('dino');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const initState = () => ({ y: 0, vy: 0, duck: false, air: false, t: 0, dist: 0, speed: 330, obs: [], next: 1.1, night: false, scroll: 0, clouds: Array.from({ length: 4 }, (_, i) => ({ x: i * 110, y: rand(30, 140) })), coins: 0 });
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
 
-  const start = () => {
-    setDinoY(0); setObstacles([]); setScore(0); setAlive(true); setStarted(true); velRef.current = 0;
-    aliveRef.current = true;
-  };
+  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
   const jump = () => {
-    if (!aliveRef.current) { start(); return; }
-    if (dinoRef.current === 0) velRef.current = -14;
+    const s = g.current;
+    if (phase !== 'play' || s.air) return;
+    s.vy = 640; s.air = true; s.duck = false;
+    fx.burst(DX + 14, GY, '#c9c9a8', 6, 90, 0.4, 4); hx.tap();
   };
 
-  React.useEffect(() => {
-    const t = setInterval(() => {
-      if (!aliveRef.current) return;
-      velRef.current += 0.8;
-      const ny = Math.max(0, dinoRef.current + velRef.current);
-      if (ny === 0 && velRef.current > 0) velRef.current = 0;
-      setDinoY(ny);
-      const speed = 4 + scoreRef.current / 200;
-      scoreRef.current += 1; setScore(s => s + 1);
-      setObstacles(prev => {
-        const moved = prev.map(o => ({ ...o, x: o.x - speed })).filter(o => o.x > -OBS_W);
-        if (moved.length === 0 || moved[moved.length - 1].x < W - 200 - Math.random() * 200)
-          moved.push({ x: W, h: 30 + Math.floor(Math.random() * 30), id: Date.now() });
-        for (const o of moved) {
-          const dinoBottom = ny; // 0 = on ground
-          const clearX = o.x > 50 + DINO_W || o.x + OBS_W < 50;
-          if (!clearX && dinoBottom < o.h) { aliveRef.current = false; setAlive(false); setBest(b => Math.max(b, scoreRef.current)); }
-        }
-        return moved;
-      });
-    }, 16);
-    return () => clearInterval(t);
-  }, []);
-
+  useLoop(phase === 'play', dt => {
+    const s = g.current;
+    s.t += dt;
+    s.speed = Math.min(780, 330 + s.t * 7);
+    s.dist += s.speed * dt * 0.06;
+    s.scroll += s.speed * dt;
+    s.night = Math.floor(s.dist / 400) % 2 === 1;
+    // física
+    if (s.air) {
+      s.vy -= (s.duck ? 3000 : 1750) * dt;
+      s.y += s.vy * dt;
+      if (s.y <= 0) { s.y = 0; s.vy = 0; s.air = false; fx.burst(DX + 14, GY, '#c9c9a8', 5, 70, 0.3, 3); }
+    }
+    s.clouds.forEach(c => { c.x -= s.speed * 0.12 * dt; if (c.x < -50) { c.x = AREA_W + 20; c.y = rand(30, 140); } });
+    // obstáculos
+    s.next -= dt;
+    if (s.next <= 0) {
+      const r = Math.random();
+      if (s.dist > 120 && r < 0.3) {
+        const high = Math.random() < 0.5;   // alto: agacharse · bajo: saltar
+        s.obs.push({ id: uid(), kind: 'bird', x: AREA_W + 30, w: 40, h: 28, lift: high ? 44 : 4, ph: 0 });
+      } else if (r < 0.4) {
+        s.obs.push({ id: uid(), kind: 'coin', x: AREA_W + 30, w: 26, h: 26, lift: rand(30, 110) });
+      } else {
+        const n = 1 + Math.floor(Math.random() * Math.min(3, 1 + s.dist / 250));
+        s.obs.push({ id: uid(), kind: 'cactus', x: AREA_W + 30, w: 22 * n + 6, h: rand(38, 56), n, lift: 0 });
+      }
+      s.next = Math.max(0.55, rand(0.9, 1.7) - s.t * 0.012) * (330 / s.speed) * 1.0 + 0.25;
+    }
+    const me = { x: DX + 6, y: s.y, w: 28, h: s.duck && !s.air ? 22 : 40 };
+    for (let i = s.obs.length - 1; i >= 0; i--) {
+      const o = s.obs[i];
+      o.x -= (s.speed + (o.kind === 'bird' ? 70 : 0)) * dt;
+      o.ph += dt;
+      if (o.x < -80) { s.obs.splice(i, 1); continue; }
+      const hit = { x: o.x + 4, y: o.lift, w: o.w - 8, h: o.h - 6 };
+      const meBox = { x: me.x, y: me.y, w: me.w, h: me.h };
+      const col = meBox.x < hit.x + hit.w && meBox.x + meBox.w > hit.x && meBox.y < hit.y + hit.h && meBox.y + meBox.h > hit.y;
+      if (!col) continue;
+      if (o.kind === 'coin') {
+        s.obs.splice(i, 1); s.coins += 1; s.dist += 12;
+        fx.burst(o.x + 13, GY - o.lift - 13, C.amber, 10, 150); fx.pop(o.x, GY - o.lift - 30, '+12', C.amber, 15); hx.good();
+      } else {
+        fx.burst(DX + 20, GY - s.y - 20, C.red, 22, 240, 0.7, 5); fx.shake(10, 0.35); fx.flash(C.red, 0.3); hx.die();
+        setRes({ isNew: submitBest(Math.floor(s.dist)) });
+        setPhase('over');
+        return;
+      }
+    }
+  });
+  const pan = usePan(fx, {
+    down: x => { if (x > AREA_W * 0.6) { g.current.duck = true; if (g.current.air) g.current.vy = Math.min(g.current.vy, -200); } else jump(); },
+    up: () => { g.current.duck = false; },
+  });
+  const s = g.current;
+  const fg = s.night ? '#e9e9ff' : '#2b2b3a';
+  const bg = s.night ? '#0b0b1c' : '#d9d8c2';
+  const ducking = s.duck && !s.air;
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#f5f5dc' }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 10 }}>
-        <Pressable onPress={onExit}><Text style={{ color: '#333', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
-        <Text style={{ color: '#333', fontSize: 18, fontWeight: '900' }}>Score: {Math.floor(score / 10)}  Best: {Math.floor(best / 10)}</Text>
-      </View>
-      <Pressable onPress={jump} style={{ alignSelf: 'center', width: W, height: 240, backgroundColor: '#e8e8c8', borderRadius: 8, overflow: 'hidden', borderWidth: 2, borderColor: '#888' }}>
-        {!started && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}><Text style={{ color: '#333', fontSize: 26, fontWeight: '900' }}>DINO RUN</Text><Text style={{ color: '#666', marginTop: 8 }}>Toca para saltar</Text></View>}
-        {!alive && started && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}><Text style={{ color: '#c00', fontSize: 22, fontWeight: '900' }}>GAME OVER</Text><Text style={{ color: '#333', marginTop: 6 }}>Score: {Math.floor(score / 10)}</Text><Text style={{ color: '#888', marginTop: 4 }}>Toca para reiniciar</Text></View>}
-        {/* Ground */}
-        <View style={{ position: 'absolute', bottom: GROUND - 4, left: 0, right: 0, height: 3, backgroundColor: '#888' }} />
-        {/* Dino */}
-        {(alive || !started) && <Text style={{ position: 'absolute', left: 46, bottom: GROUND + dinoY, fontSize: 34 }}>🦕</Text>}
-        {/* Obstacles */}
-        {obstacles.map(o => <Text key={o.id} style={{ position: 'absolute', left: o.x, bottom: GROUND, fontSize: o.h > 45 ? 36 : 28 }}>🌵</Text>)}
-      </Pressable>
-    </SafeAreaView>
+    <GameScreen title="DINO RUN" emoji="🦖" accent={C.lime} onExit={onExit} score={Math.floor(s.dist)} best={best} scoreLabel="DISTANCIA"
+      hud={<><Text style={{ color: C.dim, fontSize: 12 }}>Monedas: <Text style={{ color: C.amber, fontWeight: '800' }}>{s.coins}</Text></Text><Text style={{ color: C.dim, fontSize: 12 }}>Vel. {Math.round(s.speed / 33)}</Text></>}>
+      <PlayArea fx={fx} bg={bg} border={s.night ? C.line : '#9a9880'} {...pan}>
+        {s.clouds.map((c, i) => <Text key={i} style={{ position: 'absolute', left: c.x, top: c.y, fontSize: 30, opacity: s.night ? 0.25 : 0.55 }}>{s.night ? '✨' : '☁️'}</Text>)}
+        <View style={{ position: 'absolute', left: 0, right: 0, top: GY, height: 3, backgroundColor: fg }} />
+        {Array.from({ length: 14 }, (_, i) => <View key={i} style={{ position: 'absolute', top: GY + 10 + (i % 3) * 8, left: ((i * 47 - s.scroll) % (AREA_W + 60) + AREA_W + 60) % (AREA_W + 60) - 20, width: 6 + (i % 4) * 4, height: 2, backgroundColor: fg, opacity: 0.45 }} />)}
+        {s.obs.map(o => {
+          const top = GY - o.lift - o.h;
+          if (o.kind === 'cactus') return <Text key={o.id} style={{ position: 'absolute', left: o.x, top: top - 6, fontSize: o.h, lineHeight: o.h + 8, width: o.w + 20, color: fg }}>{'🌵'.repeat(o.n)}</Text>;
+          if (o.kind === 'bird') return <Text key={o.id} style={{ position: 'absolute', left: o.x, top: top - 6, fontSize: 34, transform: [{ scaleX: -1 }, { translateY: Math.sin(o.ph * 14) * 3 }] }}>🦅</Text>;
+          return <Text key={o.id} style={{ position: 'absolute', left: o.x, top, fontSize: 26, ...tglow(C.amber, 8, 0.8) }}>🪙</Text>;
+        })}
+        <Text style={{ position: 'absolute', left: DX - 4, top: GY - s.y - (ducking ? 32 : 48), fontSize: ducking ? 30 : 44, lineHeight: ducking ? 34 : 50, transform: [{ scaleX: -1 }, { translateY: !s.air && phase === 'play' ? Math.sin(s.t * 28) * 1.5 : 0 }] }}>🦖</Text>
+        {phase === 'play' && <View pointerEvents="none" style={{ position: 'absolute', bottom: 10, left: 0, right: 0, flexDirection: 'row' }}>
+          <Text style={{ flex: 0.6, textAlign: 'center', color: fg, opacity: 0.35, fontSize: 11, fontWeight: '800', letterSpacing: 2 }}>TOCA · SALTAR</Text>
+          <Text style={{ flex: 0.4, textAlign: 'center', color: fg, opacity: 0.35, fontSize: 11, fontWeight: '800', letterSpacing: 2 }}>MANTÉN · AGACHAR</Text>
+        </View>}
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🦖" title={phase === 'over' ? 'EXTINTO' : 'DINO RUN'}
+          subtitle={phase === 'over' ? `Corriste ${Math.floor(s.dist)} m` : 'La carrera infinita'}
+          score={Math.floor(s.dist)} scoreLabel="METROS" best={best} isNew={res.isNew} accent={C.lime} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Toca la izquierda para saltar', 'Mantén la derecha para agacharte', 'Aves altas: agáchate · aves bajas: salta', 'Cambia de día a noche cada 400 m'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 // ─────────────────────────────────────────────────────────────────
@@ -6660,7 +6081,7 @@ function Menu({ onPick }) {
     <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
       <ScrollView contentContainerStyle={{ alignItems: 'center', paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
         <View style={{ width: Math.min(width, 520), paddingHorizontal: 16, paddingTop: 22 }}>
-          <Text style={{ color: C.text, fontSize: 38, fontWeight: '900', letterSpacing: 3, ...glow(C.cyan, 16, 0.9) }}>ARCADE<Text style={{ color: C.cyan }}> HUB</Text></Text>
+          <Text style={{ color: C.text, fontSize: 38, fontWeight: '900', letterSpacing: 3, ...tglow(C.cyan, 16, 0.9) }}>ARCADE<Text style={{ color: C.cyan }}> HUB</Text></Text>
           <Text style={{ color: C.dim, fontSize: 13, marginTop: 4, marginBottom: 14 }}>{GAMES.length} juegos · {played} con récord</Text>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
