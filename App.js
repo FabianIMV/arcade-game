@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useReducer, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -4510,53 +4510,93 @@ function FlappyNeon({ onExit }) {
 // ─────────────────────────────────────────────────────────────────
 // MEMORY MATCH
 const MM_EMOJIS = ['🔥','💎','🌙','⚡','🎯','🌊','🍎','👾','🚀','💀','🌈','🦄'];
-function MemoryMatch({ onExit }) {
-  const makeCards = () => {
-    const pairs = MM_EMOJIS.slice(0, 8);
-    return [...pairs, ...pairs].map((e, i) => ({ id: i, emoji: e, flipped: false, matched: false })).sort(() => Math.random() - 0.5);
-  };
-  const [cards, setCards] = React.useState(makeCards());
-  const [selected, setSelected] = React.useState([]);
-  const [moves, setMoves] = React.useState(0);
-  const [won, setWon] = React.useState(false);
-  const [locked, setLocked] = React.useState(false);
-
-  const flip = (idx) => {
-    if (locked || cards[idx].flipped || cards[idx].matched) return;
-    const newCards = cards.map((c, i) => i === idx ? { ...c, flipped: true } : c);
-    const newSel = [...selected, idx];
-    setCards(newCards); setSelected(newSel);
-    if (newSel.length === 2) {
-      setMoves(m => m + 1); setLocked(true);
-      setTimeout(() => {
-        const [a, b] = newSel;
-        setCards(prev => prev.map((c, i) => {
-          if (i === a || i === b) return prev[a].emoji === prev[b].emoji ? { ...c, matched: true, flipped: true } : { ...c, flipped: false };
-          return c;
-        }));
-        setSelected([]); setLocked(false);
-      }, 800);
-    }
-  };
-  React.useEffect(() => { if (cards.every(c => c.matched)) setWon(true); }, [cards]);
-  const reset = () => { setCards(makeCards()); setSelected([]); setMoves(0); setWon(false); setLocked(false); };
-
+function MemoryCard({ up, matched, emoji, color, size, onPress, wrong }) {
+  const a = useRef(new Animated.Value(up || matched ? 1 : 0)).current;
+  const sh = useRef(new Animated.Value(0)).current;
+  useEffect(() => { Animated.timing(a, { toValue: up || matched ? 1 : 0, duration: 170, useNativeDriver: true }).start(); }, [up, matched]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (wrong) Animated.sequence([Animated.timing(sh, { toValue: 1, duration: 60, useNativeDriver: true }), Animated.timing(sh, { toValue: -1, duration: 90, useNativeDriver: true }), Animated.timing(sh, { toValue: 0, duration: 60, useNativeDriver: true })]).start(); }, [wrong]); // eslint-disable-line react-hooks/exhaustive-deps
+  const showFace = up || matched;
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#0a001a' }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 15 }}>
-        <Pressable onPress={onExit}><Text style={{ color: '#a855f7', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
-        <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>Movimientos: {moves}</Text>
-        <Pressable onPress={reset}><Text style={{ color: '#a855f7', fontSize: 16 }}>Reset</Text></Pressable>
-      </View>
-      {won && <View style={{ alignItems: 'center', marginBottom: 10 }}><Text style={{ color: '#ff0', fontSize: 26, fontWeight: '900' }}>¡GANASTE! 🎉</Text><Text style={{ color: '#aaa' }}>en {moves} movimientos</Text></View>}
-      <View style={{ flexWrap: 'wrap', flexDirection: 'row', justifyContent: 'center', padding: 10 }}>
-        {cards.map((c, i) => (
-          <Pressable key={c.id} onPress={() => flip(i)} style={{ width: 76, height: 76, margin: 6, borderRadius: 12, backgroundColor: c.flipped || c.matched ? '#2d0060' : '#1a0040', borderWidth: 2, borderColor: c.matched ? '#a855f7' : '#440088', justifyContent: 'center', alignItems: 'center', shadowColor: '#a855f7', shadowOpacity: c.matched ? 0.9 : 0, shadowRadius: 10 }}>
-            <Text style={{ fontSize: 32 }}>{c.flipped || c.matched ? c.emoji : '❓'}</Text>
-          </Pressable>
-        ))}
-      </View>
-    </SafeAreaView>
+    <Pressable onPress={onPress} style={{ width: size, height: size, padding: 4 }}>
+      <Animated.View style={{ flex: 1, transform: [{ translateX: sh.interpolate({ inputRange: [-1, 1], outputRange: [-5, 5] }) }, { scaleX: a.interpolate({ inputRange: [0, 0.5, 1], outputRange: [1, 0.05, 1] }) }] }}>
+        <View style={{ flex: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: showFace ? alpha(color, matched ? 0.28 : 0.16) : C.panel2, borderWidth: 2, borderColor: showFace ? color : C.line, ...(matched ? glow(color, 12, 0.8) : null) }}>
+          {showFace ? <Text style={{ fontSize: size * 0.46 }}>{emoji}</Text> : <Text style={{ fontSize: size * 0.3, color: alpha(C.violet, 0.5), fontWeight: '900' }}>?</Text>}
+        </View>
+      </Animated.View>
+    </Pressable>
+  );
+}
+function MemoryMatch({ onExit }) {
+  const EMO = ['🔥', '💎', '🌙', '⚡', '🎯', '🌊', '🍎', '👾', '🚀', '💀', '🌈', '🦄', '🍕', '🎸', '🐙', '🌵', '🍩', '👑'];
+  const COLORS = [C.red, C.cyan, C.violet, C.amber, C.pink, C.blue, C.lime, C.orange];
+  const later = useTimeouts();
+  const fx = useFX();
+  const [best, submitBest] = useBest('memory');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const [, force] = useReducer(x => x + 1, 0);
+  const g = useRef(null);
+  const levelCfg = lv => { const pairs = Math.min(15, 5 + lv); const cols = pairs <= 6 ? 3 : pairs <= 10 ? 4 : 5; return { pairs, cols, time: 22 + pairs * 6 }; };
+  const build = (lv, score, combo) => {
+    const cfg = levelCfg(lv);
+    const faces = shuffle(EMO).slice(0, cfg.pairs);
+    const cards = shuffle([...faces, ...faces]).map((e, i) => ({ id: i, e, c: COLORS[EMO.indexOf(e) % COLORS.length], up: true, matched: false, wrong: 0 }));
+    return { lv, cfg, cards, first: null, lock: true, time: cfg.time, score, combo, maxCombo: 0, moves: 0, matches: 0, peek: true, over: false };
+  };
+  if (!g.current) g.current = build(1, 0, 0);
+  const startLevel = (lv, score) => {
+    const s = build(lv, score, 0); g.current = s; force();
+    later(() => { s.cards.forEach(c => { c.up = false; }); s.lock = false; s.peek = false; force(); }, 1300 + s.cfg.pairs * 60);
+  };
+  const start = () => { fx.clear(); setPhase('play'); startLevel(1, 0); };
+  useLoop(phase === 'play', dt => {
+    const s = g.current;
+    if (s.peek || s.over) return;
+    s.time -= dt;
+    if (s.time <= 0) { s.time = 0; s.over = true; hx.die(); setRes({ isNew: submitBest(s.score) }); setPhase('over'); }
+  });
+  const flip = i => {
+    const s = g.current;
+    if (phase !== 'play' || s.lock || s.over) return;
+    const c = s.cards[i];
+    if (c.up || c.matched) return;
+    c.up = true; hx.tick();
+    if (s.first == null) { s.first = i; force(); return; }
+    const a = s.cards[s.first]; s.moves += 1;
+    if (a.e === c.e) {
+      a.matched = c.matched = true; s.first = null; s.matches += 1; s.combo += 1; s.maxCombo = Math.max(s.maxCombo, s.combo);
+      const pts = 100 * s.combo; s.score += pts; hx.good();
+      fx.pop(AREA_W / 2, AREA_H * 0.12, `+${pts}${s.combo > 1 ? ` · RACHA ×${s.combo}` : ''}`, C.amber, 18);
+      if (s.matches >= s.cfg.pairs) {
+        s.lock = true; const bonus = Math.round(s.time * 10); s.score += bonus; hx.win(); fx.flash('#fff', 0.3);
+        fx.pop(AREA_W / 2, AREA_H / 2, `NIVEL ${s.lv} · BONUS +${bonus}`, C.lime, 22);
+        later(() => startLevel(s.lv + 1, s.score), 1400);
+      }
+    } else {
+      s.lock = true; s.combo = 0; const f = s.first; s.first = null; a.wrong += 1; c.wrong += 1; hx.warn();
+      later(() => { a.up = false; c.up = false; s.lock = false; force(); }, 650);
+    }
+    force();
+  };
+  const s = g.current;
+  const rows = Math.ceil(s.cards.length / s.cfg.cols);
+  const cell = Math.min(Math.floor((AREA_W - 24) / s.cfg.cols), Math.floor((AREA_H - 90) / rows), 104);
+  return (
+    <GameScreen title="MEMORY MATCH" emoji="🃏" accent={C.violet} onExit={onExit} score={s.score} best={best}
+      hud={<><Text style={{ color: s.time < 8 ? C.red : C.text, fontWeight: '900', fontSize: 15 }}>⏱ {Math.ceil(s.time)}s</Text><Text style={{ color: C.dim, fontSize: 12 }}>Nivel <Text style={{ color: C.violet, fontWeight: '800' }}>{s.lv}</Text> · Pares {s.matches}/{s.cfg.pairs}</Text><View style={{ minWidth: 70, alignItems: 'flex-end' }}>{s.combo > 1 ? <Combo n={s.combo} color={C.violet} /> : null}</View></>}>
+      <PlayArea fx={fx} bg="#090516" border={alpha(C.violet, 0.4)}>
+        <View style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: cell * s.cfg.cols }}>
+            {s.cards.map((c, i) => <MemoryCard key={`${s.lv}-${c.id}`} up={c.up} matched={c.matched} emoji={c.e} color={c.c} size={cell} wrong={c.wrong} onPress={() => flip(i)} />)}
+          </View>
+          {s.peek && phase === 'play' && <Text style={{ color: C.amber, fontWeight: '900', letterSpacing: 2, marginTop: 12 }}>¡MEMORIZA!</Text>}
+        </View>
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🃏" title={phase === 'over' ? '¡SE ACABÓ EL TIEMPO!' : 'MEMORY MATCH'}
+          subtitle={phase === 'over' ? `Llegaste al nivel ${s.lv} · mejor racha ${s.maxCombo}` : 'Encuentra todos los pares'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.violet} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Al empezar verás las cartas un instante', 'Cada nivel tiene más pares y menos tiempo', 'Los pares seguidos multiplican los puntos'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 // ─────────────────────────────────────────────────────────────────
@@ -4900,105 +4940,151 @@ function CoinCollector({ onExit }) {
 // ─────────────────────────────────────────────────────────────────
 // REACTION TIME
 function ReactionTime({ onExit }) {
-  const [state, setState] = React.useState('idle'); // idle, waiting, ready, result
-  const [reactionMs, setReactionMs] = React.useState(null);
-  const [best, setBest] = React.useState(null);
-  const [startTime, setStartTime] = React.useState(null);
-  const timerRef = React.useRef(null);
-
-  const startGame = () => {
-    setState('waiting');
-    const delay = 1500 + Math.random() * 3000;
-    timerRef.current = setTimeout(() => { setState('ready'); setStartTime(Date.now()); }, delay);
+  const ROUNDS = 5;
+  const fx = useFX();
+  const later = useTimeouts();
+  const [best, submitBest] = useBest('reaction', true);
+  const [phase, setPhase] = useState('ready');         // ready | play | over
+  const [st, setSt] = useState('wait');                // wait | go | early | result
+  const [round, setRound] = useState(0);
+  const [times, setTimes] = useState([]);
+  const [last, setLast] = useState(0);
+  const [target, setTarget] = useState({ x: 100, y: 200 });
+  const [res, setRes] = useState({ isNew: false });
+  const goAt = useRef(0); const gen = useRef(0);
+  const GRADE = ms => (ms < 220 ? ['⚡ SOBREHUMANO', C.cyan] : ms < 280 ? ['🐆 RAPIDÍSIMO', C.lime] : ms < 340 ? ['🐇 BUEN REFLEJO', C.amber] : ms < 450 ? ['🚶 NORMAL', C.orange] : ['🐢 DESPIERTA', C.red]);
+  const arm = r => {
+    const id = ++gen.current;
+    setRound(r); setSt('wait');
+    later(() => {
+      if (gen.current !== id) return;
+      if (r % 2 === 1) setTarget({ x: rand(50, AREA_W - 50), y: rand(120, AREA_H - 110) });
+      goAt.current = Date.now(); setSt('go');
+    }, rand(1200, 3600));
   };
-  const handlePress = () => {
-    if (state === 'idle' || state === 'result') { startGame(); return; }
-    if (state === 'waiting') { clearTimeout(timerRef.current); setState('idle'); setReactionMs(null); return; }
-    if (state === 'ready') {
-      const ms = Date.now() - startTime;
-      setReactionMs(ms); setState('result');
-      setBest(b => b === null ? ms : Math.min(b, ms));
-    }
+  const start = () => { fx.clear(); gen.current += 1; setTimes([]); setPhase('play'); arm(0); };
+  const hitGo = () => {
+    const ms = Date.now() - goAt.current;
+    setLast(ms); hx.hit();
+    const list = [...times, ms]; setTimes(list);
+    fx.burst(round % 2 ? target.x : AREA_W / 2, round % 2 ? target.y : AREA_H / 2, GRADE(ms)[1], 18, 240);
+    if (list.length >= ROUNDS) {
+      const avg = Math.round(list.reduce((a, b) => a + b, 0) / list.length);
+      later(() => { hx.win(); setRes({ isNew: submitBest(avg), avg }); setPhase('over'); }, 700);
+      setSt('result');
+    } else { setSt('result'); later(() => arm(round + 1), 1100); }
   };
-  const grade = reactionMs ? (reactionMs < 200 ? '⚡ INCREÍBLE' : reactionMs < 300 ? '🔥 Rápido' : reactionMs < 450 ? '👍 Bien' : '🐢 Lento') : '';
-
+  const press = (onTarget) => {
+    if (phase !== 'play') return;
+    if (st === 'wait') { gen.current += 1; setSt('early'); hx.bad(); fx.shake(6, 0.25); later(() => arm(round), 1300); return; }
+    if (st === 'go') { if (round % 2 === 1 && !onTarget) return; hitGo(); }
+  };
+  const avgNow = times.length ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : 0;
+  const bg = st === 'go' && round % 2 === 0 ? '#06371b' : st === 'early' ? '#3a0a14' : '#0d0a18';
+  const targetMode = round % 2 === 1;
+  const finalAvg = res.avg || avgNow;
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#050005' }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 15 }}>
-        <Pressable onPress={onExit}><Text style={{ color: '#f0f', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
-        {best && <Text style={{ color: '#f0f', fontSize: 16, fontWeight: '900' }}>Mejor: {best}ms</Text>}
-      </View>
-      <Pressable onPress={handlePress} style={{ flex: 1, backgroundColor: state === 'ready' ? '#00aa00' : state === 'waiting' ? '#aa0000' : '#111', justifyContent: 'center', alignItems: 'center' }}>
-        {state === 'idle' && <><Text style={{ color: '#f0f', fontSize: 32, fontWeight: '900', textAlign: 'center' }}>REACTION TIME</Text><Text style={{ color: '#aaa', fontSize: 18, marginTop: 20 }}>Toca para comenzar</Text></>}
-        {state === 'waiting' && <><Text style={{ color: '#fff', fontSize: 36, fontWeight: '900' }}>ESPERA...</Text><Text style={{ color: '#ccc', marginTop: 10 }}>No toques todavía · (si tocas, pierdes)</Text></>}
-        {state === 'ready' && <><Text style={{ color: '#fff', fontSize: 48, fontWeight: '900' }}>¡TOCA!</Text></>}
-        {state === 'result' && <><Text style={{ color: '#ff0', fontSize: 44, fontWeight: '900' }}>{reactionMs}ms</Text><Text style={{ color: '#fff', fontSize: 24, marginTop: 10 }}>{grade}</Text>{best && <Text style={{ color: '#aaa', marginTop: 10 }}>Mejor: {best}ms</Text>}<Text style={{ color: '#888', marginTop: 30 }}>Toca para intentar de nuevo</Text></>}
-      </Pressable>
-    </SafeAreaView>
+    <GameScreen title="REFLEJOS" emoji="⚡" accent={C.pink} onExit={onExit} score={phase === 'over' ? finalAvg : avgNow} scoreLabel="MEDIA ms" best={best} bestLabel="MEJOR ms"
+      hud={<><Text style={{ color: C.dim, fontSize: 12 }}>Ronda <Text style={{ color: C.pink, fontWeight: '800' }}>{Math.min(ROUNDS, times.length + (st === 'result' ? 0 : 1))}/{ROUNDS}</Text></Text><View style={{ flexDirection: 'row', gap: 4 }}>{Array.from({ length: ROUNDS }, (_, i) => <View key={i} style={{ width: 22, height: 6, borderRadius: 3, backgroundColor: i < times.length ? C.pink : alpha(C.pink, 0.2) }} />)}</View><Text style={{ color: C.dim, fontSize: 12 }}>{targetMode ? 'Toca el objetivo' : 'Toca la pantalla'}</Text></>}>
+      <PlayArea fx={fx} bg={bg} border={alpha(C.pink, 0.4)}>
+        <Pressable testID="rt-area" onPressIn={() => press(false)} style={StyleSheet.absoluteFill} />
+        <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: AREA_H * 0.28, alignItems: 'center' }}>
+          {st === 'wait' && <><Text style={{ fontSize: 56 }}>✋</Text><Text style={{ color: C.text, fontSize: 24, fontWeight: '900', letterSpacing: 2, marginTop: 8 }}>ESPERA…</Text><Text style={{ color: C.dim, marginTop: 6 }}>{targetMode ? 'Aparecerá un objetivo' : 'Toca cuando se ponga verde'}</Text></>}
+          {st === 'go' && !targetMode && <><Text style={{ fontSize: 56 }}>👆</Text><Text style={{ color: C.lime, fontSize: 40, fontWeight: '900', letterSpacing: 3, ...tglow(C.lime, 16) }}>¡YA!</Text></>}
+          {st === 'early' && <><Text style={{ fontSize: 56 }}>🙈</Text><Text style={{ color: C.red, fontSize: 24, fontWeight: '900', marginTop: 8 }}>¡DEMASIADO PRONTO!</Text></>}
+          {st === 'result' && <><Text style={{ color: GRADE(last)[1], fontSize: 60, fontWeight: '900', ...tglow(GRADE(last)[1], 16) }}>{last} ms</Text><Text style={{ color: GRADE(last)[1], fontSize: 16, fontWeight: '900', marginTop: 6 }}>{GRADE(last)[0]}</Text></>}
+        </View>
+        {st === 'go' && targetMode && (
+          <Pressable testID="rt-target" onPressIn={() => press(true)} style={{ position: 'absolute', left: target.x - 40, top: target.y - 40, width: 80, height: 80 }}>
+            <View style={{ flex: 1, borderRadius: 40, backgroundColor: C.lime, borderWidth: 4, borderColor: '#fff', ...glow(C.lime, 24, 1) }} />
+          </Pressable>
+        )}
+        <Overlay show={phase !== 'play'} kind={phase} emoji="⚡" title={phase === 'over' ? GRADE(finalAvg)[0] : 'REFLEJOS'}
+          subtitle={phase === 'over' ? `Tus tiempos: ${times.join(' · ')} ms` : '5 rondas · mide tu tiempo de reacción'}
+          score={finalAvg} scoreLabel="MEDIA (ms)" best={best} isNew={res.isNew} accent={C.pink} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Pantalla verde: toca lo más rápido posible', 'Rondas alternas: toca el objetivo que aparece', 'Si tocas antes de tiempo, repites la ronda'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 // ─────────────────────────────────────────────────────────────────
 // COLOR RUSH – tap the correct color name
 function ColorRush({ onExit }) {
-  const COLORS = [
-    { name: 'ROJO', hex: '#ff2222' }, { name: 'AZUL', hex: '#2266ff' },
-    { name: 'VERDE', hex: '#22cc44' }, { name: 'AMARILLO', hex: '#ffdd00' },
-    { name: 'NARANJA', hex: '#ff8800' }, { name: 'MORADO', hex: '#aa00ff' },
+  const COLS6 = [
+    { n: 'ROJO', c: C.red }, { n: 'AZUL', c: C.blue }, { n: 'VERDE', c: C.lime },
+    { n: 'AMARILLO', c: C.amber }, { n: 'MORADO', c: C.violet }, { n: 'NARANJA', c: C.orange },
   ];
-  const make = () => {
-    const word = COLORS[Math.floor(Math.random() * COLORS.length)];
-    const ink = COLORS[Math.floor(Math.random() * COLORS.length)];
-    const opts = [word, ...COLORS.filter(c => c !== word).sort(() => Math.random() - 0.5).slice(0, 3)].sort(() => Math.random() - 0.5);
-    return { word, ink, opts };
+  const fx = useFX();
+  const [best, submitBest] = useBest('colorrush');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const newQ = s => {
+    const n = s.ok >= 14 ? 6 : 4;
+    const w = randInt(0, n - 1);
+    const ink = Math.random() < 0.35 ? w : randInt(0, n - 1);
+    s.q = { w, ink, n, t: 0, limit: Math.max(1.0, 2.8 - s.ok * 0.05) };
   };
-  const [q, setQ] = React.useState(make());
-  const [score, setScore] = React.useState(0);
-  const [best, setBest] = React.useState(0);
-  const [lives, setLives] = React.useState(3);
-  const [flash, setFlash] = React.useState(null);
-  const [started, setStarted] = React.useState(false);
-
-  const answer = (c) => {
-    if (!started) return;
-    if (c.name === q.word.name) {
-      setScore(s => s + 1); setFlash('correct');
-    } else {
-      const newLives = lives - 1; setLives(newLives); setFlash('wrong');
-      if (newLives <= 0) { setBest(b => Math.max(b, score)); }
-    }
-    setTimeout(() => { setFlash(null); if (lives > 1 || c.name === q.word.name) setQ(make()); }, 300);
+  const initState = () => { const s = { ok: 0, score: 0, lives: 3, combo: 0, maxCombo: 0, rule: 'ink', ruleLeft: 6, q: null, t: 0, flash: null, banner: null }; newQ(s); return s; };
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
+  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
+  const wrong = (s, why) => {
+    s.lives -= 1; s.combo = 0; s.flash = { c: C.red, t: 0.25 }; fx.shake(7, 0.25); fx.flash(C.red, 0.2); hx.bad();
+    if (s.lives <= 0) { hx.die(); setRes({ isNew: submitBest(s.score), why }); setPhase('over'); return true; }
+    newQ(s); return false;
   };
-  const reset = () => { setScore(0); setLives(3); setQ(make()); setStarted(true); };
-
-  if (!started || lives <= 0) return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#050010', justifyContent: 'center', alignItems: 'center' }}>
-      <Pressable onPress={onExit} style={{ position: 'absolute', top: 50, left: 20 }}><Text style={{ color: '#f0f', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
-      <Text style={{ color: '#fff', fontSize: 30, fontWeight: '900', marginBottom: 10 }}>COLOR RUSH</Text>
-      {lives <= 0 && <Text style={{ color: '#f44', fontSize: 22, marginBottom: 8 }}>Game Over · Score: {score}</Text>}
-      {best > 0 && <Text style={{ color: '#ff0', fontSize: 18, marginBottom: 20 }}>Mejor: {best}</Text>}
-      <Text style={{ color: '#aaa', textAlign: 'center', marginHorizontal: 30, marginBottom: 30 }}>Toca el botón con el COLOR del texto, no la palabra</Text>
-      <Pressable onPress={reset} style={{ backgroundColor: '#f0f', padding: 16, borderRadius: 12 }}><Text style={{ color: '#000', fontSize: 20, fontWeight: '900' }}>JUGAR</Text></Pressable>
-    </SafeAreaView>
-  );
-
+  const answer = i => {
+    const s = g.current;
+    if (phase !== 'play') return;
+    const target = s.rule === 'ink' ? s.q.ink : s.q.w;
+    if (i !== target) { wrong(s, 'fallo'); return; }
+    s.combo += 1; s.maxCombo = Math.max(s.maxCombo, s.combo); s.ok += 1;
+    const speedBonus = Math.round((1 - s.q.t / s.q.limit) * 5);
+    const pts = (10 + speedBonus) * (1 + Math.floor(s.combo / 8));
+    s.score += pts; s.flash = { c: C.lime, t: 0.2 };
+    fx.pop(AREA_W / 2, AREA_H * 0.34, `+${pts}`, C.lime, 22); hx.hit();
+    s.ruleLeft -= 1;
+    if (s.ruleLeft <= 0) { s.rule = s.rule === 'ink' ? 'word' : 'ink'; s.ruleLeft = randInt(5, 8); s.banner = { t: 1.4 }; fx.flash(C.violet, 0.25); hx.warn(); }
+    newQ(s);
+  };
+  useLoop(phase === 'play', dt => {
+    const s = g.current;
+    s.t += dt; s.q.t += dt;
+    if (s.flash) { s.flash.t -= dt; if (s.flash.t <= 0) s.flash = null; }
+    if (s.banner) { s.banner.t -= dt; if (s.banner.t <= 0) s.banner = null; }
+    if (s.q.t >= s.q.limit) wrong(s, 'tiempo');
+  });
+  const s = g.current;
+  const cols = COLS6.slice(0, s.q.n);
+  const BW = (AREA_W - 48) / 2;
+  const rule = s.rule === 'ink' ? 'TOCA EL COLOR DE LA TINTA' : 'TOCA LO QUE DICE LA PALABRA';
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: flash === 'correct' ? '#003300' : flash === 'wrong' ? '#330000' : '#050010' }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 15 }}>
-        <Pressable onPress={onExit}><Text style={{ color: '#f0f', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
-        <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>{'❤️'.repeat(lives)}  Score: {score}</Text>
-      </View>
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ color: '#888', marginBottom: 10 }}>Toca el color del texto</Text>
-        <Text style={{ color: q.ink.hex, fontSize: 52, fontWeight: '900', marginBottom: 40 }}>{q.word.name}</Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12 }}>
-          {q.opts.map((c, i) => (
-            <Pressable key={i} onPress={() => answer(c)} style={{ backgroundColor: c.hex, width: 140, height: 60, borderRadius: 12, justifyContent: 'center', alignItems: 'center', margin: 6 }}>
-              <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 4 }}>{c.name}</Text>
-            </Pressable>
-          ))}
+    <GameScreen title="COLOR RUSH" emoji="🎨" accent={C.pink} onExit={onExit} score={s.score} best={best}
+      hud={<><Lives n={s.lives} max={3} /><Text style={{ color: C.dim, fontSize: 12 }}>Aciertos <Text style={{ color: C.pink, fontWeight: '800' }}>{s.ok}</Text></Text><View style={{ minWidth: 70, alignItems: 'flex-end' }}>{s.combo > 2 ? <Combo n={s.combo} color={C.pink} /> : null}</View></>}>
+      <PlayArea fx={fx} bg={s.flash ? alpha(s.flash.c, 0.1) : '#0a0612'} border={alpha(C.pink, 0.4)}>
+        <View style={{ position: 'absolute', top: 18, left: 18, right: 18 }}>
+          <Bar value={s.q.limit - s.q.t} max={s.q.limit} color={s.q.t / s.q.limit > 0.7 ? C.red : C.pink} h={10} />
+          <Text style={{ textAlign: 'center', marginTop: 14, color: s.rule === 'ink' ? C.cyan : C.amber, fontSize: 13, fontWeight: '900', letterSpacing: 2 }}>{rule}</Text>
         </View>
-      </View>
-    </SafeAreaView>
+        <View style={{ position: 'absolute', top: AREA_H * 0.2, left: 0, right: 0, alignItems: 'center' }}>
+          <Text style={{ fontSize: 58, fontWeight: '900', letterSpacing: 2, color: cols[s.q.ink].c, ...tglow(cols[s.q.ink].c, 18) }}>{cols[s.q.w].n}</Text>
+        </View>
+        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 24, alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: BW * 2 + 12, gap: 12 }}>
+            {cols.map((c, i) => (
+              <Pressable key={i} testID={`cr-${i}`} onPressIn={() => answer(i)} style={{ width: BW, height: s.q.n > 4 ? 72 : 96 }}>
+                <View style={{ flex: 1, borderRadius: 22, backgroundColor: alpha(c.c, 0.85), borderWidth: 2, borderColor: '#fff6', ...glow(c.c, 14, 0.6) }} />
+              </Pressable>
+            ))}
+          </View>
+        </View>
+        {s.banner && <View pointerEvents="none" style={{ position: 'absolute', top: AREA_H * 0.45, left: 0, right: 0, alignItems: 'center' }}><Text style={{ color: C.violet, fontSize: 18, fontWeight: '900', letterSpacing: 2, ...tglow(C.violet, 12) }}>¡CAMBIÓ LA REGLA!</Text></View>}
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🎨" title={phase === 'over' ? 'TE CONFUNDISTE' : 'COLOR RUSH'}
+          subtitle={phase === 'over' ? `${s.ok} aciertos · mejor racha ${s.maxCombo}` : 'Tu cerebro contra tus ojos'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.pink} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Lee la regla de arriba y toca el color correcto', 'La regla cambia cada pocos aciertos', 'Responde rápido: el tiempo se acorta'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 // ─────────────────────────────────────────────────────────────────
@@ -5082,62 +5168,94 @@ function PongSolo({ onExit }) {
 // ─────────────────────────────────────────────────────────────────
 // WORD CHAIN – escribe palabras que empiezan con la última letra
 function WordChain({ onExit }) {
-  const WORDS_ES = ['árbol','libro','osito','ola','agua','uva','avión','nuez','zebra','abeja','jabón','nave','estrella','anillo','lobo','oso','oveja','ajo','oído','dado','dragón','noche','elefante','espejo','ojo','jabali','iguana','alfil','llave','leche','café','eclipse','esfinge','gato','otoño','ogro','rata','ardilla','anguila','araña','niño','orco'];
+  const WORDS = ['árbol', 'avión', 'abeja', 'agua', 'anillo', 'araña', 'ardilla', 'arroz', 'azúcar', 'almohada', 'amigo', 'abuelo', 'aceite', 'águila', 'alfombra', 'barco', 'bosque', 'botella', 'burro', 'banana', 'balón', 'bruja', 'bufanda', 'bicicleta', 'botón', 'brazo', 'casa', 'camino', 'caballo', 'cielo', 'campana', 'coche', 'cuchara', 'corazón', 'cohete', 'castillo', 'cebolla', 'camisa', 'cocina', 'conejo', 'dado', 'dragón', 'dedo', 'diamante', 'delfín', 'dinero', 'doctor', 'dulce', 'duende', 'escuela', 'estrella', 'elefante', 'espejo', 'escalera', 'edificio', 'entrada', 'esfera', 'espada', 'error', 'flor', 'fuego', 'foca', 'fruta', 'farol', 'fantasma', 'feria', 'familia', 'fiesta', 'gato', 'globo', 'guitarra', 'gusano', 'gigante', 'galleta', 'gorila', 'guante', 'hormiga', 'huevo', 'hoja', 'helado', 'hongo', 'hamaca', 'hielo', 'hermano', 'hotel', 'isla', 'iglesia', 'imán', 'invierno', 'iguana', 'idea', 'insecto', 'jirafa', 'jardín', 'jugo', 'jabón', 'jaula', 'joya', 'juego', 'koala', 'kiwi', 'luna', 'libro', 'león', 'lápiz', 'lago', 'lluvia', 'lobo', 'limón', 'luz', 'lámpara', 'mesa', 'mano', 'mar', 'mariposa', 'montaña', 'manzana', 'martillo', 'mundo', 'mono', 'moneda', 'museo', 'nube', 'naranja', 'nariz', 'noche', 'nido', 'nieve', 'nave', 'nuez', 'oso', 'oro', 'ola', 'ojo', 'oveja', 'orquesta', 'océano', 'olla', 'otoño', 'perro', 'pan', 'pelota', 'playa', 'planeta', 'puerta', 'pájaro', 'pato', 'piedra', 'payaso', 'pizza', 'pulpo', 'peine', 'queso', 'rana', 'reloj', 'rayo', 'río', 'rosa', 'ratón', 'robot', 'rueda', 'ropa', 'regalo', 'sol', 'silla', 'sapo', 'semilla', 'serpiente', 'sombrero', 'sandía', 'selva', 'sopa', 'tren', 'tigre', 'torre', 'tortuga', 'taza', 'tambor', 'tomate', 'techo', 'tijeras', 'tesoro', 'uva', 'unicornio', 'universo', 'vaca', 'volcán', 'viento', 'ventana', 'vaso', 'verano', 'violín', 'valle', 'vela', 'xilófono', 'yate', 'yoga', 'yema', 'yogur', 'zapato', 'zorro', 'zanahoria', 'zebra', 'zona'];
   const norm = w => w.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  const [chain, setChain] = React.useState([]);
-  const [input, setInput] = React.useState('');
-  const [msg, setMsg] = React.useState('');
-  const [used, setUsed] = React.useState(new Set());
-  const [score, setScore] = React.useState(0);
-  const [best, setBest] = React.useState(0);
-  const [lives, setLives] = React.useState(3);
-  const [started, setStarted] = React.useState(false);
-
-  const start = () => { setChain([]); setInput(''); setMsg(''); setUsed(new Set()); setScore(0); setLives(3); setStarted(true); };
-
-  const submit = () => {
-    const w = input.trim().toLowerCase();
-    if (!w) return;
-    if (used.has(norm(w))) { setMsg('¡Ya usada!'); setInput(''); return; }
-    if (!WORDS_ES.some(x => norm(x) === norm(w))) { setMsg('No conozco esa palabra'); setInput(''); return; }
-    if (chain.length > 0) {
-      const last = norm(chain[chain.length - 1]);
-      if (norm(w)[0] !== last[last.length - 1]) { setMsg(`Debe empezar con "${last[last.length - 1].toUpperCase()}"`); const nl = lives - 1; setLives(nl); setInput(''); if (nl <= 0) { setBest(b => Math.max(b, score)); setStarted(false); } return; }
+  const first = w => norm(w)[0];
+  const lastL = w => { const n = norm(w); return n[n.length - 1]; };
+  const fx = useFX();
+  const later = useTimeouts();
+  const [best, submitBest] = useBest('wordchain');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const [, force] = useReducer(x => x + 1, 0);
+  const g = useRef(null);
+  const nextRound = s => {
+    const need = lastL(s.chain[s.chain.length - 1]);
+    const unused = WORDS.filter(w => !s.used.has(w));
+    const follow = w => unused.filter(x => x !== w && first(x) === lastL(w)).length > 0;
+    const good = shuffle(unused.filter(w => first(w) === need && follow(w))).slice(0, randInt(1, 2));
+    if (!good.length) { // callejón sin salida: el jugador gana la cadena
+      hx.win(); setRes({ isNew: submitBest(s.score), won: true }); setPhase('over'); return;
     }
-    setChain(c => [...c, w]); setUsed(u => new Set([...u, norm(w)])); setScore(s => s + 1); setMsg('✅'); setInput('');
+    // señuelos: empiezan con una letra parecida
+    const decoys = shuffle(unused.filter(w => first(w) !== need)).slice(0, 4 - good.length);
+    s.opts = shuffle([...good, ...decoys].map(w => ({ w, ok: first(w) === need })));
+    s.need = need; s.limit = Math.max(2.6, 7 - s.chain.length * 0.12); s.t = 0; s.lock = false; s.pick = null;
   };
-
-  if (!started) return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#001a00', justifyContent: 'center', alignItems: 'center' }}>
-      <Pressable onPress={onExit} style={{ position: 'absolute', top: 50, left: 20 }}><Text style={{ color: '#0f0', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
-      <Text style={{ color: '#0f0', fontSize: 28, fontWeight: '900' }}>WORD CHAIN</Text>
-      {score > 0 && <Text style={{ color: '#f44', fontSize: 20, marginTop: 8 }}>Game Over · Score: {score}</Text>}
-      {best > 0 && <Text style={{ color: '#ff0', fontSize: 16, marginTop: 4 }}>Mejor: {best}</Text>}
-      <Text style={{ color: '#aaa', textAlign: 'center', marginHorizontal: 30, marginVertical: 20 }}>Escribe palabras en cadena. Cada palabra debe empezar con la última letra de la anterior.</Text>
-      <Pressable onPress={start} style={{ backgroundColor: '#0f0', padding: 16, borderRadius: 12 }}><Text style={{ color: '#000', fontSize: 20, fontWeight: '900' }}>JUGAR</Text></Pressable>
-    </SafeAreaView>
-  );
-
-  const lastWord = chain.length > 0 ? chain[chain.length - 1] : null;
-  const lastLetter = lastWord ? norm(lastWord)[norm(lastWord).length - 1].toUpperCase() : null;
+  const init = () => { const s = { chain: [], used: new Set(), score: 0, lives: 3, streak: 0, opts: [], need: '', t: 0, limit: 7, lock: false, pick: null }; const w = pick(WORDS); s.chain.push(w); s.used.add(w); nextRound(s); return s; };
+  if (!g.current) g.current = init();
+  const start = () => { fx.clear(); g.current = init(); setPhase('play'); };
+  const choose = o => {
+    const s = g.current;
+    if (phase !== 'play' || s.lock) return;
+    s.lock = true; s.pick = o.w;
+    if (o.ok) {
+      s.chain.push(o.w); s.used.add(o.w); s.streak += 1;
+      const pts = 10 + Math.round((1 - s.t / s.limit) * 10) + Math.min(20, s.streak * 2); s.score += pts;
+      fx.burst(AREA_W / 2, AREA_H * 0.3, C.lime, 14, 200); fx.pop(AREA_W / 2, AREA_H * 0.22, `+${pts}`, C.lime, 22); hx.good(); force();
+      later(() => { if (g.current === s) { nextRound(s); force(); } }, 450);
+    } else {
+      s.lives -= 1; s.streak = 0; fx.shake(7, 0.25); fx.flash(C.red, 0.25); hx.bad(); force();
+      if (s.lives <= 0) { later(() => { hx.die(); setRes({ isNew: submitBest(s.score) }); setPhase('over'); }, 800); }
+      else later(() => { if (g.current === s) { s.chain.push(s.opts.find(x => x.ok).w); s.used.add(s.chain[s.chain.length - 1]); nextRound(s); force(); } }, 900);
+    }
+  };
+  useLoop(phase === 'play', dt => {
+    const s = g.current;
+    if (s.lock) return;
+    s.t += dt;
+    if (s.t >= s.limit) {
+      s.lock = true; s.lives -= 1; s.streak = 0; fx.shake(7, 0.25); fx.flash(C.red, 0.25); fx.pop(AREA_W / 2, AREA_H * 0.3, '¡TIEMPO!', C.red, 22); hx.bad();
+      if (s.lives <= 0) { later(() => { hx.die(); setRes({ isNew: submitBest(s.score) }); setPhase('over'); }, 800); }
+      else later(() => { if (g.current === s) { s.chain.push(s.opts.find(x => x.ok).w); s.used.add(s.chain[s.chain.length - 1]); nextRound(s); force(); } }, 900);
+    }
+  });
+  const s = g.current;
+  const last = s.chain[s.chain.length - 1];
+  const recent = s.chain.slice(-4, -1);
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#001a00' }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 15 }}>
-        <Pressable onPress={onExit}><Text style={{ color: '#0f0', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
-        <Text style={{ color: '#fff', fontSize: 16, fontWeight: '900' }}>{'❤️'.repeat(lives)}  Score: {score}</Text>
-      </View>
-      {lastLetter && <Text style={{ color: '#ff0', fontSize: 22, fontWeight: '900', textAlign: 'center' }}>Empieza con: {lastLetter}</Text>}
-      <Text style={{ color: msg.startsWith('✅') ? '#0f0' : '#f44', textAlign: 'center', fontSize: 16, minHeight: 22 }}>{msg}</Text>
-      <View style={{ flex: 1, padding: 15 }}>
-        <ScrollView style={{ maxHeight: 200, marginBottom: 10 }}>
-          {chain.slice().reverse().map((w, i) => <Text key={i} style={{ color: i === 0 ? '#0ff' : '#888', fontSize: 16, marginBottom: 4 }}>{i === 0 ? '→ ' : '   '}{w}</Text>)}
-        </ScrollView>
-        <View style={{ flexDirection: 'row', marginTop: 10 }}>
-          <TextInput value={input} onChangeText={setInput} onSubmitEditing={submit} placeholder={lastLetter ? `Empieza con ${lastLetter}...` : 'Escribe una palabra...'} placeholderTextColor="#555" style={{ flex: 1, backgroundColor: '#003300', color: '#0f0', padding: 12, borderRadius: 10, fontSize: 18, borderWidth: 2, borderColor: '#0f0' }} autoCapitalize="none" autoCorrect={false} />
-          <Pressable onPress={submit} style={{ backgroundColor: '#0f0', padding: 14, borderRadius: 10, marginLeft: 8, justifyContent: 'center' }}><Text style={{ color: '#000', fontWeight: '900', fontSize: 18 }}>OK</Text></Pressable>
+    <GameScreen title="WORD CHAIN" emoji="🔗" accent={C.lime} onExit={onExit} score={s.score} best={best}
+      hud={<><Lives n={s.lives} max={3} /><Text style={{ color: C.dim, fontSize: 12 }}>Cadena <Text style={{ color: C.lime, fontWeight: '800' }}>{s.chain.length}</Text></Text><View style={{ minWidth: 70, alignItems: 'flex-end' }}>{s.streak > 2 ? <Combo n={s.streak} color={C.lime} /> : null}</View></>}>
+      <PlayArea fx={fx} bg="#04100a" border={alpha(C.lime, 0.4)}>
+        <View style={{ position: 'absolute', top: 18, left: 18, right: 18 }}>
+          <Bar value={s.limit - s.t} max={s.limit} color={s.t / s.limit > 0.7 ? C.red : C.lime} h={10} />
         </View>
-      </View>
-    </SafeAreaView>
+        <View style={{ position: 'absolute', top: 44, left: 0, right: 0, alignItems: 'center' }}>
+          {recent.map((w, i) => <Text key={i} style={{ color: alpha(C.dim, 0.5 + i * 0.15), fontSize: 14 + i * 2, marginBottom: 2 }}>{w}</Text>)}
+          <Text style={{ color: C.lime, fontSize: 38, fontWeight: '900', letterSpacing: 1, marginTop: 6, ...tglow(C.lime, 14) }}>{last}</Text>
+          <Text style={{ color: C.dim, fontSize: 14, marginTop: 8 }}>Elige una palabra que empiece con</Text>
+          <Text style={{ color: C.amber, fontSize: 54, fontWeight: '900', ...tglow(C.amber, 14) }}>{s.need.toUpperCase()}</Text>
+        </View>
+        <View style={{ position: 'absolute', left: 16, right: 16, bottom: 20, gap: 10 }}>
+          {s.opts.map((o, i) => {
+            const picked = s.pick === o.w;
+            const reveal = s.lock && o.ok;
+            const col = picked ? (o.ok ? C.lime : C.red) : reveal ? C.lime : C.cyan;
+            return (
+              <Pressable key={o.w} testID={`wc-${i}`} onPress={() => choose(o)}>
+                <View style={{ height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: alpha(col, picked || reveal ? 0.28 : 0.1), borderWidth: 2, borderColor: alpha(col, picked || reveal ? 1 : 0.6) }}>
+                  <Text style={{ color: C.text, fontSize: 20, fontWeight: '800', letterSpacing: 1 }}>{o.w}</Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🔗" title={phase === 'over' ? (res.won ? '¡CADENA PERFECTA!' : 'SE ROMPIÓ LA CADENA') : 'WORD CHAIN'}
+          subtitle={phase === 'over' ? `Cadena de ${s.chain.length} palabras` : 'Cada palabra empieza con la última letra de la anterior'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.lime} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Elige la palabra que empiece con la letra indicada', 'Los señuelos no empiezan con esa letra', 'El tiempo por palabra se va acortando'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 // ─────────────────────────────────────────────────────────────────
@@ -5248,60 +5366,102 @@ function DinoRun({ onExit }) {
 // ─────────────────────────────────────────────────────────────────
 // FRUIT TAP
 function FruitTap({ onExit }) {
-  const W = Dimensions.get('window').width;
-  const FRUITS = ['🍎','🍊','🍋','🍇','🍓','🍑','🥝','🍍','🫐','🍒'];
-  const [items, setItems] = React.useState([]);
-  const [score, setScore] = React.useState(0);
-  const [missed, setMissed] = React.useState(0);
-  const [best, setBest] = React.useState(0);
-  const [alive, setAlive] = React.useState(false);
-  const [time, setTime] = React.useState(45);
-  const aliveRef = React.useRef(false);
-  const scoreRef = React.useRef(0);
-  aliveRef.current = alive; scoreRef.current = score;
-
-  const start = () => { setItems([]); setScore(0); setMissed(0); setTime(45); setAlive(true); };
-  const tap = (id) => {
-    setItems(prev => prev.filter(it => it.id !== id));
-    scoreRef.current += 1; setScore(s => s + 1);
+  const fx = useFX();
+  const [best, submitBest] = useBest('fruitslash');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const initState = () => ({ fruits: [], halves: [], trail: [], lives: 3, score: 0, t: 0, wave: 0.6, combo: 0, maxCombo: 0, sliced: 0, last: null, swipe: 0, swipeX: 0, swipeY: 0, freeze: 0 });
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
+  const FR = [['🍎', '#ff4d6d'], ['🍊', '#ff8a3d'], ['🍋', '#ffe14d'], ['🍉', '#7dff6b'], ['🍇', '#9b6bff'], ['🍓', '#ff3d7a'], ['🍍', '#ffc233'], ['🥝', '#a6ff4d']];
+  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
+  const launch = s => {
+    const r = Math.random();
+    const bomb = r < Math.min(0.2, 0.08 + s.t * 0.002);
+    const ice = !bomb && r > 0.95;
+    const f = pick(FR);
+    const x = rand(50, AREA_W - 50);
+    s.fruits.push({ id: uid(), x, y: AREA_H + 30, vx: (AREA_W / 2 - x) * rand(0.2, 0.55), vy: -rand(AREA_H * 0.95, AREA_H * 1.2), rot: 0, vr: rand(-4, 4), e: bomb ? '💣' : ice ? '🧊' : f[0], c: bomb ? '#ff4d6d' : ice ? '#22e6ff' : f[1], bomb, ice, r: 26, cut: false });
   };
-
-  React.useEffect(() => {
-    const t = setInterval(() => { if (!aliveRef.current) return; setTime(p => { if (p <= 1) { aliveRef.current = false; setAlive(false); setBest(b => Math.max(b, scoreRef.current)); return 0; } return p - 1; }); }, 1000);
-    return () => clearInterval(t);
-  }, []);
-  React.useEffect(() => {
-    const t = setInterval(() => {
-      if (!aliveRef.current) return;
-      const size = 56;
-      setItems(prev => {
-        const now = Date.now();
-        const expired = prev.filter(it => now - it.born > 2200);
-        if (expired.length > 0) setMissed(m => { const nm = m + expired.length; if (nm >= 5) { aliveRef.current = false; setAlive(false); setBest(b => Math.max(b, scoreRef.current)); } return nm; });
-        const alive2 = prev.filter(it => now - it.born <= 2200);
-        if (Math.random() < 0.04 && alive2.length < 10)
-          alive2.push({ id: Date.now() + Math.random(), emoji: FRUITS[Math.floor(Math.random() * FRUITS.length)], x: 20 + Math.random() * (W - size - 40), y: 80 + Math.random() * 360, born: Date.now() });
-        return alive2;
-      });
-    }, 80);
-    return () => clearInterval(t);
-  }, []);
-
+  const end = (s, why) => {
+    hx.die(); setRes({ isNew: submitBest(s.score), why }); setPhase('over');
+  };
+  const slice = (s, f) => {
+    f.cut = true;
+    if (f.bomb) {
+      fx.burst(f.x, f.y, C.red, 30, 320, 0.9, 6); fx.shake(14, 0.5); fx.flash(C.red, 0.5);
+      s.lives = 0; end(s, 'bomba'); return;
+    }
+    if (f.ice) { s.freeze = 4; fx.flash(C.cyan, 0.3); fx.pop(f.x, f.y, 'CÁMARA LENTA', C.cyan, 16); hx.good(); }
+    s.sliced += 1; s.combo += 1; s.maxCombo = Math.max(s.maxCombo, s.combo); s.swipe += 1;
+    const pts = 1 + Math.floor(s.combo / 5);
+    s.score += pts;
+    fx.burst(f.x, f.y, f.c, 16, 230, 0.6, 5); fx.pop(f.x, f.y - 26, `+${pts}`, C.text, 15); hx.hit();
+    s.halves.push({ id: uid(), e: f.e, x: f.x - 8, y: f.y, vx: f.vx - 120, vy: f.vy * 0.3, rot: 0, vr: -5, side: -1 });
+    s.halves.push({ id: uid(), e: f.e, x: f.x + 8, y: f.y, vx: f.vx + 120, vy: f.vy * 0.3, rot: 0, vr: 5, side: 1 });
+  };
+  const segHit = (ax, ay, bx, by, f) => {
+    const dx = bx - ax, dy = by - ay; const l2 = dx * dx + dy * dy;
+    let t = l2 ? ((f.x - ax) * dx + (f.y - ay) * dy) / l2 : 0; t = clamp(t, 0, 1);
+    return Math.hypot(ax + dx * t - f.x, ay + dy * t - f.y) < f.r + 8;
+  };
+  useLoop(phase === 'play', dt0 => {
+    const s = g.current;
+    if (s.freeze > 0) s.freeze -= dt0;
+    const dt = dt0 * (s.freeze > 0 ? 0.5 : 1);
+    s.t += dt0;
+    s.wave -= dt;
+    if (s.wave <= 0) {
+      const n = Math.random() < 0.5 ? 1 : randInt(2, 3 + Math.floor(s.t / 40));
+      for (let i = 0; i < n; i++) launch(s);
+      s.wave = Math.max(0.55, 1.35 - s.t * 0.012);
+    }
+    s.fruits.forEach(f => { f.vy += 950 * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.rot += f.vr * dt; });
+    for (let i = s.fruits.length - 1; i >= 0; i--) {
+      const f = s.fruits[i];
+      if (f.cut) { s.fruits.splice(i, 1); continue; }
+      if (f.vy > 0 && f.y > AREA_H + 40) {
+        s.fruits.splice(i, 1);
+        if (!f.bomb && !f.ice) {
+          s.lives -= 1; s.combo = 0; fx.pop(clamp(f.x, 30, AREA_W - 30), AREA_H - 30, '✖', C.red, 26); fx.shake(5, 0.2); hx.bad();
+          if (s.lives <= 0) { end(s, 'frutas'); return; }
+        }
+      }
+    }
+    s.halves.forEach(h => { h.vy += 950 * dt; h.x += h.vx * dt; h.y += h.vy * dt; h.rot += h.vr * dt; });
+    s.halves = s.halves.filter(h => h.y < AREA_H + 60);
+    s.trail.forEach(p => { p.a -= dt0 * 3.2; }); s.trail = s.trail.filter(p => p.a > 0);
+  });
+  const pan = usePan(fx, {
+    down: (x, y) => { const s = g.current; s.last = { x, y }; s.swipe = 0; s.trail.push({ x, y, a: 1 }); },
+    move: (x, y) => {
+      const s = g.current;
+      if (phase !== 'play' || !s.last) return;
+      s.trail.push({ x, y, a: 1 }); if (s.trail.length > 16) s.trail.shift();
+      for (const f of s.fruits) if (!f.cut && segHit(s.last.x, s.last.y, x, y, f)) { slice(s, f); if (phase !== 'play') return; }
+      s.last = { x, y };
+    },
+    up: () => {
+      const s = g.current;
+      if (s.swipe >= 3) { const b = s.swipe * 2; s.score += b; fx.pop(AREA_W / 2, AREA_H / 2, `¡${s.swipe} DE UN CORTE! +${b}`, C.amber, 20); hx.win(); }
+      s.swipe = 0; s.last = null;
+    },
+  });
+  const s = g.current;
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#001a0a' }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 10 }}>
-        <Pressable onPress={onExit}><Text style={{ color: '#0f0', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
-        <Text style={{ color: '#fff', fontSize: 15, fontWeight: '900' }}>⭐{score} ❌{missed}/5 ⏱{time}s Best:{best}</Text>
-      </View>
-      <View style={{ flex: 1, position: 'relative' }}>
-        {!alive && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', zIndex: 10 }}><Text style={{ color: '#0f0', fontSize: 28, fontWeight: '900' }}>FRUIT TAP</Text>{score > 0 && <Text style={{ color: '#f44', fontSize: 20, marginTop: 8 }}>Game Over · Score: {score}</Text>}{best > 0 && <Text style={{ color: '#ff0', fontSize: 16, marginTop: 4 }}>Mejor: {best}</Text>}<Pressable onPress={start} style={{ backgroundColor: '#0f0', padding: 14, borderRadius: 12, marginTop: 20 }}><Text style={{ color: '#000', fontSize: 20, fontWeight: '900' }}>JUGAR</Text></Pressable></View>}
-        {items.map(it => (
-          <Pressable key={it.id} onPress={() => tap(it.id)} style={{ position: 'absolute', left: it.x, top: it.y }}>
-            <Text style={{ fontSize: 46 }}>{it.emoji}</Text>
-          </Pressable>
-        ))}
-      </View>
-    </SafeAreaView>
+    <GameScreen title="FRUIT SLASH" emoji="🍉" accent={C.lime} onExit={onExit} score={s.score} best={best}
+      hud={<><Lives n={s.lives} max={3} icon="🍎" off="✖️" /><Text style={{ color: C.cyan, fontSize: 12, fontWeight: '800' }}>{s.freeze > 0 ? `🧊 ${Math.ceil(s.freeze)}s` : ''}</Text><View style={{ minWidth: 70, alignItems: 'flex-end' }}>{s.combo > 2 ? <Combo n={s.combo} color={C.lime} /> : null}</View></>}>
+      <PlayArea fx={fx} bg={s.freeze > 0 ? '#041419' : '#08120a'} border={alpha(C.lime, 0.35)} {...pan}>
+        <GridBg color={C.lime} step={46} />
+        {s.halves.map(h => <Text key={h.id} style={{ position: 'absolute', left: h.x - 18, top: h.y - 22, width: 36, height: 44, overflow: 'hidden', fontSize: 34, lineHeight: 44, textAlign: h.side < 0 ? 'right' : 'left', transform: [{ rotate: `${h.rot}rad` }], opacity: 0.9 }}>{h.e}</Text>)}
+        {s.fruits.map(f => <Text key={f.id} style={{ position: 'absolute', left: f.x - 24, top: f.y - 28, width: 48, textAlign: 'center', fontSize: 42, lineHeight: 56, transform: [{ rotate: `${f.rot}rad` }], ...tglow(f.bomb ? C.red : f.c, 10) }}>{f.e}</Text>)}
+        {s.trail.map((p, i) => <View key={i} pointerEvents="none" style={{ position: 'absolute', left: p.x - 5 * p.a, top: p.y - 5 * p.a, width: 10 * p.a, height: 10 * p.a, borderRadius: 6, backgroundColor: '#fff', opacity: p.a * 0.9, ...glow('#fff', 8, 1) }} />)}
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🍉" title={phase === 'over' ? (res.why === 'bomba' ? '¡BOOM!' : 'SE ESCAPARON') : 'FRUIT SLASH'}
+          subtitle={phase === 'over' ? `${s.sliced} frutas cortadas · mejor racha ${s.maxCombo}` : 'Corta frutas, evita las bombas'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.lime} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Desliza el dedo sobre las frutas para cortarlas', 'Si se escapan 3 frutas, pierdes', '💣 termina la partida · 🧊 cámara lenta', 'Corta 3+ de un solo trazo para ganar bonus'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 // ─────────────────────────────────────────────────────────────────
@@ -5724,170 +5884,107 @@ const MR_CANNON_W = 36;
 const MR_COLORS = ['#ff2d78', '#00f0ff', '#ffe600', '#a259ff', '#00ff99', '#ff6a00'];
 
 function MathRush({ onExit }) {
-  const [phase, setPhase] = useState('idle');
-  const [score, setScore] = useState(0);
-  const [best, setBest] = useState(0);
-  const [lives, setLives] = useState(MR_MAX_LIVES);
-  const [problem, setProblem] = useState(null);
-  const [answers, setAnswers] = useState([]);
-  const [enemies, setEnemies] = useState([]);
-  const [flash, setFlash] = useState(null);
-  const rafRef = useRef(null);
-  const lastTimeRef = useRef(null);
-  const enemiesRef = useRef([]);
-  const spawnTimerRef = useRef(0);
-  const speedRef = useRef(MR_INITIAL_SPEED);
-  const scoreRef = useRef(0);
-  const livesRef = useRef(MR_MAX_LIVES);
-  const problemRef = useRef(null);
-  const phaseRef = useRef('idle');
-  const idCounterRef = useRef(0);
-
-  useEffect(() => {
-    AsyncStorage.getItem('mr_best').then(v => { if (v) setBest(parseInt(v, 10)); });
-  }, []);
-
-  const generateProblem = () => {
-    const ops = ['+', '-', '×'];
-    const op = ops[Math.floor(Math.random() * ops.length)];
-    let a, b, answer;
-    if (op === '+') { a = Math.floor(Math.random() * 10) + 1; b = Math.floor(Math.random() * 10) + 1; answer = a + b; }
-    else if (op === '-') { a = Math.floor(Math.random() * 10) + 5; b = Math.floor(Math.random() * a) + 1; answer = a - b; }
-    else { a = Math.floor(Math.random() * 9) + 2; b = Math.floor(Math.random() * 9) + 2; answer = a * b; }
-    return { text: `${a} ${op} ${b} = ?`, answer };
+  const BW = 98, BH = 42, DANGER = AREA_H - 118;
+  const fx = useFX();
+  const [best, submitBest] = useBest('mathrush');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const initState = () => ({ blocks: [], spawn: 0.5, t: 0, score: 0, lives: 3, combo: 0, maxCombo: 0, solved: 0, level: 1, freeze: 0, bad: 0, banner: { text: 'NIVEL 1 · SUMAS Y RESTAS', t: 1.5 } });
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
+  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
+  const makeProblem = lv => {
+    let a, b, op;
+    const r = Math.random();
+    if (lv === 1) { op = r < 0.5 ? '+' : '−'; a = randInt(2, 20); b = randInt(1, 15); }
+    else if (lv === 2) { op = r < 0.4 ? '×' : r < 0.7 ? '+' : '−'; a = op === '×' ? randInt(2, 9) : randInt(10, 60); b = op === '×' ? randInt(2, 9) : randInt(5, 40); }
+    else { op = r < 0.45 ? '×' : r < 0.75 ? '+' : '−'; a = op === '×' ? randInt(3, 12) : randInt(20, 99); b = op === '×' ? randInt(3, 12) : randInt(10, 80); }
+    if (op === '−' && b > a) [a, b] = [b, a];
+    const ans = op === '+' ? a + b : op === '−' ? a - b : a * b;
+    const opts = new Set([ans]);
+    while (opts.size < 3) { const d = randInt(1, lv === 1 ? 5 : 9) * (Math.random() < 0.5 ? -1 : 1); const v = ans + d; if (v >= 0) opts.add(v); }
+    return { text: `${a} ${op} ${b}`, ans, opts: shuffle([...opts]) };
   };
-
-  const buildAnswers = (correct) => {
-    const wrongs = new Set();
-    while (wrongs.size < 2) {
-      const delta = Math.floor(Math.random() * 10) + 1;
-      const w = Math.random() < 0.5 ? correct + delta : Math.max(1, correct - delta);
-      if (w !== correct) wrongs.add(w);
+  const spawn = s => {
+    const p = makeProblem(s.level);
+    const r = Math.random();
+    const kind = r < 0.07 ? 'bomb' : r < 0.13 ? 'freeze' : 'normal';
+    let x = rand(8, AREA_W - BW - 8);
+    for (let k = 0; k < 8; k++) { if (!s.blocks.some(b => b.y < BH + 10 && Math.abs(b.x - x) < BW)) break; x = rand(8, AREA_W - BW - 8); }
+    s.blocks.push({ id: uid(), ...p, kind, x, y: -BH, vy: 34 + s.level * 8 + Math.min(60, s.t * 0.7), wob: Math.random() * 6 });
+  };
+  const answer = v => {
+    const s = g.current;
+    if (phase !== 'play' || !s.blocks.length) return;
+    const target = s.blocks.reduce((a, b) => (b.y > a.y ? b : a));
+    if (v !== target.ans) {
+      s.combo = 0; s.bad = 0.25; fx.shake(5, 0.2); fx.flash(C.red, 0.15); hx.bad(); target.y -= 24; return;
     }
-    const arr = [correct, ...wrongs];
-    for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
-    return arr;
-  };
-
-  const startGame = () => {
-    const p = generateProblem();
-    problemRef.current = p; setProblem(p); setAnswers(buildAnswers(p.answer));
-    enemiesRef.current = []; setEnemies([]);
-    scoreRef.current = 0; setScore(0);
-    livesRef.current = MR_MAX_LIVES; setLives(MR_MAX_LIVES);
-    speedRef.current = MR_INITIAL_SPEED; spawnTimerRef.current = 0; lastTimeRef.current = null;
-    phaseRef.current = 'playing'; setPhase('playing');
-  };
-
-  const endGame = async () => {
-    phaseRef.current = 'dead'; setPhase('dead');
-    cancelAnimationFrame(rafRef.current);
-    deathVibrate();
-    const s = scoreRef.current;
-    const stored = await AsyncStorage.getItem('mr_best');
-    const prev = stored ? parseInt(stored, 10) : 0;
-    if (s > prev) { await AsyncStorage.setItem('mr_best', String(s)); setBest(s); }
-  };
-
-  const handleAnswer = (val) => {
-    if (phaseRef.current !== 'playing') return;
-    const p = problemRef.current; if (!p) return;
-    if (val === p.answer) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setFlash('good'); setTimeout(() => setFlash(null), 300);
-      const pts = enemiesRef.current.filter(e => e.value === p.answer).length * 10;
-      enemiesRef.current = enemiesRef.current.filter(e => e.value !== p.answer);
-      setEnemies([...enemiesRef.current]);
-      scoreRef.current += pts; setScore(scoreRef.current);
-      const np = generateProblem(); problemRef.current = np; setProblem(np); setAnswers(buildAnswers(np.answer));
-    } else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      setFlash('bad'); setTimeout(() => setFlash(null), 300);
-      livesRef.current -= 1; setLives(livesRef.current);
-      if (livesRef.current <= 0) endGame();
+    const cx = target.x + BW / 2, cy = target.y + BH / 2;
+    s.blocks = s.blocks.filter(b => b !== target);
+    s.combo += 1; s.maxCombo = Math.max(s.maxCombo, s.combo); s.solved += 1;
+    const pts = 10 * s.level + s.combo * 2; s.score += pts;
+    fx.burst(cx, cy, C.pink, 14, 220); fx.pop(cx, cy - 12, `+${pts}`, C.text, 17); hx.hit();
+    if (target.kind === 'bomb') {
+      s.blocks.forEach(b => { fx.burst(b.x + BW / 2, b.y + BH / 2, C.orange, 10, 200); s.score += 5; }); s.blocks = [];
+      fx.ring(cx, cy, C.orange, 200); fx.flash(C.orange, 0.35); fx.shake(8, 0.3); hx.heavy();
     }
+    if (target.kind === 'freeze') { s.freeze = 4; fx.flash(C.cyan, 0.25); fx.pop(cx, cy - 36, '❄ CONGELADO', C.cyan, 16); hx.good(); }
+    if (s.solved % 8 === 0) { s.level = Math.min(3, s.level + 1); if (s.solved === 8 || s.solved === 16) { s.banner = { text: s.level === 2 ? 'NIVEL 2 · ¡MULTIPLICACIONES!' : 'NIVEL 3 · ¡NÚMEROS GRANDES!', t: 1.6 }; hx.good(); } }
   };
-
-  useEffect(() => {
-    if (phase !== 'playing') return;
-    const loop = (timestamp) => {
-      if (phaseRef.current !== 'playing') return;
-      if (!lastTimeRef.current) lastTimeRef.current = timestamp;
-      const dt = timestamp - lastTimeRef.current; lastTimeRef.current = timestamp;
-      speedRef.current += MR_SPEED_INCREMENT * dt;
-      spawnTimerRef.current += dt;
-      if (spawnTimerRef.current > MR_SPAWN_INTERVAL) {
-        spawnTimerRef.current = 0;
-        const p = problemRef.current; if (p) {
-          const useCorrect = Math.random() < 0.55;
-          const value = useCorrect ? p.answer : (buildAnswers(p.answer).find(v => v !== p.answer) || p.answer + 3);
-          idCounterRef.current += 1;
-          enemiesRef.current = [...enemiesRef.current, { id: idCounterRef.current, x: Math.random() * (width - MR_ENEMY_W - 16) + 8, y: -MR_ENEMY_H, value, color: MR_COLORS[Math.floor(Math.random() * MR_COLORS.length)] }];
-        }
+  useLoop(phase === 'play', dt0 => {
+    const s = g.current;
+    s.t += dt0;
+    if (s.freeze > 0) s.freeze -= dt0;
+    if (s.bad > 0) s.bad -= dt0;
+    if (s.banner) { s.banner.t -= dt0; if (s.banner.t <= 0) s.banner = null; }
+    const dt = dt0 * (s.freeze > 0 ? 0.15 : 1);
+    s.spawn -= dt;
+    if (s.spawn <= 0) { spawn(s); s.spawn = Math.max(1.1, 2.6 - s.t * 0.018 - s.level * 0.15); }
+    s.blocks.forEach(b => { b.y += b.vy * dt; });
+    for (let i = s.blocks.length - 1; i >= 0; i--) {
+      const b = s.blocks[i];
+      if (b.y + BH >= DANGER) {
+        s.blocks.splice(i, 1); s.lives -= 1; s.combo = 0;
+        fx.burst(b.x + BW / 2, DANGER, C.red, 18, 240); fx.shake(8, 0.3); fx.flash(C.red, 0.3); hx.bad();
+        if (s.lives <= 0) { hx.die(); setRes({ isNew: submitBest(s.score) }); setPhase('over'); return; }
       }
-      let hitBottom = false;
-      enemiesRef.current = enemiesRef.current.map(e => {
-        const ny = e.y + speedRef.current * (dt / 16);
-        if (ny > GAME_HEIGHT - MR_CANNON_H - MR_ENEMY_H) { hitBottom = true; return null; }
-        return { ...e, y: ny };
-      }).filter(Boolean);
-      setEnemies([...enemiesRef.current]);
-      if (hitBottom) {
-        livesRef.current -= 1; setLives(livesRef.current);
-        if (livesRef.current <= 0) { endGame(); return; }
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      }
-      rafRef.current = requestAnimationFrame(loop);
-    };
-    rafRef.current = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [phase]);
-
-  const flashBg = flash === 'good' ? '#00ff9944' : flash === 'bad' ? '#ff003344' : 'transparent';
+    }
+  });
+  const s = g.current;
+  const target = s.blocks.length ? s.blocks.reduce((a, b) => (b.y > a.y ? b : a)) : null;
+  const BTW = (AREA_W - 24 - 20) / 3;
   return (
-    <View style={{ flex: 1, backgroundColor: '#0a0010' }}>
-      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: flashBg, zIndex: 99, pointerEvents: 'none' }} />
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingTop: 36, paddingBottom: 4 }}>
-        <Pressable onPress={onExit} hitSlop={12}><Text style={{ color: '#888', fontSize: 20, fontWeight: 'bold' }}>✕</Text></Pressable>
-        <Text style={{ color: '#ff2d78', fontSize: 18, fontWeight: '900', letterSpacing: 2 }}>MATH RUSH</Text>
-        <Text style={{ color: '#ffe600', fontSize: 13, fontWeight: '700' }}>⭐{score}  🏆{best}</Text>
-      </View>
-      {phase === 'playing' && problem && (
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginHorizontal: 14, marginBottom: 4, backgroundColor: '#1a0030', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 8, borderWidth: 1, borderColor: '#a259ff' }}>
-          <Text style={{ color: '#fff', fontSize: 24, fontWeight: '900' }}>{problem.text}</Text>
-          <Text style={{ fontSize: 18 }}>{'❤️'.repeat(lives)}</Text>
-        </View>
-      )}
-      <View style={{ flex: 1, marginHorizontal: 6, borderRadius: 12, overflow: 'hidden', backgroundColor: '#07000f', borderWidth: 1, borderColor: '#1a0040' }}>
-        {phase === 'playing' && enemies.map(e => (
-          <View key={e.id} style={{ position: 'absolute', width: MR_ENEMY_W, height: MR_ENEMY_H, borderRadius: 10, borderWidth: 2, alignItems: 'center', justifyContent: 'center', left: e.x, top: e.y, borderColor: e.color, backgroundColor: e.color + '33' }}>
-            <Text style={{ color: e.color, fontSize: 20, fontWeight: '900' }}>{e.value}</Text>
-          </View>
-        ))}
-        {phase === 'playing' && <View style={{ position: 'absolute', bottom: 6, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', width: MR_CANNON_W, height: MR_CANNON_H }}><Text style={{ fontSize: 34 }}>🚀</Text></View>}
-        {phase === 'idle' && <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 }}>
-          <Text style={{ fontSize: 56, marginBottom: 10 }}>🔢</Text>
-          <Text style={{ color: '#ff2d78', fontSize: 30, fontWeight: '900', letterSpacing: 3, marginBottom: 8 }}>MATH RUSH</Text>
-          <Text style={{ color: '#bbb', fontSize: 15, textAlign: 'center', marginBottom: 24 }}>¡Toca la respuesta correcta{'\n'}para destruir los enemigos!</Text>
-          <Pressable onPress={startGame} style={{ backgroundColor: '#ff2d78', paddingHorizontal: 40, paddingVertical: 14, borderRadius: 30 }} hitSlop={8}><Text style={{ color: '#fff', fontSize: 20, fontWeight: '900' }}>START</Text></Pressable>
-        </View>}
-        {phase === 'dead' && <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ fontSize: 56, marginBottom: 10 }}>💥</Text>
-          <Text style={{ color: '#ff2d78', fontSize: 30, fontWeight: '900', marginBottom: 8 }}>GAME OVER</Text>
-          <Text style={{ color: '#ffe600', fontSize: 22, fontWeight: '800', marginBottom: 16 }}>Score: {score}</Text>
-          <Pressable onPress={startGame} style={{ backgroundColor: '#ff2d78', paddingHorizontal: 40, paddingVertical: 14, borderRadius: 30 }}><Text style={{ color: '#fff', fontSize: 20, fontWeight: '900' }}>RETRY</Text></Pressable>
-        </View>}
-      </View>
-      {phase === 'playing' && answers.length === 3 && (
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 10, paddingVertical: 10, gap: 8 }}>
-          {answers.map((a, i) => (
-            <Pressable key={i} onPress={() => handleAnswer(a)} hitSlop={10} style={{ flex: 1, backgroundColor: '#1a0040', borderRadius: 16, paddingVertical: 18, alignItems: 'center', borderWidth: 2, borderColor: '#a259ff' }}>
-              <Text style={{ color: '#fff', fontSize: 22, fontWeight: '900' }}>{a}</Text>
+    <GameScreen title="MATH RUSH" emoji="🧮" accent={C.pink} onExit={onExit} score={s.score} best={best}
+      hud={<><Lives n={s.lives} max={3} /><Text style={{ color: C.dim, fontSize: 12 }}>Nivel <Text style={{ color: C.pink, fontWeight: '800' }}>{s.level}</Text> · Resueltas {s.solved}</Text><View style={{ minWidth: 70, alignItems: 'flex-end' }}>{s.combo > 1 ? <Combo n={s.combo} color={C.pink} /> : <Text style={{ color: C.cyan, fontWeight: '800', fontSize: 12 }}>{s.freeze > 0 ? '❄' : ''}</Text>}</View></>}>
+      <PlayArea fx={fx} bg={s.bad > 0 ? '#1a0610' : '#0a0612'} border={alpha(C.pink, 0.4)}>
+        <GridBg color={C.pink} step={46} />
+        <View style={{ position: 'absolute', left: 0, right: 0, top: DANGER, height: 2, backgroundColor: C.red, opacity: 0.7, ...glow(C.red, 8, 0.8) }} />
+        {s.blocks.map(b => {
+          const t = b === target;
+          const col = b.kind === 'bomb' ? C.orange : b.kind === 'freeze' ? C.cyan : C.pink;
+          return (
+            <View key={b.id} style={{ position: 'absolute', left: b.x, top: b.y, width: BW, height: BH, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: alpha(col, t ? 0.3 : 0.14), borderWidth: t ? 3 : 1.5, borderColor: t ? '#fff' : alpha(col, 0.7), ...glow(col, t ? 14 : 6, t ? 0.9 : 0.4) }}>
+              <Text style={{ color: C.text, fontSize: 19, fontWeight: '900' }}>{b.kind === 'bomb' ? '💣 ' : b.kind === 'freeze' ? '❄ ' : ''}{b.text}</Text>
+            </View>
+          );
+        })}
+        <View style={{ position: 'absolute', left: 12, right: 12, bottom: 16, flexDirection: 'row', gap: 10 }}>
+          {(target ? target.opts : ['', '', '']).map((o, i) => (
+            <Pressable key={i} testID={`ans-${i}`} onPressIn={() => o !== '' && answer(o)} style={{ width: BTW, height: 76 }}>
+              <View style={{ flex: 1, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: alpha(C.cyan, 0.15), borderWidth: 2, borderColor: C.cyan, ...glow(C.cyan, 10, 0.5) }}>
+                <Text style={{ color: C.cyan, fontSize: 30, fontWeight: '900' }}>{o}</Text>
+              </View>
             </Pressable>
           ))}
         </View>
-      )}
-    </View>
+        {s.banner && <Text pointerEvents="none" style={{ position: 'absolute', top: AREA_H * 0.4, width: AREA_W, textAlign: 'center', color: C.text, fontSize: 18, fontWeight: '900', letterSpacing: 2, opacity: Math.min(1, s.banner.t), ...tglow(C.pink, 12) }}>{s.banner.text}</Text>}
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🧮" title={phase === 'over' ? 'SIN VIDAS' : 'MATH RUSH'}
+          subtitle={phase === 'over' ? `${s.solved} operaciones · mejor racha ${s.maxCombo}` : 'Resuelve antes de que caigan'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.pink} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Responde la operación resaltada (la más baja)', '💣 destruye todo · ❄ congela el tiempo', 'Cada 8 aciertos sube la dificultad'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 
@@ -6004,100 +6101,94 @@ const WM_GAME_DURATION = 60;
 const WM_HOLE_SIZE = Math.min((width - 60) / 3, 90);
 
 function WhackAMole({ onExit }) {
-  const [gameState, setGameState] = useState('idle');
-  const [score, setScore] = useState(0);
-  const [lives, setLives] = useState(3);
-  const [timeLeft, setTimeLeft] = useState(WM_GAME_DURATION);
-  const [bestScore, setBestScore] = useState(0);
-  const [holes, setHoles] = useState(Array.from({ length: WM_GRID_SIZE }, () => ({ active: false, isBomb: false })));
-  const moleAnims = useRef(Array.from({ length: WM_GRID_SIZE }, () => new Animated.Value(0))).current;
-  const timerRef = useRef(null); const moleTimersRef = useRef([]); const spawnIntervalRef = useRef(null);
-  const scoreRef = useRef(0); const livesRef = useRef(3); const gameStateRef = useRef('idle');
-
-  useEffect(() => { AsyncStorage.getItem('wm_best').then(val => { if (val) setBestScore(parseInt(val)); }); return () => clearAllTimers(); }, []);
-
-  const clearAllTimers = () => { clearInterval(timerRef.current); clearInterval(spawnIntervalRef.current); moleTimersRef.current.forEach(t => clearTimeout(t)); moleTimersRef.current = []; };
-
-  const startGame = () => {
-    scoreRef.current = 0; livesRef.current = 3; gameStateRef.current = 'playing';
-    setScore(0); setLives(3); setTimeLeft(WM_GAME_DURATION);
-    setHoles(Array.from({ length: WM_GRID_SIZE }, () => ({ active: false, isBomb: false })));
-    moleAnims.forEach(a => a.setValue(0)); setGameState('playing');
-    timerRef.current = setInterval(() => { setTimeLeft(prev => { if (prev <= 1) { endGame(); return 0; } return prev - 1; }); }, 1000);
-    spawnIntervalRef.current = setInterval(() => { if (gameStateRef.current !== 'playing') return; spawnMole(); }, Math.max(500, 1200 - Math.floor(scoreRef.current / 5) * 80));
+  const DUR = 45;
+  const GW = AREA_W - 36, HOLE = Math.floor(GW / 3) - 10, GAPX = (GW - HOLE * 3) / 2, GX0 = 18;
+  const GY0 = Math.max(70, (AREA_H - (HOLE + 24) * 3) / 2 + 6), RH = HOLE + 24;
+  const fx = useFX();
+  const [best, submitBest] = useBest('whack');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const initState = () => ({ holes: Array.from({ length: 9 }, () => null), time: DUR, t: 0, score: 0, combo: 0, maxCombo: 0, spawn: 0.5, hits: 0, misses: 0, hammer: null, freeze: 0 });
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
+  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
+  const holeCenter = i => ({ x: GX0 + (i % 3) * (HOLE + GAPX) + HOLE / 2, y: GY0 + Math.floor(i / 3) * RH + HOLE * 0.6 });
+  const spawn = s => {
+    const free = s.holes.map((h, i) => (h ? -1 : i)).filter(i => i >= 0);
+    if (!free.length) return;
+    const i = pick(free);
+    const r = Math.random();
+    const type = r < 0.62 ? 'mole' : r < 0.74 ? 'gold' : r < 0.84 ? 'helmet' : r < 0.94 ? 'bomb' : 'clock';
+    const life = Math.max(0.55, 1.5 - s.t * 0.018) * (type === 'gold' ? 0.7 : 1);
+    s.holes[i] = { type, age: 0, life, hp: type === 'helmet' ? 2 : 1, hit: 0 };
   };
-
-  const spawnMole = () => {
-    const idx = Math.floor(Math.random() * WM_GRID_SIZE);
-    const isBomb = Math.random() < WM_BOMB_CHANCE;
-    const duration = Math.max(700, 1800 - Math.floor(scoreRef.current / 5) * 100);
-    setHoles(prev => { if (prev[idx].active) return prev; const next = [...prev]; next[idx] = { active: true, isBomb }; return next; });
-    Animated.sequence([Animated.timing(moleAnims[idx], { toValue: 1, duration: 180, useNativeDriver: true }), Animated.delay(duration), Animated.timing(moleAnims[idx], { toValue: 0, duration: 180, useNativeDriver: true })]).start();
-    const t = setTimeout(() => { setHoles(prev => { const next = [...prev]; next[idx] = { active: false, isBomb: false }; return next; }); moleAnims[idx].setValue(0); }, duration + 400);
-    moleTimersRef.current.push(t);
+  const whack = (x, y) => {
+    const s = g.current;
+    if (phase !== 'play') return;
+    let target = -1, bd = 1e9;
+    s.holes.forEach((h, i) => { if (!h || h.hit) return; const c = holeCenter(i); const d = Math.hypot(c.x - x, c.y - y); if (d < HOLE * 0.62 && d < bd) { bd = d; target = i; } });
+    s.hammer = { x, y, t: 0.18 };
+    if (target < 0) { if (s.combo > 0) s.combo = 0; hx.tick(); return; }
+    const h = s.holes[target]; const c = holeCenter(target);
+    h.hp -= 1;
+    if (h.type === 'bomb') {
+      h.hit = 0.3; s.combo = 0; s.time = Math.max(0, s.time - 4);
+      fx.burst(c.x, c.y, C.red, 22, 260); fx.shake(9, 0.3); fx.flash(C.red, 0.3); fx.pop(c.x, c.y - 30, '-4s', C.red, 22); hx.bad();
+    } else if (h.type === 'clock') {
+      h.hit = 0.3; s.time += 3; fx.burst(c.x, c.y, C.lime, 12, 190); fx.pop(c.x, c.y - 30, '+3s', C.lime, 22); hx.good();
+    } else if (h.hp > 0) {
+      fx.burst(c.x, c.y - 10, '#fff', 6, 140, 0.3, 3); fx.shake(3, 0.15); hx.hit();
+    } else {
+      h.hit = 0.3; s.hits += 1; s.combo += 1; s.maxCombo = Math.max(s.maxCombo, s.combo);
+      const base = h.type === 'gold' ? 5 : h.type === 'helmet' ? 3 : 1;
+      const mult = 1 + Math.floor(s.combo / 5);
+      const pts = base * mult; s.score += pts;
+      fx.burst(c.x, c.y - 10, h.type === 'gold' ? C.amber : C.orange, 12, 200, 0.5, 4); fx.pop(c.x, c.y - 40, `+${pts}`, mult > 1 ? C.amber : C.text, 18); fx.ring(c.x, c.y, C.orange, 44); hx.heavy();
+    }
   };
-
-  const endGame = () => {
-    gameStateRef.current = 'gameover'; clearAllTimers(); setGameState('gameover');
-    setHoles(Array.from({ length: WM_GRID_SIZE }, () => ({ active: false, isBomb: false }))); moleAnims.forEach(a => a.setValue(0));
-    const finalScore = scoreRef.current;
-    AsyncStorage.getItem('wm_best').then(val => { const prev = val ? parseInt(val) : 0; if (finalScore > prev) { AsyncStorage.setItem('wm_best', String(finalScore)); setBestScore(finalScore); } });
-  };
-
-  const tapHole = (idx) => {
-    if (gameStateRef.current !== 'playing') return;
-    setHoles(prev => {
-      if (!prev[idx].active) return prev;
-      const hole = prev[idx];
-      if (hole.isBomb) { Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); livesRef.current = Math.max(0, livesRef.current - 1); setLives(livesRef.current); if (livesRef.current <= 0) endGame(); }
-      else { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); scoreRef.current += 1; setScore(scoreRef.current); }
-      Animated.timing(moleAnims[idx], { toValue: 0, duration: 100, useNativeDriver: true }).start();
-      const next = [...prev]; next[idx] = { active: false, isBomb: false }; return next;
+  useLoop(phase === 'play', dt => {
+    const s = g.current;
+    s.t += dt; s.time -= dt;
+    if (s.hammer) { s.hammer.t -= dt; if (s.hammer.t <= 0) s.hammer = null; }
+    s.spawn -= dt;
+    if (s.spawn <= 0) { spawn(s); if (s.t > 18 && Math.random() < 0.4) spawn(s); s.spawn = Math.max(0.28, 0.85 - s.t * 0.014) * rand(0.7, 1.2); }
+    s.holes.forEach((h, i) => {
+      if (!h) return;
+      h.age += dt;
+      if (h.hit > 0) { h.hit -= dt; if (h.hit <= 0) s.holes[i] = null; return; }
+      if (h.age >= h.life) { if (h.type === 'mole' || h.type === 'gold' || h.type === 'helmet') s.combo = 0; s.holes[i] = null; }
     });
-  };
-
-  const holeSize = WM_HOLE_SIZE;
+    if (s.time <= 0) { s.time = 0; hx.win(); setRes({ isNew: submitBest(s.score) }); setPhase('over'); }
+  });
+  const pan = usePan(fx, { down: whack });
+  const s = g.current;
+  const E = { mole: '🐹', gold: '🦔', helmet: '🐻', bomb: '💣', clock: '⏱️' };
+  const mult = 1 + Math.floor(s.combo / 5);
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#1a0a2e', alignItems: 'center' }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4, justifyContent: 'space-between' }}>
-        <Pressable onPress={onExit} style={{ padding: 8 }}><Text style={{ color: '#aaa', fontSize: 18, fontWeight: 'bold' }}>✕</Text></Pressable>
-        <Text style={{ color: '#fff', fontSize: 20, fontWeight: 'bold' }}>🐹 Whack-a-Mole</Text>
-        <Text style={{ color: '#ffd700', fontSize: 14, fontWeight: '600' }}>Mejor: {bestScore}</Text>
-      </View>
-      {gameState !== 'idle' && (
-        <View style={{ flexDirection: 'row', justifyContent: 'space-around', width: '100%', paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#2d1b4e', marginBottom: 8 }}>
-          <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>⏱ {timeLeft}s</Text>
-          <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Score: {score}</Text>
-          <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{Array.from({ length: 3 }, (_, i) => i < lives ? '❤️' : '🖤').join('')}</Text>
-        </View>
-      )}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: holeSize * 3 + 48, justifyContent: 'space-around', alignContent: 'space-around', marginTop: 24, gap: 12, padding: 8 }}>
-        {holes.map((hole, idx) => {
-          const translateY = moleAnims[idx].interpolate({ inputRange: [0, 1], outputRange: [holeSize * 0.6, 0] });
+    <GameScreen title="WHACK-A-MOLE" emoji="🐹" accent={C.violet} onExit={onExit} score={s.score} best={best}
+      hud={<><Text style={{ color: s.time < 8 ? C.red : C.text, fontWeight: '900', fontSize: 15 }}>⏱ {Math.ceil(s.time)}s</Text><Text style={{ color: C.dim, fontSize: 12 }}>Racha <Text style={{ color: C.violet, fontWeight: '800' }}>{s.combo}</Text></Text><View style={{ minWidth: 64, alignItems: 'flex-end' }}>{mult > 1 ? <Combo n={mult} color={C.violet} /> : null}</View></>}>
+      <PlayArea fx={fx} bg="#0a0616" border={alpha(C.violet, 0.4)} {...pan}>
+        <GridBg color={C.violet} step={46} />
+        {s.holes.map((h, i) => {
+          const c = holeCenter(i);
+          const k = h ? (h.hit > 0 ? 0 : Math.min(1, h.age * 7) * (h.age > h.life - 0.15 ? Math.max(0, (h.life - h.age) / 0.15) : 1)) : 0;
           return (
-            <Pressable key={idx} onPress={() => tapHole(idx)} style={{ width: holeSize, height: holeSize, borderRadius: holeSize / 2, backgroundColor: '#3d1f00', justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: '#5a3010', overflow: 'hidden' }}>
-              {hole.active && <Animated.Text style={{ fontSize: holeSize * 0.5, opacity: moleAnims[idx], transform: [{ translateY }] }}>{hole.isBomb ? '💣' : idx % 2 === 0 ? '🐹' : '🐭'}</Animated.Text>}
-            </Pressable>
+            <View key={i} style={{ position: 'absolute', left: c.x - HOLE / 2, top: c.y - HOLE * 0.6, width: HOLE, height: HOLE * 0.95, alignItems: 'center' }} pointerEvents="none">
+              <View style={{ position: 'absolute', bottom: 0, width: HOLE * 0.92, height: HOLE * 0.4, borderRadius: HOLE * 0.2, backgroundColor: '#05030c', borderWidth: 2, borderColor: alpha(C.violet, 0.5) }} />
+              <View style={{ position: 'absolute', bottom: HOLE * 0.2, left: 0, right: 0, height: HOLE * 0.75, overflow: 'hidden', alignItems: 'center', justifyContent: 'flex-end' }}>
+                {h && <Text style={{ fontSize: HOLE * 0.62, lineHeight: HOLE * 0.72, transform: [{ translateY: (1 - k) * HOLE * 0.7 }, { scale: h.hit > 0 ? 0.85 : 1 }], opacity: h.hit > 0 ? 0.6 : 1 }}>{E[h.type]}</Text>}
+              </View>
+              <View style={{ position: 'absolute', bottom: HOLE * 0.2 - 4, width: HOLE * 0.95, height: HOLE * 0.2, borderRadius: HOLE * 0.1, backgroundColor: '#1d1236', borderTopWidth: 2, borderTopColor: alpha(C.violet, 0.6) }} />
+            </View>
           );
         })}
-      </View>
-      {gameState === 'idle' && (
-        <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(10,0,30,0.88)', justifyContent: 'center', alignItems: 'center', padding: 32, zIndex: 10 }}>
-          <Text style={{ color: '#fff', fontSize: 32, fontWeight: 'bold', marginBottom: 12 }}>Whack-a-Mole!</Text>
-          <Text style={{ color: '#ccc', fontSize: 16, textAlign: 'center', marginBottom: 28 }}>Toca los topos para puntuar.{'\n'}¡Evita las bombas 💣!</Text>
-          <Pressable style={{ backgroundColor: '#7c3aed', paddingHorizontal: 40, paddingVertical: 14, borderRadius: 30 }} onPress={startGame}><Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Comenzar</Text></Pressable>
-        </View>
-      )}
-      {gameState === 'gameover' && (
-        <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(10,0,30,0.88)', justifyContent: 'center', alignItems: 'center', padding: 32, zIndex: 10 }}>
-          <Text style={{ color: '#fff', fontSize: 32, fontWeight: 'bold', marginBottom: 12 }}>¡Juego terminado!</Text>
-          <Text style={{ color: '#ffd700', fontSize: 26, fontWeight: 'bold', marginBottom: 8 }}>Score: {score}</Text>
-          {score >= bestScore && score > 0 && <Text style={{ color: '#ffd700', fontSize: 20, marginBottom: 20 }}>🏆 ¡Nuevo récord!</Text>}
-          <Pressable style={{ backgroundColor: '#7c3aed', paddingHorizontal: 40, paddingVertical: 14, borderRadius: 30, marginBottom: 12 }} onPress={startGame}><Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Jugar de nuevo</Text></Pressable>
-          <Pressable onPress={onExit}><Text style={{ color: '#a78bfa', fontSize: 16 }}>Menú principal</Text></Pressable>
-        </View>
-      )}
-    </SafeAreaView>
+        {s.hammer && <Text pointerEvents="none" style={{ position: 'absolute', left: s.hammer.x - 22, top: s.hammer.y - 40, fontSize: 40, transform: [{ rotate: `${-0.9 + (0.18 - s.hammer.t) * 6}rad` }] }}>🔨</Text>}
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🐹" title={phase === 'over' ? '¡TIEMPO!' : 'WHACK-A-MOLE'}
+          subtitle={phase === 'over' ? `${s.hits} topos · mejor racha ${s.maxCombo}` : '45 segundos de caos'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.violet} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Golpea los topos que asoman', '🦔 vale 5 · 🐻 casco: 2 golpes · ⏱️ +3s', '💣 resta 4s · fallar rompe la racha'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 
@@ -6114,107 +6205,97 @@ const RT_COLORS = [
 const RT_PAD_SIZE = Math.min((width - 48) / 2, 155);
 
 function RhythmTap({ onExit }) {
-  const [gameState, setGameState] = useState('idle');
-  const [sequence, setSequence] = useState([]);
-  const [playerIndex, setPlayerIndex] = useState(0);
-  const [bestLevel, setBestLevel] = useState(1);
-  const [isShowingSequence, setIsShowingSequence] = useState(false);
-  const [message, setMessage] = useState('');
-  const padAnims = useRef(RT_COLORS.map(() => new Animated.Value(0))).current;
-  const sequenceRef = useRef([]); const playerIndexRef = useRef(0); const isShowingRef = useRef(false);
-  const gameStateRef = useRef('idle'); const showTimeoutRef = useRef(null);
+  const PADS = [
+    { c: C.red, n: 'ROJO', h: 'tap' }, { c: C.blue, n: 'AZUL', h: 'hit' },
+    { c: C.lime, n: 'VERDE', h: 'heavy' }, { c: C.amber, n: 'AMARILLO', h: 'tick' },
+  ];
+  const later = useTimeouts();
+  const fx = useFX();
+  const [best, submitBest] = useBest('simon');
+  const [phase, setPhase] = useState('ready');       // ready | play | over
+  const [mode, setMode] = useState('show');          // show | input | wait
+  const [seq, setSeq] = useState([]);
+  const [pos, setPos] = useState(0);
+  const [lit, setLit] = useState(-1);
+  const [score, setScore] = useState(0);
+  const [round, setRound] = useState(0);
+  const [reverse, setReverse] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(1);
+  const [res, setRes] = useState({ isNew: false });
+  const seqRef = useRef([]); const gen = useRef(0); const inputT = useRef(0);
 
-  useEffect(() => { AsyncStorage.getItem('rt_best').then(val => { if (val) setBestLevel(parseInt(val)); }); return () => { if (showTimeoutRef.current) clearTimeout(showTimeoutRef.current); }; }, []);
-
-  const flashPad = (colorIdx, duration = 350) => new Promise(resolve => {
-    Animated.sequence([Animated.timing(padAnims[colorIdx], { toValue: 1, duration: duration * 0.4, useNativeDriver: false }), Animated.timing(padAnims[colorIdx], { toValue: 0, duration: duration * 0.6, useNativeDriver: false })]).start(() => resolve());
-  });
-
-  const showSequence = async (seq) => {
-    isShowingRef.current = true; setIsShowingSequence(true); setMessage('¡Observa!');
-    const speed = Math.max(280, 700 - Math.floor((seq.length - 1) / 3) * 90);
-    const flashDur = Math.max(180, speed * 0.55); const pause = Math.max(100, speed * 0.45);
-    for (let i = 0; i < seq.length; i++) {
-      if (gameStateRef.current !== 'playing') break;
-      await flashPad(seq[i], flashDur);
-      await new Promise(r => { showTimeoutRef.current = setTimeout(r, pause); });
-    }
-    isShowingRef.current = false; setIsShowingSequence(false);
-    if (gameStateRef.current === 'playing') { setMessage('¡Tu turno!'); playerIndexRef.current = 0; setPlayerIndex(0); }
+  const play = (list, rev, rnd, sc) => {
+    const id = ++gen.current;
+    setMode('show'); setPos(0); setReverse(rev);
+    const step = Math.max(230, 520 - rnd * 22);
+    list.forEach((p, i) => {
+      later(() => { if (gen.current !== id) return; setLit(p); hx[PADS[p].h](); }, 700 + i * step);
+      later(() => { if (gen.current !== id) return; setLit(-1); }, 700 + i * step + step * 0.62);
+    });
+    later(() => { if (gen.current !== id) return; setMode('input'); inputT.current = Date.now(); setTimeLeft(1); }, 700 + list.length * step + 150);
   };
-
-  const startGame = () => {
-    gameStateRef.current = 'playing'; setGameState('playing'); setMessage('');
-    const firstSeq = [Math.floor(Math.random() * 4)];
-    sequenceRef.current = firstSeq; setSequence(firstSeq); playerIndexRef.current = 0; setPlayerIndex(0);
-    setTimeout(() => showSequence(firstSeq), 600);
+  const nextRound = (sc, rnd) => {
+    const list = [...seqRef.current, randInt(0, 3)];
+    seqRef.current = list; setSeq(list); setRound(rnd);
+    const rev = rnd > 0 && rnd % 5 === 0;
+    play(list, rev, rnd, sc);
   };
-
-  const handlePadPress = (colorIdx) => {
-    if (gameStateRef.current !== 'playing' || isShowingRef.current) return;
-    flashPad(colorIdx, 220); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (colorIdx !== sequenceRef.current[playerIndexRef.current]) {
-      setMessage('¡Incorrecto!');
-      gameStateRef.current = 'gameover'; setGameState('gameover');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const lvl = sequenceRef.current.length;
-      AsyncStorage.getItem('rt_best').then(val => { const prev = val ? parseInt(val) : 1; if (lvl > prev) { AsyncStorage.setItem('rt_best', String(lvl)); setBestLevel(lvl); } });
-      return;
-    }
-    const nextIndex = playerIndexRef.current + 1; playerIndexRef.current = nextIndex; setPlayerIndex(nextIndex);
-    if (nextIndex === sequenceRef.current.length) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      const nextSeq = [...sequenceRef.current, Math.floor(Math.random() * 4)];
-      sequenceRef.current = nextSeq; setSequence(nextSeq); playerIndexRef.current = 0; setPlayerIndex(0);
-      setMessage('¡Correcto!');
-      setTimeout(() => { if (gameStateRef.current === 'playing') showSequence(nextSeq); }, 900);
-    }
+  const start = () => { fx.clear(); gen.current += 1; seqRef.current = []; setScore(0); setPhase('play'); nextRound(0, 1); };
+  useEffect(() => { // temporizador de entrada
+    if (phase !== 'play' || mode !== 'input') return undefined;
+    const id = setInterval(() => {
+      const left = 1 - (Date.now() - inputT.current) / (2500 + seqRef.current.length * 900);
+      setTimeLeft(Math.max(0, left));
+      if (left <= 0) { clearInterval(id); fail('tiempo'); }
+    }, 60);
+    return () => clearInterval(id);
+  }, [phase, mode, pos]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fail = why => {
+    gen.current += 1; hx.die(); fx.shake(8, 0.3); fx.flash(C.red, 0.3);
+    setRes({ isNew: submitBest(score), why }); setPhase('over');
   };
-
+  const press = i => {
+    if (phase !== 'play' || mode !== 'input') return;
+    setLit(i); later(() => setLit(-1), 140); hx[PADS[i].h]();
+    const expect = reverse ? seq[seq.length - 1 - pos] : seq[pos];
+    if (i !== expect) { fail('error'); return; }
+    inputT.current = Date.now();
+    if (pos + 1 >= seq.length) {
+      const bonus = seq.length * 10 + (reverse ? 25 : 0);
+      const sc = score + bonus; setScore(sc); hx.good(); fx.pop(AREA_W / 2, AREA_H * 0.2, `+${bonus}`, C.amber, 22);
+      setMode('wait'); setPos(0);
+      later(() => nextRound(sc, round + 1), 800);
+    } else setPos(pos + 1);
+  };
+  const SZ = Math.min((AREA_W - 48) / 2, 150);
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#0d0d1a', alignItems: 'center' }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', width: '100%', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4, justifyContent: 'space-between' }}>
-        <Pressable onPress={onExit} style={{ padding: 8 }}><Text style={{ color: '#aaa', fontSize: 18, fontWeight: 'bold' }}>✕</Text></Pressable>
-        <Text style={{ color: '#fff', fontSize: 20, fontWeight: 'bold' }}>🎵 Ritmo y Color</Text>
-        <Text style={{ color: '#ffd700', fontSize: 14 }}>Mejor: Niv.{bestLevel}</Text>
-      </View>
-      {gameState === 'playing' && (
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingHorizontal: 20, paddingVertical: 8, backgroundColor: '#1a1a2e', marginBottom: 8 }}>
-          <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>Nivel: {sequence.length}</Text>
-          <Text style={{ color: '#a29bfe', fontSize: 14, fontWeight: '600' }}>{message}</Text>
+    <GameScreen title="RITMO Y COLOR" emoji="🎵" accent={C.violet} onExit={onExit} score={score} best={best}
+      hud={<><Text style={{ color: C.dim, fontSize: 12 }}>Ronda <Text style={{ color: C.violet, fontWeight: '800' }}>{round}</Text></Text><Text style={{ color: mode === 'show' ? C.cyan : mode === 'input' ? C.lime : C.dim, fontWeight: '900', fontSize: 13 }}>{phase !== 'play' ? '' : mode === 'show' ? 'MIRA…' : mode === 'input' ? (reverse ? '↩ AL REVÉS' : 'REPITE') : '¡BIEN!'}</Text><Text style={{ color: C.dim, fontSize: 12 }}>{seq.length} pasos</Text></>}>
+      <PlayArea fx={fx} bg="#07051a" border={alpha(C.violet, 0.4)}>
+        <View style={{ position: 'absolute', top: 24, left: 24, right: 24, height: 8, borderRadius: 4, backgroundColor: alpha(C.violet, 0.15), overflow: 'hidden' }}>
+          <View style={{ width: `${(mode === 'input' ? timeLeft : 0) * 100}%`, height: '100%', backgroundColor: timeLeft < 0.3 ? C.red : C.violet }} />
         </View>
-      )}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 16, marginTop: 32, paddingHorizontal: 16 }}>
-        {RT_COLORS.map((color, idx) => {
-          const bgColor = padAnims[idx].interpolate({ inputRange: [0, 1], outputRange: [color.bg, color.lit] });
-          const scale = padAnims[idx].interpolate({ inputRange: [0, 1], outputRange: [1, 1.07] });
-          return (
-            <Pressable key={color.key} onPress={() => handlePadPress(idx)} disabled={isShowingSequence || gameState !== 'playing'}>
-              <Animated.View style={{ width: RT_PAD_SIZE, height: RT_PAD_SIZE, borderRadius: 24, justifyContent: 'center', alignItems: 'center', backgroundColor: bgColor, transform: [{ scale }], opacity: gameState !== 'playing' ? 0.5 : 1 }}>
-                <Text style={{ fontSize: RT_PAD_SIZE * 0.3, marginBottom: 6 }}>{color.label}</Text>
-                <Text style={{ color: '#fff', fontSize: RT_PAD_SIZE * 0.13, fontWeight: 'bold' }}>{color.text}</Text>
-              </Animated.View>
-            </Pressable>
-          );
-        })}
-      </View>
-      {gameState === 'idle' && (
-        <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,0,20,0.9)', justifyContent: 'center', alignItems: 'center', padding: 32, zIndex: 10 }}>
-          <Text style={{ color: '#fff', fontSize: 30, fontWeight: 'bold', marginBottom: 16, textAlign: 'center' }}>🎵 Ritmo y Color</Text>
-          <Text style={{ color: '#ccc', fontSize: 15, textAlign: 'center', marginBottom: 28, lineHeight: 24 }}>Observa la secuencia de colores{'\n'}y repítela en el mismo orden.{'\n'}¡Cada ronda agrega un paso más!</Text>
-          <Pressable style={{ backgroundColor: '#6c5ce7', paddingHorizontal: 44, paddingVertical: 14, borderRadius: 30 }} onPress={startGame}><Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Comenzar</Text></Pressable>
+        {reverse && mode !== 'wait' && phase === 'play' && <Text style={{ position: 'absolute', top: 44, width: AREA_W, textAlign: 'center', color: C.pink, fontWeight: '900', letterSpacing: 2, fontSize: 13 }}>RONDA ESPECIAL: REPITE AL REVÉS</Text>}
+        <View style={{ position: 'absolute', left: 0, right: 0, top: AREA_H / 2 - SZ - 12, alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: SZ * 2 + 16, gap: 16 }}>
+            {PADS.map((p, i) => {
+              const on = lit === i;
+              return (
+                <Pressable key={i} testID={`pad-${i}`} onPressIn={() => press(i)} style={{ width: SZ, height: SZ }}>
+                  <View style={{ flex: 1, borderRadius: 28, backgroundColor: on ? p.c : alpha(p.c, 0.16), borderWidth: 3, borderColor: on ? '#fff' : alpha(p.c, 0.7), transform: [{ scale: on ? 1.04 : 1 }], alignItems: 'center', justifyContent: 'center', ...glow(p.c, on ? 28 : 8, on ? 1 : 0.4) }}>
+                    <Text style={{ color: on ? '#04040c' : alpha(p.c, 0.9), fontWeight: '900', letterSpacing: 2, fontSize: 14 }}>{p.n}</Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
-      )}
-      {gameState === 'gameover' && (
-        <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(5,0,20,0.9)', justifyContent: 'center', alignItems: 'center', padding: 32, zIndex: 10 }}>
-          <Text style={{ color: '#fff', fontSize: 30, fontWeight: 'bold', marginBottom: 16 }}>¡Fin del juego!</Text>
-          <Text style={{ color: '#ffd700', fontSize: 24, fontWeight: 'bold', marginBottom: 8 }}>Nivel: {sequence.length}</Text>
-          {sequence.length >= bestLevel && <Text style={{ color: '#ffd700', fontSize: 20, marginBottom: 20 }}>🏆 ¡Nuevo récord!</Text>}
-          <Pressable style={{ backgroundColor: '#6c5ce7', paddingHorizontal: 44, paddingVertical: 14, borderRadius: 30, marginBottom: 14 }} onPress={startGame}><Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Jugar de nuevo</Text></Pressable>
-          <Pressable onPress={onExit}><Text style={{ color: '#a29bfe', fontSize: 16 }}>Menú principal</Text></Pressable>
-        </View>
-      )}
-    </SafeAreaView>
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🎵" title={phase === 'over' ? (res.why === 'tiempo' ? '¡SE ACABÓ EL TIEMPO!' : 'SECUENCIA INCORRECTA') : 'RITMO Y COLOR'}
+          subtitle={phase === 'over' ? `Llegaste a la ronda ${round}` : 'Memoriza y repite la secuencia'}
+          score={score} best={best} isNew={res.isNew} accent={C.violet} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Mira la secuencia y repítela', 'Cada ronda añade un paso y va más rápido', 'Cada 5 rondas: ¡hay que repetirla al revés!'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 
@@ -6315,107 +6396,135 @@ function wsScramble(word){const arr=word.split('');for(let i=arr.length-1;i>0;i-
 function wsShuffleWords(){const arr=[...WS_WORDS];for(let i=arr.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[arr[i],arr[j]]=[arr[j],arr[i]];}return arr;}
 
 function WordScramble({ onExit }) {
-  const [gameState, setGameState] = useState('idle');
-  const [wordList, setWordList] = useState([]); const [wordIndex, setWordIndex] = useState(0);
-  const [tiles, setTiles] = useState([]); const [answer, setAnswer] = useState([]);
-  const [score, setScore] = useState(0); const [bestScore, setBestScore] = useState(0);
-  const [timeLeft, setTimeLeft] = useState(30); const [feedback, setFeedback] = useState(null);
-  const timerRef = useRef(null); const shakeAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => { AsyncStorage.getItem('ws_best').then(v => { if (v) setBestScore(parseInt(v, 10)); }); return () => clearInterval(timerRef.current); }, []);
-
-  const loadWord = (list, idx, currentScore) => {
-    const word = list[idx];
-    const scrambled = wsScramble(word);
-    setTiles(scrambled.map((letter, i) => ({ letter, id: i, color: WS_TILE_COLORS[i % WS_TILE_COLORS.length], used: false })));
-    setAnswer([]); setTimeLeft(30); setFeedback(null); clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => { setTimeLeft(t => { if(t<=1){skipWord(list,idx,currentScore);return 0;}return t-1; }); }, 1000);
+  const BANK = {
+    4: [['GATO', 'Maúlla y le gusta el pescado'], ['CASA', 'Donde vives'], ['LUNA', 'Brilla de noche'], ['AGUA', 'Líquido transparente que bebes'], ['MESA', 'Comes sobre ella'], ['FLOR', 'Nace en el jardín y huele bien'], ['PATO', 'Ave que nada y hace cuac'], ['SOPA', 'Plato caliente con caldo']],
+    5: [['LIBRO', 'Se lee y tiene páginas'], ['PLAYA', 'Arena y mar'], ['CIELO', 'Azul sobre tu cabeza'], ['FUEGO', 'Quema y da calor'], ['NOCHE', 'Cuando sale la luna'], ['SILLA', 'Te sientas en ella'], ['TIGRE', 'Felino con rayas'], ['RELOJ', 'Marca la hora'], ['PIZZA', 'Redonda, con queso'], ['CARRO', 'Vehículo de cuatro ruedas']],
+    6: [['PUERTA', 'Se abre para entrar'], ['BOSQUE', 'Muchos árboles juntos'], ['CAMINO', 'Por donde caminas'], ['COCINA', 'Donde se prepara la comida'], ['DELFÍN', 'Mamífero marino muy listo'], ['CAMISA', 'Prenda con botones'], ['ÁRBOLES', 'Tienen tronco y hojas']],
+    7: [['PLANETA', 'Tierra, Marte o Venus'], ['VENTANA', 'Entra luz por ella'], ['ESCUELA', 'Donde estudias'], ['JUGUETE', 'Con él juegan los niños'], ['TORTUGA', 'Lenta, con caparazón'], ['MONTAÑA', 'Más alta que una colina'], ['CUCHARA', 'Sirve para tomar sopa']],
+    8: [['ELEFANTE', 'Gran animal con trompa'], ['MARIPOSA', 'Insecto con alas de colores'], ['GUITARRA', 'Instrumento de seis cuerdas'], ['ESTRELLA', 'Brilla en el cielo nocturno'], ['TELÉFONO', 'Sirve para llamar'], ['AVENTURA', 'Viaje lleno de emoción']],
   };
-
-  const skipWord = (list, idx, currentScore) => {
-    clearInterval(timerRef.current);
-    const newScore = Math.max(0, currentScore-5); setScore(newScore);
-    const nextIdx = idx + 1;
-    if(nextIdx>=WS_TOTAL) finishGame(newScore);
-    else { setWordIndex(nextIdx); loadWord(list, nextIdx, newScore); }
+  const TOTAL = 10;
+  const COLS = [C.red, C.cyan, C.lime, C.amber, C.violet, C.pink, C.orange, C.blue];
+  const fx = useFX();
+  const later = useTimeouts();
+  const [best, submitBest] = useBest('wordscramble');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const [, force] = useReducer(x => x + 1, 0);
+  const g = useRef(null);
+  const mkWord = (idx) => {
+    const len = idx < 2 ? 4 : idx < 5 ? 5 : idx < 7 ? 6 : idx < 9 ? 7 : 8;
+    const [w, hint] = pick(BANK[len]);
+    let letters = shuffle(w.split(''));
+    if (letters.join('') === w) letters = letters.reverse();
+    return { word: w, hint, tiles: letters.map((l, i) => ({ id: i, l, used: false })), slots: [], limit: 22 + w.length * 3, t: 0, revealed: 0, lock: false, bad: 0 };
   };
-
-  const startGame = () => {
-    const list = wsShuffleWords(); setWordList(list); setWordIndex(0); setScore(0); setGameState('playing'); loadWord(list, 0, 0);
+  const init = () => ({ idx: 0, score: 0, lives: 3, streak: 0, cur: mkWord(0), solved: 0 });
+  if (!g.current) g.current = init();
+  const start = () => { fx.clear(); g.current = init(); setPhase('play'); };
+  const nextWord = (s) => {
+    s.idx += 1;
+    if (s.idx >= TOTAL) { hx.win(); setRes({ isNew: submitBest(s.score) }); setPhase('over'); return; }
+    s.cur = mkWord(s.idx); force();
   };
-
-  const finishGame = async (finalScore) => {
-    clearInterval(timerRef.current); setGameState('over');
-    const stored = await AsyncStorage.getItem('ws_best'); const prev = stored ? parseInt(stored,10) : 0;
-    if(finalScore>prev){await AsyncStorage.setItem('ws_best',String(finalScore));setBestScore(finalScore);}
+  const lose = (s, why) => {
+    s.lives -= 1; s.streak = 0; hx.bad(); fx.shake(6, 0.25); fx.flash(C.red, 0.2);
+    fx.pop(AREA_W / 2, AREA_H * 0.3, why === 'tiempo' ? `Era: ${s.cur.word}` : `Era: ${s.cur.word}`, C.red, 18);
+    s.cur.lock = true; force();
+    if (s.lives <= 0) { later(() => { hx.die(); setRes({ isNew: submitBest(s.score) }); setPhase('over'); }, 900); return; }
+    later(() => nextWord(s), 1000);
   };
-
-  const tapTile = (tile) => {
-    if(tile.used||feedback) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const newTiles = tiles.map(t => t.id===tile.id?{...t,used:true}:t);
-    const newAnswer = [...answer,{letter:tile.letter,id:tile.id}];
-    setTiles(newTiles); setAnswer(newAnswer);
-    const word = wordList[wordIndex];
-    if(newAnswer.length===word.length) {
-      const attempt = newAnswer.map(a=>a.letter).join('');
-      if(attempt===word) {
-        clearInterval(timerRef.current); Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setFeedback('correct');
-        const pts = Math.max(10, Math.round((timeLeft/30)*100)); const newScore = score+pts; setScore(newScore);
-        setTimeout(() => { const nextIdx=wordIndex+1; if(nextIdx>=WS_TOTAL)finishGame(newScore); else{setWordIndex(nextIdx);loadWord(wordList,nextIdx,newScore);} }, 800);
-      } else {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error); setFeedback('wrong');
-        Animated.sequence([Animated.timing(shakeAnim,{toValue:10,duration:60,useNativeDriver:true}),Animated.timing(shakeAnim,{toValue:-10,duration:60,useNativeDriver:true}),Animated.timing(shakeAnim,{toValue:6,duration:50,useNativeDriver:true}),Animated.timing(shakeAnim,{toValue:0,duration:50,useNativeDriver:true})]).start();
-        setTimeout(() => { setTiles(newTiles.map(t=>({...t,used:false}))); setAnswer([]); setFeedback(null); }, 700);
-      }
+  const check = s => {
+    const c = s.cur;
+    const guess = c.slots.map(i => c.tiles[i].l).join('');
+    if (guess === c.word) {
+      const pts = 50 + Math.max(0, Math.round(c.limit - c.t)) * 3 + s.streak * 10 - c.revealed * 20;
+      s.score += Math.max(10, pts); s.streak += 1; s.solved += 1; c.lock = true;
+      fx.burst(AREA_W / 2, AREA_H * 0.28, C.lime, 24, 260); fx.pop(AREA_W / 2, AREA_H * 0.2, `+${Math.max(10, pts)}`, C.lime, 24); hx.good(); force();
+      later(() => nextWord(s), 800);
+    } else {
+      c.bad = 0.4; s.streak = 0; hx.bad(); fx.shake(5, 0.2);
+      later(() => { c.tiles.forEach(t => { t.used = false; }); c.slots = []; force(); }, 350);
     }
   };
-
-  const word = wordList[wordIndex] || '';
-  const timerColor = timeLeft > 10 ? '#06d6a0' : timeLeft > 5 ? '#ffd166' : '#ff6b6b';
-
+  useLoop(phase === 'play', dt => {
+    const s = g.current; const c = s.cur;
+    if (c.lock) return;
+    c.t += dt; if (c.bad > 0) c.bad -= dt;
+    if (c.t >= c.limit) lose(s, 'tiempo');
+  });
+  const tapTile = id => {
+    const s = g.current; const c = s.cur;
+    if (phase !== 'play' || c.lock || c.bad > 0 || c.tiles[id].used) return;
+    c.tiles[id].used = true; c.slots.push(id); hx.tick();
+    if (c.slots.length === c.word.length) check(s);
+    force();
+  };
+  const tapSlot = k => {
+    const s = g.current; const c = s.cur;
+    if (phase !== 'play' || c.lock || c.bad > 0) return;
+    const id = c.slots[k]; if (id == null) return;
+    c.tiles[id].used = false; c.slots.splice(k, 1); hx.tick(); force();
+  };
+  const reveal = () => {
+    const s = g.current; const c = s.cur;
+    if (phase !== 'play' || c.lock) return;
+    // devolver todo y poner la siguiente letra correcta
+    c.tiles.forEach(t => { t.used = false; }); c.slots = [];
+    c.revealed += 1;
+    for (let k = 0; k < c.revealed && k < c.word.length; k++) {
+      const t = c.tiles.find(tt => !tt.used && tt.l === c.word[k]); if (t) { t.used = true; c.slots.push(t.id); }
+    }
+    hx.hit(); force();
+  };
+  const shuffleTiles = () => { const c = g.current.cur; if (c.lock) return; c.tiles = shuffle(c.tiles); hx.tick(); force(); };
+  const s = g.current; const c = s.cur;
+  const len = c.word.length;
+  const TS = Math.min(48, Math.floor((AREA_W - 40 - (len - 1) * 8) / len));
   return (
-    <SafeAreaView style={{ flex:1, backgroundColor:'#0f0f1e' }}>
-      <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-between', paddingHorizontal:16, paddingVertical:8, backgroundColor:'#1a1a2e' }}>
-        <Pressable onPress={onExit} style={{ padding:6 }}><Text style={{ color:'#ff6b6b', fontSize:20, fontWeight:'bold' }}>✕</Text></Pressable>
-        <Text style={{ color:'#a855f7', fontSize:18, fontWeight:'bold' }}>🔤 Palabras</Text>
-        <Text style={{ color:'#aaa', fontSize:13 }}>Mejor: {bestScore}</Text>
-      </View>
-      {gameState==='idle' && <View style={{ flex:1, alignItems:'center', justifyContent:'center', padding:24 }}>
-        <Text style={{ color:'#a855f7', fontSize:28, fontWeight:'bold', marginBottom:10, textAlign:'center' }}>Palabras Revueltas</Text>
-        <Text style={{ color:'#ccc', fontSize:16, textAlign:'center', marginBottom:20, lineHeight:24 }}>Ordena las letras para{'\n'}formar la palabra correcta</Text>
-        <Text style={{ color:'#aaa', fontSize:14, textAlign:'center', marginBottom:28, lineHeight:24 }}>⭐ Más rápido = más puntos{'\n'}⏭ Saltar = -5 puntos{'\n'}🔤 20 palabras en español</Text>
-        <Pressable style={{ backgroundColor:'#a855f7', paddingHorizontal:40, paddingVertical:14, borderRadius:30 }} onPress={startGame}><Text style={{ color:'#fff', fontSize:18, fontWeight:'bold' }}>COMENZAR</Text></Pressable>
-      </View>}
-      {gameState==='over' && <View style={{ flex:1, alignItems:'center', justifyContent:'center', padding:24 }}>
-        <Text style={{ color:'#a855f7', fontSize:28, fontWeight:'bold', marginBottom:10 }}>¡Juego Terminado!</Text>
-        <Text style={{ color:'#fff', fontSize:26, fontWeight:'bold', marginBottom:10 }}>Puntuación: {score}</Text>
-        {score>=bestScore&&score>0&&<Text style={{ color:'#ffd700', fontSize:18, marginBottom:20 }}>¡Nuevo récord! 🏆</Text>}
-        <Pressable style={{ backgroundColor:'#a855f7', paddingHorizontal:40, paddingVertical:14, borderRadius:30, marginBottom:16 }} onPress={startGame}><Text style={{ color:'#fff', fontSize:18, fontWeight:'bold' }}>JUGAR DE NUEVO</Text></Pressable>
-        <Pressable onPress={onExit}><Text style={{ color:'#aaa', fontSize:15 }}>Salir</Text></Pressable>
-      </View>}
-      {gameState==='playing' && <View style={{ flex:1, paddingHorizontal:16, paddingTop:12 }}>
-        <View style={{ flexDirection:'row', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
-          <Text style={{ color:'#ccc', fontSize:15, fontWeight:'600' }}>{wordIndex+1}/{WS_TOTAL}</Text>
-          <View style={{ backgroundColor:'#1a1a2e', paddingHorizontal:16, paddingVertical:4, borderRadius:20 }}><Text style={{ color:timerColor, fontSize:18, fontWeight:'bold' }}>{timeLeft}s</Text></View>
-          <Text style={{ color:'#ffd166', fontSize:15, fontWeight:'600' }}>Pts: {score}</Text>
+    <GameScreen title="PALABRAS" emoji="🔤" accent={C.violet} onExit={onExit} score={s.score} best={best}
+      hud={<><Lives n={s.lives} max={3} /><Text style={{ color: C.dim, fontSize: 12 }}>Palabra <Text style={{ color: C.violet, fontWeight: '800' }}>{Math.min(TOTAL, s.idx + 1)}/{TOTAL}</Text></Text><View style={{ minWidth: 70, alignItems: 'flex-end' }}>{s.streak > 1 ? <Combo n={s.streak} color={C.violet} /> : null}</View></>}>
+      <PlayArea fx={fx} bg="#0a0616" border={alpha(C.violet, 0.4)}>
+        <View style={{ position: 'absolute', top: 18, left: 18, right: 18 }}>
+          <Bar value={c.limit - c.t} max={c.limit} color={c.t / c.limit > 0.75 ? C.red : C.violet} h={10} />
+          <Text style={{ color: C.dim, textAlign: 'center', marginTop: 14, fontSize: 14, lineHeight: 20 }}>💡 {c.hint}</Text>
         </View>
-        {feedback==='correct'&&<View style={{ backgroundColor:'#06d6a044', borderRadius:10, padding:8, marginBottom:8, alignItems:'center' }}><Text style={{ color:'#06d6a0', fontSize:18, fontWeight:'bold' }}>¡Correcto! ✓</Text></View>}
-        <Pressable style={{ minHeight:80, backgroundColor:'#1a1a2e', borderRadius:14, marginBottom:24, justifyContent:'center', alignItems:'center', padding:12, borderWidth:2, borderColor:'#a855f733' }} onPress={() => { if(answer.length===0||feedback) return; const removed=answer[answer.length-1]; setAnswer(answer.slice(0,-1)); setTiles(tiles.map(t=>t.id===removed.id?{...t,used:false}:t)); }}>
-          {answer.length===0&&<Text style={{ color:'#555', fontSize:14, position:'absolute' }}>Toca las letras…</Text>}
-          <Animated.View style={{ flexDirection:'row', flexWrap:'wrap', justifyContent:'center', gap:6, transform:[{translateX:shakeAnim}] }}>
-            {answer.map((a,i)=>(<View key={`${a.id}-${i}`} style={{ backgroundColor:'#2d2d4e', width:40, height:44, borderRadius:8, alignItems:'center', justifyContent:'center', borderWidth:1, borderColor:feedback==='wrong'?'#ff6b6b':'#a855f7' }}><Text style={{ color:'#fff', fontSize:20, fontWeight:'bold' }}>{a.letter}</Text></View>))}
-          </Animated.View>
-        </Pressable>
-        <View style={{ alignItems:'center', marginBottom:24 }}>
-          <View style={{ flexDirection:'row', flexWrap:'wrap', justifyContent:'center', gap:10 }}>
-            {tiles.map(tile=>(<Pressable key={tile.id} style={{ width:52, height:58, borderRadius:12, backgroundColor:tile.color, alignItems:'center', justifyContent:'center', opacity:tile.used?0.25:1 }} onPress={()=>tapTile(tile)} disabled={tile.used||!!feedback}><Text style={{ color:'#fff', fontSize:24, fontWeight:'bold' }}>{tile.letter}</Text></Pressable>))}
+        <View style={{ position: 'absolute', left: 0, right: 0, top: AREA_H * 0.27, alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {Array.from({ length: len }, (_, k) => {
+              const id = c.slots[k]; const t = id != null ? c.tiles[id] : null;
+              const ok = c.lock && s.cur.slots.length === len && c.slots.map(i => c.tiles[i].l).join('') === c.word;
+              return (
+                <Pressable key={k} onPress={() => tapSlot(k)} style={{ width: TS, height: TS + 6 }}>
+                  <View style={{ flex: 1, borderRadius: 12, borderWidth: 2, borderColor: t ? (c.bad > 0 ? C.red : ok ? C.lime : C.violet) : alpha(C.violet, 0.35), backgroundColor: t ? alpha(c.bad > 0 ? C.red : ok ? C.lime : C.violet, 0.2) : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+                    {t && <Text style={{ color: C.text, fontSize: TS * 0.56, fontWeight: '900' }}>{t.l}</Text>}
+                  </View>
+                </Pressable>
+              );
+            })}
           </View>
         </View>
-        <Pressable style={{ alignSelf:'center', paddingHorizontal:24, paddingVertical:10, borderRadius:20, borderWidth:1, borderColor:'#444' }} onPress={() => skipWord(wordList, wordIndex, score)}><Text style={{ color:'#888', fontSize:14 }}>Saltar (-5 pts)</Text></Pressable>
-      </View>}
-    </SafeAreaView>
+        <View style={{ position: 'absolute', left: 0, right: 0, top: AREA_H * 0.47, alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10, width: AREA_W - 30 }}>
+            {c.tiles.map((t, i) => (
+              <Pressable key={t.id} testID={`tile-${i}`} onPress={() => tapTile(t.id)} style={{ width: TS + 6, height: TS + 10 }}>
+                <View style={{ flex: 1, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: t.used ? 'transparent' : alpha(COLS[(t.id) % COLS.length], 0.85), borderWidth: 2, borderColor: t.used ? alpha(C.dim, 0.2) : '#fff5', ...(t.used ? null : glow(COLS[t.id % COLS.length], 10, 0.5)) }}>
+                  {!t.used && <Text style={{ color: '#07040f', fontSize: TS * 0.6, fontWeight: '900' }}>{t.l}</Text>}
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 22, flexDirection: 'row', justifyContent: 'center', gap: 14 }}>
+          <Btn label="🔀 MEZCLAR" small ghost color={C.violet} onPress={shuffleTiles} />
+          <Btn label="💡 LETRA (-20)" small ghost color={C.amber} onPress={reveal} />
+        </View>
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🔤" title={phase === 'over' ? (s.idx >= TOTAL ? '¡COMPLETADO!' : 'FIN DEL JUEGO') : 'PALABRAS'}
+          subtitle={phase === 'over' ? `${s.solved} de ${TOTAL} palabras resueltas` : 'Ordena las letras de 10 palabras'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.violet} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Toca las letras en orden · toca un hueco para quitarla', 'Cada palabra tiene un tiempo límite', 'Resolver rápido y en racha da más puntos'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 // ── CROSSY ROAD ──────────────────────────────────────────────────
