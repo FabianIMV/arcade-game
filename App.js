@@ -6,7 +6,6 @@ import {
   PanResponder,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,6 +13,7 @@ import {
   View
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   AREA_H, AREA_HF, AREA_W, SCREEN_W, Bar, Btn, C, Combo, GameScreen, GridBg, Lives, Overlay, Pill, PlayArea, Starfield,

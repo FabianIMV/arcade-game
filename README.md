@@ -38,7 +38,7 @@ Todos los juegos comparten el mismo sistema de diseño (`utils/kit.js`): cabecer
 | 🧙 **Aventura** | **Pixel Quest** (30 mundos) · **Void Crawler** (roguelike con niebla y jefe) · **Monster Duel** (captura, evoluciona, líderes) · **Pixel Craft** (mina, fabrica, zombis y noche) · **Pixel RPG** (mundo procedural, tiendas, hechizos, dragón) |
 
 ### 🧬 Progreso y extras
-- **Sonido** sintetizado para todos los juegos (activable en ⚙️ Ajustes; requiere `expo-av`, ya incluido en `package.json`).
+- **Sonido** sintetizado para todos los juegos (activable en ⚙️ Ajustes; requiere `expo-audio`, ya incluido en `package.json`).
 - **Perfil**: nivel y XP, **12 logros** y **reto del día** con racha 🔥 (un juego distinto cada día).
 - **Favoritos** ⭐ con su propia pestaña en el menú.
 - **Ajustes**: sonido, vibración y borrado de progreso.
@@ -66,7 +66,7 @@ The app is deployed with **Expo EAS Update**. That means new game content, bug f
 | Technology | Purpose |
 |------------|---------|
 | **React Native** | Core mobile framework |
-| **Expo SDK 54** | Managed workflow, dev tooling |
+| **Expo SDK 57** | Managed workflow, dev tooling |
 | **expo-haptics** | Tactile feedback throughout all games |
 | **expo-updates** | OTA delivery via EAS Update |
 | **@react-native-async-storage/async-storage** | Récords y partidas guardadas |

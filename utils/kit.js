@@ -5,10 +5,10 @@
  */
 import React, { createContext, useCallback, useContext, useEffect, useReducer, useRef, useState } from 'react';
 import {
-  Animated, Dimensions, Easing, PanResponder, Platform, Pressable,
-  SafeAreaView, StatusBar, StyleSheet, Text, View,
+  Animated, Dimensions, Easing, PanResponder, Platform, Pressable, StatusBar, StyleSheet, Text, View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Profile, getSettings, playSfx } from './meta';
 
@@ -353,7 +353,7 @@ export function GameScreen({ title, emoji, accent = C.cyan, onExit, score, best,
   const gid = useContext(GameCtx);
   useEffect(() => { if (gid) Profile.played(gid); }, [gid]);
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: C.bg, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 0 }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingTop: 8, paddingBottom: 6 }}>
         <Pressable testID="back" onPress={onExit} hitSlop={14} style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: C.panel2, borderWidth: 1, borderColor: C.line, alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ color: C.text, fontSize: 20, fontWeight: '800', marginTop: -2 }}>‹</Text>

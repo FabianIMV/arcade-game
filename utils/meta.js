@@ -6,9 +6,9 @@ import React, { useEffect, useReducer, useRef, useState } from 'react';
 import { Animated, Easing, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// expo-av es opcional: si no está instalado, el juego sigue sin sonido
+// expo-audio es opcional: si no está instalado, el juego sigue sin sonido
 let Audio = null;
-try { Audio = require('expo-av').Audio; } catch (_) {}
+try { Audio = require('expo-audio'); } catch (_) {}
 
 // ─── Ajustes ──────────────────────────────────────────────────────
 const settings = { sound: true, haptics: true };
@@ -84,22 +84,23 @@ async function loadSfx() {
   if (!Audio || sfxState) return;
   sfxState = 1;
   try {
-    await Audio.setAudioModeAsync({ playsInSilentModeIOS: false, allowsRecordingIOS: false, staysActiveInBackground: false });
-    await Promise.all(Object.keys(SFX_DEFS).map(async name => {
+    if (Audio.setAudioModeAsync) await Audio.setAudioModeAsync({ playsInSilentMode: false, shouldPlayInBackground: false });
+    Object.keys(SFX_DEFS).forEach(name => {
       const uri = `data:audio/wav;base64,${synthWav(SFX_DEFS[name])}`;
-      const { sound } = await Audio.Sound.createAsync({ uri }, { volume: 0.8 });
-      sfxPool[name] = sound;
-    }));
+      const player = Audio.createAudioPlayer({ uri });
+      player.volume = 0.8;
+      sfxPool[name] = player;
+    });
   } catch (_) { /* sin sonido */ }
   sfxState = 2;
 }
 export function playSfx(name) {
   if (!settings.sound || !Audio) return;
   if (!sfxState) { loadSfx(); return; }
-  const s = sfxPool[name]; const now = Date.now();
-  if (!s || now - (sfxLast[name] || 0) < 45) return;
+  const p = sfxPool[name]; const now = Date.now();
+  if (!p || now - (sfxLast[name] || 0) < 45) return;
   sfxLast[name] = now;
-  try { const r = s.replayAsync(); if (r && r.catch) r.catch(() => {}); } catch (_) {}
+  try { const r = p.seekTo(0); if (r && r.then) r.then(() => p.play()).catch(() => {}); else p.play(); } catch (_) {}
 }
 
 // ─── Avisos (toasts) ──────────────────────────────────────────────
