@@ -3,13 +3,16 @@
  * Tema, hápticos, mejor puntuación persistente, game loop, partículas,
  * textos flotantes, screen shake, pantallas de inicio / game over.
  */
-import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useReducer, useRef, useState } from 'react';
 import {
   Animated, Dimensions, Easing, PanResponder, Platform, Pressable,
   SafeAreaView, StatusBar, StyleSheet, Text, View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Profile, getSettings, playSfx } from './meta';
+
+export const GameCtx = createContext(null);
 
 // ─── Medidas ──────────────────────────────────────────────────────
 const { width: W, height: H } = Dimensions.get('window');
@@ -59,22 +62,24 @@ export const overlap = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y
 // ─── Hápticos ─────────────────────────────────────────────────────
 const safe = fn => { try { const r = fn(); if (r && r.catch) r.catch(() => {}); } catch (_) {} };
 const later = (fn, ms) => setTimeout(() => safe(fn), ms);
-const imp = s => () => Haptics.impactAsync(s);
-const note = t => () => Haptics.notificationAsync(t);
+const imp = s => () => { if (getSettings().haptics) return Haptics.impactAsync(s); return null; };
+const note = t => () => { if (getSettings().haptics) return Haptics.notificationAsync(t); return null; };
 export const hx = {
-  tick: () => safe(() => Haptics.selectionAsync()),
-  tap: () => safe(imp(Haptics.ImpactFeedbackStyle.Light)),
-  hit: () => safe(imp(Haptics.ImpactFeedbackStyle.Medium)),
-  heavy: () => safe(imp(Haptics.ImpactFeedbackStyle.Heavy)),
-  good: () => safe(note(Haptics.NotificationFeedbackType.Success)),
-  warn: () => safe(note(Haptics.NotificationFeedbackType.Warning)),
-  bad: () => safe(note(Haptics.NotificationFeedbackType.Error)),
+  tick: () => { playSfx('tick'); safe(() => (getSettings().haptics ? Haptics.selectionAsync() : null)); },
+  tap: () => { playSfx('tap'); safe(imp(Haptics.ImpactFeedbackStyle.Light)); },
+  hit: () => { playSfx('hit'); safe(imp(Haptics.ImpactFeedbackStyle.Medium)); },
+  heavy: () => { playSfx('heavy'); safe(imp(Haptics.ImpactFeedbackStyle.Heavy)); },
+  good: () => { playSfx('good'); safe(note(Haptics.NotificationFeedbackType.Success)); },
+  warn: () => { playSfx('warn'); safe(note(Haptics.NotificationFeedbackType.Warning)); },
+  bad: () => { playSfx('bad'); safe(note(Haptics.NotificationFeedbackType.Error)); },
   die: () => {
+    playSfx('die');
     safe(note(Haptics.NotificationFeedbackType.Error));
     later(imp(Haptics.ImpactFeedbackStyle.Heavy), 110);
     later(imp(Haptics.ImpactFeedbackStyle.Heavy), 240);
   },
   win: () => {
+    playSfx('win');
     safe(note(Haptics.NotificationFeedbackType.Success));
     later(imp(Haptics.ImpactFeedbackStyle.Medium), 140);
     later(imp(Haptics.ImpactFeedbackStyle.Heavy), 290);
@@ -99,10 +104,12 @@ export function useBest(id, lowerIsBetter = false) {
       ref.current = score;
       setBest(score);
       AsyncStorage.setItem(key, String(score)).catch(() => {});
+      Profile.finished(id, score, true);
       return true;
     }
+    Profile.finished(id, score, false);
     return false;
-  }, [key, lowerIsBetter]);
+  }, [key, lowerIsBetter, id]);
   return [best, submit];
 }
 
@@ -343,6 +350,8 @@ export function Combo({ n, color = C.amber }) {
 
 /** Estructura de pantalla estándar: cabecera + HUD + área de juego */
 export function GameScreen({ title, emoji, accent = C.cyan, onExit, score, best, scoreLabel = 'PUNTOS', bestLabel = 'RÉCORD', hud, children, footer }) {
+  const gid = useContext(GameCtx);
+  useEffect(() => { if (gid) Profile.played(gid); }, [gid]);
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: C.bg, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 0 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingTop: 8, paddingBottom: 6 }}>

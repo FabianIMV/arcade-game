@@ -13,6 +13,7 @@
 
 React Native / Expo arcade game app. All games live in `App.js` as separate function components.
 Shared UI/juice (theme, haptics, FX, overlays, best score, game loop) lives in `utils/kit.js`.
+Settings, sound effects (`expo-av`, optional), profile/XP/achievements/daily challenge and toasts live in `utils/meta.js`; `hx.*` already plays sound + haptics, and `useBest().submit` already feeds the profile — games need no extra code.
 
 ## Adding a New Game
 

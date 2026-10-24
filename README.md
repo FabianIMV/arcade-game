@@ -19,23 +19,29 @@ Lo voy orquestando en mis ratos libres — una tarde aquí, un fin de semana all
 
 ---
 
-A fully-featured **multi-game arcade hub** built with **React Native + Expo**, packed with haptic feedback, emoji sprites, and retro neon energy. 36 games, one app, zero excuses to be bored.
+A fully-featured **multi-game arcade hub** built with **React Native + Expo**, packed with haptic feedback, emoji sprites, and retro neon energy. 40 games, one app, zero excuses to be bored.
 
 Deployed over-the-air via **EAS Update** straight to your iPhone through **Expo Go** — no App Store required.
 
 ---
 
-## 🎮 Los juegos (36)
+## 🎮 Los juegos (40)
 
 Todos los juegos comparten el mismo sistema de diseño (`utils/kit.js`): cabecera con récord, partículas, textos flotantes, *screen shake*, hápticos, pantallas de inicio y fin de partida, y récord persistente por juego. El menú tiene categorías, tarjetas con tu mejor puntuación y un botón **Sorpréndeme** 🎲.
 
 | Categoría | Juegos |
 |-----------|--------|
-| 🚀 **Acción** | **Neon Galaxy** (oleadas, jefes y power-ups) · **Cyber Run** (corredor de 3 carriles) · **Galactic Hunt** (galería de tiro con cargador) · **Neon Tunnel** (túnel 3D de anillos) · **Neon Warrior** (plataformas con jefes) · **Asteroid Dodge** (esquiva con bonus *cerca*) |
+| 🚀 **Acción** | **Neon Galaxy** (oleadas, jefes y power-ups) · **Cyber Run** (corredor de 3 carriles) · **Galactic Hunt** (galería de tiro con cargador) · **Neon Tunnel** (túnel 3D de anillos) · **Neon Warrior** (plataformas con jefes) · **Asteroid Dodge** (esquiva con bonus *cerca*) · **Invasores** (clásico con escudos y ovni) |
 | 🕹️ **Arcade** | **Snake Power** · **Ping Pong** (IA que mejora) · **Breakout** (mejoras y multibola) · **Pong Solo** (bumpers estilo pinball) · **Star Catcher** · **Coin Rush** · **Crossy Road** (calles, ríos y trenes) |
-| ⚡ **Reflejos** | **Gravity Flip** · **Wall Jumper** · **Whack-a-Mole** · **Fruit Slash** (corta frutas) · **Ritmo y Color** (Simon) · **Flappy Neon** · **Tower Stack** · **Reflejos** · **Color Rush** (Stroop) · **Dino Run** |
-| 🧩 **Puzzle** | **Neon Tetris** (hold, fantasma, gestos) · **2048 Neon** (deshacer) · **15 Puzzle** (3×3, 4×4, 5×5) · **Bubble Shooter** (bombas y arcoíris) · **Memory Match** · **Math Rush** · **Palabras** · **Word Chain** |
+| ⚡ **Reflejos** | **Gravity Flip** · **Wall Jumper** · **Whack-a-Mole** · **Fruit Slash** (corta frutas) · **Ritmo y Color** (Simon) · **Flappy Neon** · **Sky Hop** (rebota hacia el cielo) · **Tower Stack** · **Reflejos** · **Color Rush** (Stroop) · **Dino Run** |
+| 🧩 **Puzzle** | **Neon Tetris** (hold, fantasma, gestos) · **2048 Neon** (deshacer) · **15 Puzzle** (3×3, 4×4, 5×5) · **Bubble Shooter** (bombas y arcoíris) · **Memory Match** · **Math Rush** · **Palabras** · **Word Chain** · **Buscaminas** (3 dificultades) · **4 en línea** (IA minimax) |
 | 🧙 **Aventura** | **Pixel Quest** (30 mundos) · **Void Crawler** (roguelike con niebla y jefe) · **Monster Duel** (captura, evoluciona, líderes) · **Pixel Craft** (mina, fabrica, zombis y noche) · **Pixel RPG** (mundo procedural, tiendas, hechizos, dragón) |
+
+### 🧬 Progreso y extras
+- **Sonido** sintetizado para todos los juegos (activable en ⚙️ Ajustes; requiere `expo-av`, ya incluido en `package.json`).
+- **Perfil**: nivel y XP, **12 logros** y **reto del día** con racha 🔥 (un juego distinto cada día).
+- **Favoritos** ⭐ con su propia pestaña en el menú.
+- **Ajustes**: sonido, vibración y borrado de progreso.
 
 ---
 
@@ -91,7 +97,7 @@ Then open **Expo Go** on your iPhone, navigate to your project, and the latest u
 
 ## 🤖 Built By AI
 
-This entire app — all 36 games, the hub UI, the haptics, the save system, the animations — was architected and coded by an **AI assistant** in collaboration with the user. No game engine. No third-party game framework. Pure React Native, raw creativity, and a lot of emoji.
+This entire app — all 40 games, the hub UI, the haptics, the save system, the animations — was architected and coded by an **AI assistant** in collaboration with the user. No game engine. No third-party game framework. Pure React Native, raw creativity, and a lot of emoji.
 
 > *Proof that AI + human > either alone.* 💪
 

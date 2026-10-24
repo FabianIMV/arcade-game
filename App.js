@@ -18,8 +18,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   AREA_H, AREA_HF, AREA_W, SCREEN_W, Bar, Btn, C, Combo, GameScreen, GridBg, Lives, Overlay, Pill, PlayArea, Starfield,
   alpha, clamp, glow, tglow, hx, lerp, makeStars, overlap, pick, rand, randInt, shuffle,
-  uid, useBest, useFX, useForce, useLoop, usePan, useTimeouts,
+  GameCtx, uid, useBest, useFX, useForce, useLoop, usePan, useTimeouts,
 } from './utils/kit';
+import { ACHIEVEMENTS, Profile, ToastHost, levelInfo, toast, useProfile, useSettings } from './utils/meta';
 
 const { width, height } = Dimensions.get('window');
 
@@ -5092,6 +5093,374 @@ function PixelRPG({ onExit }) {
 }
 // ─────────────────────────────────────────────────────────────────
 
+// ─── INVASORES ────────────────────────────────────────────────────
+function Invaders({ onExit }) {
+  const COLS = 8, ROWS = 5, DX = 38, DY = 34, SY = AREA_H - 54, SHY = AREA_H - 138;
+  const FW = (COLS - 1) * DX + 28;
+  const fx = useFX();
+  const [best, submitBest] = useBest('invaders');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const stars = useRef(makeStars(40)).current;
+  const makeShields = () => { const out = []; for (let k = 0; k < 4; k++) { const bx = (AREA_W / 4) * k + AREA_W / 8 - 20; for (let r = 0; r < 3; r++) for (let c = 0; c < 5; c++) { if (r === 2 && (c === 1 || c === 2 || c === 3)) continue; out.push({ id: uid(), x: bx + c * 8, y: SHY + r * 8, alive: true }); } } return out; };
+  const makeWave = wave => ({ aliens: Array.from({ length: ROWS * COLS }, (_, i) => ({ r: Math.floor(i / COLS), c: i % COLS, alive: true })), fx: (AREA_W - FW) / 2, fy: 46 + Math.min(4, wave - 1) * 8, dir: 1, stepAcc: 0, shootT: 1.2 });
+  const initState = () => ({ ...makeWave(1), wave: 1, x: AREA_W / 2, tx: AREA_W / 2, bul: [], ab: [], shields: makeShields(), ufo: null, ufoT: 12, score: 0, lives: 3, cool: 0, inv: 0, t: 0, banner: { text: 'OLEADA 1', t: 1.4 } });
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
+  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
+  const E = ['👽', '👾', '👾', '🐙', '🐙']; const PTS = [30, 20, 20, 10, 10];
+  const hit = (s, why) => {
+    if (s.inv > 0) return;
+    s.lives -= 1; s.inv = 1.6; fx.burst(s.x, SY, C.red, 20, 240); fx.shake(9, 0.3); fx.flash(C.red, 0.3); hx.bad();
+    if (s.lives <= 0) { hx.die(); setRes({ isNew: submitBest(s.score) }); setPhase('over'); }
+  };
+  useLoop(phase === 'play', dt => {
+    const s = g.current; s.t += dt; s.inv = Math.max(0, s.inv - dt); s.cool -= dt;
+    if (s.banner) { s.banner.t -= dt; if (s.banner.t <= 0) s.banner = null; }
+    s.x += (s.tx - s.x) * Math.min(1, dt * 18);
+    if (s.cool <= 0) { s.cool = 0.42; s.bul.push({ x: s.x, y: SY - 18, vy: -520 }); hx.tick(); }
+    const alive = s.aliens.filter(a => a.alive);
+    // movimiento de la formación
+    const interval = Math.max(0.035, 0.55 * (alive.length / (ROWS * COLS)) - (s.wave - 1) * 0.03);
+    s.stepAcc += dt;
+    if (s.stepAcc >= interval) {
+      s.stepAcc = 0;
+      const minC = Math.min(...alive.map(a => a.c)), maxC = Math.max(...alive.map(a => a.c));
+      const left = s.fx + minC * DX, right = s.fx + maxC * DX + 28;
+      if ((s.dir > 0 && right + 8 > AREA_W - 6) || (s.dir < 0 && left - 8 < 6)) { s.dir *= -1; s.fy += 16; } else s.fx += 8 * s.dir;
+    }
+    // disparos enemigos
+    s.shootT -= dt;
+    if (s.shootT <= 0 && alive.length) {
+      s.shootT = Math.max(0.35, 1.1 - s.wave * 0.1) * rand(0.6, 1.2);
+      const col = pick([...new Set(alive.map(a => a.c))]);
+      const low = alive.filter(a => a.c === col).sort((a, b) => b.r - a.r)[0];
+      s.ab.push({ x: s.fx + low.c * DX + 14, y: s.fy + low.r * DY + 28, vy: 190 + s.wave * 14 });
+    }
+    // ovni
+    s.ufoT -= dt;
+    if (s.ufoT <= 0 && !s.ufo) { s.ufo = { x: -30, vx: 110 }; s.ufoT = rand(14, 22); }
+    if (s.ufo) { s.ufo.x += s.ufo.vx * dt; if (s.ufo.x > AREA_W + 30) s.ufo = null; }
+    s.bul.forEach(b => { b.y += b.vy * dt; }); s.ab.forEach(b => { b.y += b.vy * dt; });
+    // balas jugador
+    s.bul = s.bul.filter(b => {
+      if (b.y < -10) return false;
+      for (const a of alive) { const ax = s.fx + a.c * DX, ay = s.fy + a.r * DY; if (a.alive && b.x > ax && b.x < ax + 28 && b.y > ay && b.y < ay + 28) { a.alive = false; s.score += PTS[a.r] * s.wave; fx.burst(ax + 14, ay + 14, C.lime, 10, 200); fx.pop(ax + 14, ay, `+${PTS[a.r] * s.wave}`, C.text, 13); hx.hit(); return false; } }
+      if (s.ufo && b.x > s.ufo.x - 16 && b.x < s.ufo.x + 16 && b.y > 30 && b.y < 56) { const pts = pick([50, 100, 150, 300]); s.score += pts; fx.burst(s.ufo.x, 42, C.pink, 18, 260); fx.pop(s.ufo.x, 28, `+${pts}`, C.pink, 18); hx.win(); s.ufo = null; return false; }
+      for (const sh of s.shields) if (sh.alive && b.x > sh.x - 2 && b.x < sh.x + 10 && b.y > sh.y && b.y < sh.y + 10) { sh.alive = false; return false; }
+      return true;
+    });
+    s.ab = s.ab.filter(b => {
+      if (b.y > AREA_H) return false;
+      for (const sh of s.shields) if (sh.alive && b.x > sh.x - 2 && b.x < sh.x + 10 && b.y > sh.y && b.y < sh.y + 10) { sh.alive = false; fx.burst(sh.x, sh.y, C.lime, 3, 80, 0.3, 3); return false; }
+      if (Math.abs(b.x - s.x) < 15 && b.y > SY - 14 && b.y < SY + 16) { hit(s); return false; }
+      return true;
+    });
+    // los invasores llegan abajo
+    if (alive.some(a => s.fy + a.r * DY + 28 > SHY - 6)) { s.lives = 0; hx.die(); fx.shake(10, 0.4); setRes({ isNew: submitBest(s.score) }); setPhase('over'); return; }
+    if (!alive.length) {
+      const bonus = 100 * s.wave; s.score += bonus; hx.win(); fx.flash('#fff', 0.3); fx.pop(AREA_W / 2, AREA_H / 2, `OLEADA SUPERADA +${bonus}`, C.lime, 20);
+      const w = s.wave + 1; Object.assign(s, makeWave(w), { wave: w, bul: [], ab: [], banner: { text: `OLEADA ${w}`, t: 1.4 } });
+      if (w % 2 === 1) s.shields = makeShields();
+    }
+  });
+  const pan = usePan(fx, { down: x => { g.current.tx = clamp(x, 16, AREA_W - 16); }, move: x => { g.current.tx = clamp(x, 16, AREA_W - 16); } });
+  const s = g.current;
+  return (
+    <GameScreen title="INVASORES" emoji="👽" accent={C.lime} onExit={onExit} score={s.score} best={best}
+      hud={<><Lives n={s.lives} max={3} icon="🚀" off="💥" /><Text style={{ color: C.dim, fontSize: 12 }}>Oleada <Text style={{ color: C.lime, fontWeight: '900' }}>{s.wave}</Text></Text><Text style={{ color: C.dim, fontSize: 12 }}>Quedan {s.aliens.filter(a => a.alive).length}</Text></>}>
+      <PlayArea fx={fx} bg="#030a06" border={alpha(C.lime, 0.35)} {...pan}>
+        <Starfield stars={stars} offset={s.t * 12} />
+        {s.aliens.map(a => a.alive && <Text key={`${a.r}-${a.c}`} style={{ position: 'absolute', left: s.fx + a.c * DX, top: s.fy + a.r * DY + (Math.floor(s.t * 3 + a.c) % 2 ? 2 : 0), width: 28, textAlign: 'center', fontSize: 24, lineHeight: 28 }}>{E[a.r]}</Text>)}
+        {s.shields.map(sh => sh.alive && <View key={sh.id} style={{ position: 'absolute', left: sh.x, top: sh.y, width: 8, height: 8, backgroundColor: C.lime, opacity: 0.8 }} />)}
+        {s.ufo && <Text style={{ position: 'absolute', left: s.ufo.x - 16, top: 30, fontSize: 26, ...tglow(C.pink, 10) }}>🛸</Text>}
+        {s.bul.map((b, i) => <View key={`b${i}`} style={{ position: 'absolute', left: b.x - 2, top: b.y - 8, width: 4, height: 14, borderRadius: 2, backgroundColor: C.cyan, ...glow(C.cyan, 6, 1) }} />)}
+        {s.ab.map((b, i) => <View key={`a${i}`} style={{ position: 'absolute', left: b.x - 2.5, top: b.y - 7, width: 5, height: 14, borderRadius: 2, backgroundColor: C.pink, ...glow(C.pink, 6, 1) }} />)}
+        <View style={{ position: 'absolute', left: s.x - 17, top: SY - 16, width: 34, height: 34, alignItems: 'center', opacity: s.inv > 0 && Math.floor(s.t * 14) % 2 ? 0.3 : 1 }}>
+          <View style={{ width: 0, height: 0, borderLeftWidth: 17, borderRightWidth: 17, borderBottomWidth: 28, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: C.lime, ...glow(C.lime, 8, 0.9) }} />
+          <View style={{ width: 34, height: 6, backgroundColor: C.lime, borderRadius: 2, marginTop: -1 }} />
+        </View>
+        <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: SY + 22, height: 2, backgroundColor: alpha(C.lime, 0.4) }} />
+        {s.banner && <Text pointerEvents="none" style={{ position: 'absolute', top: AREA_H * 0.45, width: AREA_W, textAlign: 'center', color: C.text, fontSize: 24, fontWeight: '900', letterSpacing: 3, opacity: Math.min(1, s.banner.t), ...tglow(C.lime, 12) }}>{s.banner.text}</Text>}
+        <Overlay show={phase !== 'play'} kind={phase} emoji="👽" title={phase === 'over' ? 'INVADIDOS' : 'INVASORES'}
+          subtitle={phase === 'over' ? `Llegaste a la oleada ${s.wave}` : 'Defiende la Tierra'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.lime} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Arrastra para mover · disparo automático', 'Los escudos verdes te protegen (y se desgastan)', '🛸 pasa de vez en cuando: ¡puntos extra!', 'Si los invasores bajan hasta los escudos, pierdes'] : null} />
+      </PlayArea>
+    </GameScreen>
+  );
+}
+
+// ─── SKY HOP ──────────────────────────────────────────────────────
+function SkyHop({ onExit }) {
+  const PW = 64, PH = 14, BODY = 30;
+  const fx = useFX();
+  const [best, submitBest] = useBest('skyhop');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const stars = useRef(makeStars(30)).current;
+  const initState = () => {
+    const s = { p: { x: AREA_W / 2, y: AREA_H - 90, vy: -620, face: 1 }, tx: AREA_W / 2, cam: 0, plats: [], mons: [], items: [], top: AREA_H - 60, t: 0, score: 0, bonus: 0, jet: 0, maxH: 0 };
+    s.plats.push({ id: uid(), x: AREA_W / 2 - PW / 2, y: AREA_H - 60, k: 'n', ph: 0 });
+    return s;
+  };
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
+  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
+  const gen = s => {
+    const h = Math.max(0, -s.top + AREA_H);
+    while (s.top > s.cam - AREA_H) {
+      const gap = rand(58, 80 + Math.min(34, h / 60));
+      s.top -= gap;
+      const r = Math.random(); const level = Math.min(1, h / 3000);
+      const k = r < 0.12 + level * 0.1 ? 'm' : r < 0.2 + level * 0.18 ? 'b' : r < 0.26 + level * 0.18 ? 's' : 'n';
+      const pl = { id: uid(), x: rand(8, AREA_W - PW - 8), y: s.top, k, ph: Math.random() * 6, dx: rand(50, 90) * (Math.random() < 0.5 ? 1 : -1) };
+      s.plats.push(pl);
+      if (h > 500 && k === 'n' && Math.random() < 0.12) s.mons.push({ id: uid(), x: pl.x + 14, y: pl.y - 32, alive: true });
+      else if (Math.random() < 0.07) s.items.push({ id: uid(), x: pl.x + 20, y: pl.y - 30, kind: Math.random() < 0.35 ? 'jet' : 'star', got: false });
+    }
+  };
+  const die = s => { hx.die(); fx.shake(8, 0.3); fx.flash(C.red, 0.3); setRes({ isNew: submitBest(Math.floor(s.score + s.bonus)) }); setPhase('over'); };
+  useLoop(phase === 'play', dt => {
+    const s = g.current; const p = s.p; s.t += dt;
+    gen(s);
+    p.x += (s.tx - p.x) * Math.min(1, dt * 12);
+    if (s.tx - p.x > 1) p.face = 1; else if (s.tx - p.x < -1) p.face = -1;
+    if (p.x < -10) { p.x += AREA_W + 20; s.tx += AREA_W + 20; } if (p.x > AREA_W + 10) { p.x -= AREA_W + 20; s.tx -= AREA_W + 20; }
+    const prevBottom = p.y + BODY;
+    if (s.jet > 0) { s.jet -= dt; p.vy = -760; if (Math.random() < dt * 40) fx.burst(p.x, p.y + BODY, C.orange, 2, 90, 0.3, 4); } else p.vy += 1500 * dt;
+    p.y += p.vy * dt;
+    s.plats.forEach(pl => { if (pl.k === 'm') { pl.x += pl.dx * dt; if (pl.x < 4 || pl.x > AREA_W - PW - 4) pl.dx *= -1; } });
+    if (p.vy > 0 && s.jet <= 0) {
+      for (const pl of s.plats) {
+        if (pl.broken) continue;
+        if (p.x + 10 > pl.x && p.x - 10 < pl.x + PW && prevBottom <= pl.y + 6 && p.y + BODY >= pl.y) {
+          if (pl.k === 'b') { pl.broken = true; fx.burst(pl.x + PW / 2, pl.y, '#c08c52', 8, 160); hx.tick(); continue; }
+          p.y = pl.y - BODY; p.vy = pl.k === 's' ? -1000 : -640; hx.tap();
+          fx.burst(p.x, p.y + BODY, pl.k === 's' ? C.amber : C.lime, 4, 90, 0.3, 3); if (pl.k === 's') fx.ring(p.x, p.y + BODY, C.amber, 40);
+          break;
+        }
+      }
+    }
+    for (const m of s.mons) {
+      if (!m.alive) continue;
+      if (Math.abs(p.x - (m.x + 14)) < 22 && Math.abs(p.y + BODY / 2 - (m.y + 14)) < 24) {
+        if (p.vy > 100 && prevBottom <= m.y + 14 && s.jet <= 0) { m.alive = false; p.vy = -700; s.bonus += 50; fx.burst(m.x + 14, m.y + 14, C.amber, 12, 220); fx.pop(m.x + 14, m.y, '+50', C.text, 16); hx.hit(); }
+        else if (s.jet > 0) { m.alive = false; s.bonus += 50; fx.burst(m.x + 14, m.y + 14, C.amber, 12, 220); }
+        else { die(s); return; }
+      }
+    }
+    for (const it of s.items) {
+      if (!it.got && Math.abs(p.x - (it.x + 12)) < 24 && Math.abs(p.y + BODY / 2 - (it.y + 12)) < 28) {
+        it.got = true; hx.good();
+        if (it.kind === 'jet') { s.jet = 1.6; fx.pop(it.x, it.y - 6, '¡COHETE!', C.orange, 16); } else { s.bonus += 25; fx.pop(it.x, it.y - 6, '+25', C.amber, 15); }
+        fx.ring(it.x + 12 - 0, it.y - s.cam, C.lime, 40);
+      }
+    }
+    s.cam = Math.min(s.cam, p.y - AREA_H * 0.42);
+    s.maxH = Math.max(s.maxH, -s.cam);
+    s.score = s.maxH / 10;
+    s.plats = s.plats.filter(pl => pl.y < s.cam + AREA_H + 60); s.mons = s.mons.filter(m => m.y < s.cam + AREA_H + 60); s.items = s.items.filter(i => i.y < s.cam + AREA_H + 60);
+    if (p.y > s.cam + AREA_H + 20) die(s);
+  });
+  const pan = usePan(fx, { down: x => { g.current.tx = clamp(x, 0, AREA_W); }, move: x => { g.current.tx = clamp(x, 0, AREA_W); } });
+  const s = g.current; const p = s.p; const sc = Math.floor(s.score + s.bonus);
+  const cam = s.cam;
+  return (
+    <GameScreen title="SKY HOP" emoji="🦘" accent={C.cyan} onExit={onExit} score={sc} best={best}
+      hud={<><Text style={{ color: C.dim, fontSize: 12 }}>Altura <Text style={{ color: C.cyan, fontWeight: '900' }}>{Math.floor(s.score)} m</Text></Text><Text style={{ color: C.orange, fontWeight: '900', fontSize: 12 }}>{s.jet > 0 ? '🚀 PROPULSIÓN' : ''}</Text><Text style={{ color: C.dim, fontSize: 12 }}>Toca y arrastra</Text></>}>
+      <PlayArea fx={fx} bg="#05102a" border={alpha(C.cyan, 0.35)} {...pan}>
+        <Starfield stars={stars} offset={-cam * 0.15} />
+        {s.plats.map(pl => !pl.broken && <View key={pl.id} style={{ position: 'absolute', left: pl.x, top: pl.y - cam, width: PW, height: PH, borderRadius: 7, backgroundColor: pl.k === 'm' ? alpha(C.blue, 0.4) : pl.k === 'b' ? alpha('#c08c52', 0.5) : pl.k === 's' ? alpha(C.amber, 0.35) : alpha(C.lime, 0.3), borderWidth: 2, borderColor: pl.k === 'm' ? C.blue : pl.k === 'b' ? '#c08c52' : pl.k === 's' ? C.amber : C.lime, ...glow(pl.k === 'm' ? C.blue : pl.k === 'b' ? '#c08c52' : pl.k === 's' ? C.amber : C.lime, 6, 0.6) }}>{pl.k === 's' && <Text style={{ position: 'absolute', top: -14, left: PW / 2 - 9, fontSize: 16 }}>🔶</Text>}</View>)}
+        {s.items.map(it => !it.got && <Text key={it.id} style={{ position: 'absolute', left: it.x, top: it.y - cam, fontSize: 24, ...tglow(C.amber, 8) }}>{it.kind === 'jet' ? '🚀' : '⭐'}</Text>)}
+        {s.mons.map(m => m.alive && <Text key={m.id} style={{ position: 'absolute', left: m.x, top: m.y - cam, fontSize: 28 }}>👾</Text>)}
+        <Text style={{ position: 'absolute', left: p.x - 20, top: p.y - cam - 6, width: 40, textAlign: 'center', fontSize: 34, lineHeight: 40, transform: [{ scaleX: p.face }, { scaleY: p.vy < 0 ? 1.1 : 0.95 }], ...tglow(C.cyan, 8) }}>🦘</Text>
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🦘" title={phase === 'over' ? 'CAÍSTE' : 'SKY HOP'}
+          subtitle={phase === 'over' ? `Subiste ${Math.floor(s.score)} metros` : 'Salta sin parar hacia el cielo'}
+          score={sc} best={best} isNew={res.isNew} accent={C.cyan} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Arrastra el dedo para mover a izquierda y derecha', 'Rebota en las plataformas · 🔶 resortes dan más impulso', 'Marrón: se rompe · azul: se mueve', 'Cae sobre los 👾 para aplastarlos · 🚀 te propulsa'] : null} />
+      </PlayArea>
+    </GameScreen>
+  );
+}
+
+// ─── BUSCAMINAS ───────────────────────────────────────────────────
+const MS_LEVELS = { easy: { c: 8, r: 10, m: 10, base: 500, name: 'Fácil' }, med: { c: 9, r: 12, m: 20, base: 1100, name: 'Medio' }, hard: { c: 10, r: 14, m: 36, base: 2200, name: 'Difícil' } };
+const MS_COLORS = ['', '#4d8bff', '#7dff6b', '#ff4d6d', '#9b6bff', '#ff8a3d', '#22e6ff', '#ffffff', '#8b92b8'];
+function Buscaminas({ onExit }) {
+  const fx = useFX();
+  const [best, submitBest] = useBest('minesweeper');
+  const [phase, setPhase] = useState('ready');
+  const [level, setLevel] = useState('easy');
+  const [res, setRes] = useState({ isNew: false, won: false, pts: 0 });
+  const [, force] = useReducer(x => x + 1, 0);
+  const initState = lv => { const L = MS_LEVELS[lv]; return { L, cells: Array.from({ length: L.c * L.r }, () => ({ mine: false, open: false, flag: false, n: 0 })), placed: false, mode: 'dig', t: 0, flags: 0, opened: 0, over: false }; };
+  const g = useRef(null);
+  if (!g.current) g.current = initState('easy');
+  const start = () => { fx.clear(); g.current = initState(level); setPhase('play'); };
+  const nb = (s, i) => { const { c, r } = s.L; const x = i % c, y = Math.floor(i / c); const o = []; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { if (!dx && !dy) continue; const nx = x + dx, ny = y + dy; if (nx >= 0 && ny >= 0 && nx < c && ny < r) o.push(ny * c + nx); } return o; };
+  const place = (s, safe) => {
+    const banned = new Set([safe, ...nb(s, safe)]); let n = 0;
+    while (n < s.L.m) { const i = randInt(0, s.cells.length - 1); if (banned.has(i) || s.cells[i].mine) continue; s.cells[i].mine = true; n++; }
+    s.cells.forEach((cl, i) => { cl.n = nb(s, i).filter(j => s.cells[j].mine).length; }); s.placed = true;
+  };
+  const finish = (s, won) => {
+    s.over = true;
+    if (won) {
+      const pts = Math.max(50, Math.round(s.L.base - s.t * (s.L.base / 400)));
+      hx.win(); fx.flash('#fff', 0.3); for (let k = 0; k < 5; k++) fx.burst(rand(30, AREA_W - 30), rand(60, 300), pick([C.cyan, C.pink, C.amber, C.lime]), 16, 260, 0.9, 5);
+      setRes({ isNew: submitBest(pts), won: true, pts });
+    } else { hx.die(); fx.shake(9, 0.4); fx.flash(C.red, 0.3); s.cells.forEach(cl => { if (cl.mine) cl.open = true; }); setRes({ isNew: false, won: false, pts: 0 }); }
+    setTimeout(() => setPhase(won ? 'win' : 'over'), won ? 700 : 1100);
+    force();
+  };
+  const open = (s, i) => {
+    const q = [i];
+    while (q.length) {
+      const j = q.pop(); const cl = s.cells[j];
+      if (cl.open || cl.flag) continue;
+      cl.open = true; s.opened += 1;
+      if (cl.n === 0 && !cl.mine) nb(s, j).forEach(k => { if (!s.cells[k].open) q.push(k); });
+    }
+  };
+  const tap = i => {
+    const s = g.current; if (phase !== 'play' || s.over) return;
+    const cl = s.cells[i];
+    if (s.mode === 'flag' && !cl.open) { cl.flag = !cl.flag; s.flags += cl.flag ? 1 : -1; hx.tick(); force(); return; }
+    if (cl.open) { // acorde
+      if (cl.n > 0 && nb(s, i).filter(j => s.cells[j].flag).length === cl.n) { nb(s, i).forEach(j => { const c2 = s.cells[j]; if (!c2.flag && !c2.open) { if (c2.mine) { c2.open = true; finish(s, false); } else open(s, j); } }); hx.tap(); }
+    } else if (!cl.flag) {
+      if (!s.placed) place(s, i);
+      if (cl.mine) { cl.open = true; fx.burst(0, 0, C.red, 1); finish(s, false); return; }
+      open(s, i); hx.tap();
+    }
+    if (!s.over && s.opened >= s.cells.length - s.L.m) finish(s, true);
+    force();
+  };
+  const longPress = i => { const s = g.current; if (phase !== 'play' || s.over || s.cells[i].open) return; const cl = s.cells[i]; cl.flag = !cl.flag; s.flags += cl.flag ? 1 : -1; hx.hit(); force(); };
+  useLoop(phase === 'play', dt => { const s = g.current; if (s.placed && !s.over) s.t += dt; });
+  const s = g.current; const { c, r } = s.L;
+  const cs = Math.min(Math.floor((AREA_W - 16) / c), Math.floor((AREA_H - 74) / r));
+  const bx = (AREA_W - cs * c) / 2;
+  const mins = Math.floor(s.t / 60), secs = Math.floor(s.t % 60);
+  return (
+    <GameScreen title="BUSCAMINAS" emoji="💣" accent={C.red} onExit={onExit} score={res.pts || 0} best={best}
+      hud={<><Text style={{ color: C.text, fontWeight: '900', fontSize: 14 }}>🚩 {s.L.m - s.flags}</Text><Text style={{ color: C.dim, fontSize: 12 }}>{s.L.name} · {c}×{r}</Text><Text style={{ color: C.text, fontWeight: '900', fontSize: 14 }}>⏱ {mins}:{String(secs).padStart(2, '0')}</Text></>}>
+      <PlayArea fx={fx} bg="#0c0508" border={alpha(C.red, 0.35)}>
+        <View style={{ position: 'absolute', left: bx, top: 10, width: cs * c, height: cs * r }}>
+          {s.cells.map((cl, i) => {
+            const x = (i % c) * cs, y = Math.floor(i / c) * cs;
+            return (
+              <Pressable key={i} testID={`ms-${i}`} onPress={() => tap(i)} onLongPress={() => longPress(i)} delayLongPress={260} style={{ position: 'absolute', left: x, top: y, width: cs, height: cs, padding: 1.5 }}>
+                <View style={{ flex: 1, borderRadius: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: cl.open ? (cl.mine ? alpha(C.red, 0.5) : 'rgba(255,255,255,0.04)') : alpha(C.red, 0.16), borderWidth: 1.5, borderColor: cl.open ? 'rgba(255,255,255,0.06)' : alpha(C.red, 0.5) }}>
+                  {cl.open ? (cl.mine ? <Text style={{ fontSize: cs * 0.55 }}>💣</Text> : cl.n > 0 ? <Text style={{ color: MS_COLORS[cl.n], fontWeight: '900', fontSize: cs * 0.55 }}>{cl.n}</Text> : null) : cl.flag ? <Text style={{ fontSize: cs * 0.5 }}>🚩</Text> : null}
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 10, flexDirection: 'row', justifyContent: 'center', gap: 12 }}>
+          <Btn testID="ms-dig" label="⛏️ EXCAVAR" small ghost={s.mode !== 'dig'} color={C.cyan} onPress={() => { s.mode = 'dig'; hx.tick(); force(); }} />
+          <Btn testID="ms-flag" label="🚩 BANDERA" small ghost={s.mode !== 'flag'} color={C.amber} onPress={() => { s.mode = 'flag'; hx.tick(); force(); }} />
+        </View>
+        <Overlay show={phase !== 'play'} kind={phase} emoji={phase === 'win' ? '🏆' : phase === 'over' ? '💥' : '💣'} title={phase === 'win' ? '¡DESPEJADO!' : phase === 'over' ? '¡BOOM!' : 'BUSCAMINAS'}
+          subtitle={phase === 'win' ? `${mins}:${String(secs).padStart(2, '0')} · ${s.L.name}` : phase === 'over' ? 'Pisaste una mina' : 'Descubre todo sin tocar las minas'}
+          score={res.pts} best={best} isNew={res.isNew} accent={C.red} onStart={start} onExit={onExit}
+          extra={<View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>{Object.entries(MS_LEVELS).map(([k, v]) => <Btn key={k} testID={`lv-${k}`} label={v.name} small ghost={level !== k} color={C.red} onPress={() => setLevel(k)} />)}</View>}
+          lines={phase === 'ready' ? ['Toca para excavar · mantén pulsado para poner bandera', 'El número indica minas vecinas', 'Toca un número con sus banderas para abrir alrededor', 'La primera casilla siempre es segura'] : null} />
+      </PlayArea>
+    </GameScreen>
+  );
+}
+
+// ─── 4 EN LÍNEA ───────────────────────────────────────────────────
+function Connect4({ onExit }) {
+  const NC = 7, NR = 6;
+  const cs = Math.min(Math.floor((AREA_W - 20) / NC), 62);
+  const bx = (AREA_W - cs * NC) / 2, by = 70;
+  const fx = useFX();
+  const later = useTimeouts();
+  const [best, submitBest] = useBest('connect4');
+  const [phase, setPhase] = useState('ready');          // ready | play | win | over
+  const [res, setRes] = useState({ isNew: false, draw: false });
+  const initState = (lvl, score) => ({ b: Array.from({ length: NR }, () => Array(NC).fill(0)), turn: 1, level: lvl, score, anim: null, line: null, busy: false, t: 0, msg: 'Tu turno' });
+  const g = useRef(null);
+  if (!g.current) g.current = initState(1, 0);
+  const start = () => { fx.clear(); g.current = initState(1, 0); setPhase('play'); };
+  const nextRound = () => { const s = g.current; g.current = initState(s.level + 1, s.score); setPhase('play'); };
+  const dropRow = (b, c) => { for (let r = NR - 1; r >= 0; r--) if (!b[r][c]) return r; return -1; };
+  const winLine = (b, p) => {
+    const dirs = [[0, 1], [1, 0], [1, 1], [1, -1]];
+    for (let r = 0; r < NR; r++) for (let c = 0; c < NC; c++) { if (b[r][c] !== p) continue; for (const [dr, dc] of dirs) { const cells = [[r, c]]; for (let k = 1; k < 4; k++) { const rr = r + dr * k, cc = c + dc * k; if (rr < 0 || rr >= NR || cc < 0 || cc >= NC || b[rr][cc] !== p) break; cells.push([rr, cc]); } if (cells.length === 4) return cells; } }
+    return null;
+  };
+  const full = b => b[0].every(Boolean);
+  const evalBoard = (b) => {
+    let sc = 0; const dirs = [[0, 1], [1, 0], [1, 1], [1, -1]];
+    for (let r = 0; r < NR; r++) sc += (b[r][3] === 2 ? 3 : b[r][3] === 1 ? -3 : 0);
+    for (let r = 0; r < NR; r++) for (let c = 0; c < NC; c++) for (const [dr, dc] of dirs) {
+      let a = 0, h = 0, e = 0; let ok = true;
+      for (let k = 0; k < 4; k++) { const rr = r + dr * k, cc = c + dc * k; if (rr < 0 || rr >= NR || cc < 0 || cc >= NC) { ok = false; break; } const v = b[rr][cc]; if (v === 2) a++; else if (v === 1) h++; else e++; }
+      if (!ok) continue;
+      if (a && !h) sc += a === 3 ? 5 : a === 2 ? 2 : 0; if (h && !a) sc -= h === 3 ? 6 : h === 2 ? 2 : 0;
+    }
+    return sc;
+  };
+  const minimax = (b, depth, alpha_, beta, maxing) => {
+    if (winLine(b, 2)) return 100000 + depth; if (winLine(b, 1)) return -100000 - depth;
+    if (full(b) || depth === 0) return evalBoard(b);
+    const order = [3, 2, 4, 1, 5, 0, 6];
+    if (maxing) { let v = -Infinity; for (const c of order) { const r = dropRow(b, c); if (r < 0) continue; b[r][c] = 2; v = Math.max(v, minimax(b, depth - 1, alpha_, beta, false)); b[r][c] = 0; alpha_ = Math.max(alpha_, v); if (alpha_ >= beta) break; } return v; }
+    let v = Infinity; for (const c of order) { const r = dropRow(b, c); if (r < 0) continue; b[r][c] = 1; v = Math.min(v, minimax(b, depth - 1, alpha_, beta, true)); b[r][c] = 0; beta = Math.min(beta, v); if (alpha_ >= beta) break; } return v;
+  };
+  const aiMove = s => {
+    const depth = Math.min(7, 1 + s.level);
+    let bestC = -1, bestV = -Infinity; const order = [3, 2, 4, 1, 5, 0, 6].sort(() => Math.random() - 0.5);
+    for (const c of order) { const r = dropRow(s.b, c); if (r < 0) continue; s.b[r][c] = 2; const v = minimax(s.b, depth - 1, -Infinity, Infinity, false) + (Math.random() < 0.15 && s.level < 3 ? rand(-30, 30) : 0); s.b[r][c] = 0; if (v > bestV) { bestV = v; bestC = c; } }
+    return bestC;
+  };
+  const place = (c, who) => { const s = g.current; const r = dropRow(s.b, c); if (r < 0) return false; s.anim = { c, r, who, y: by - cs, vy: 0 }; s.busy = true; return true; };
+  const land = () => {
+    const s = g.current; const { c, r, who } = s.anim; s.b[r][c] = who; s.anim = null; hx.tap();
+    fx.burst(bx + c * cs + cs / 2, by + r * cs + cs, who === 1 ? C.red : C.amber, 5, 110, 0.3, 3);
+    const line = winLine(s.b, who);
+    if (line) {
+      s.line = line; s.busy = true;
+      if (who === 1) {
+        const empties = s.b.flat().filter(v => !v).length; const pts = 100 * s.level + empties * 10; s.score += pts; hx.win(); fx.flash('#fff', 0.25); fx.pop(AREA_W / 2, 36, `+${pts}`, C.lime, 24);
+        submitBest(s.score); later(() => setPhase('win'), 1000);
+      } else { hx.die(); later(() => { setRes({ isNew: submitBest(s.score), draw: false }); setPhase('over'); }, 1100); }
+      return;
+    }
+    if (full(s.b)) { s.score += 30; later(() => { setRes({ isNew: submitBest(s.score), draw: true }); setPhase('over'); }, 600); return; }
+    if (who === 1) { s.turn = 2; s.msg = 'Pensando…'; later(() => { const c2 = aiMove(s); place(c2, 2); }, 350); } else { s.turn = 1; s.msg = 'Tu turno'; s.busy = false; }
+  };
+  const pan = usePan(fx, { down: x => { const s = g.current; if (phase !== 'play' || s.busy || s.turn !== 1) return; const c = Math.floor((x - bx) / cs); if (c < 0 || c >= NC) return; if (!place(c, 1)) hx.bad(); } });
+  useLoop(phase !== 'ready', dt => {
+    const s = g.current; s.t += dt;
+    if (s.anim) { const a = s.anim; a.vy += 2600 * dt; a.y += a.vy * dt; const ty = by + a.r * cs; if (a.y >= ty) { a.y = ty; land(); } }
+  });
+  const s = g.current;
+  return (
+    <GameScreen title="4 EN LÍNEA" emoji="🔴" accent={C.red} onExit={onExit} score={s.score} best={best}
+      hud={<><Text style={{ color: C.dim, fontSize: 12 }}>Ronda <Text style={{ color: C.red, fontWeight: '900' }}>{s.level}</Text></Text><Text style={{ color: s.turn === 1 ? C.red : C.amber, fontWeight: '900', fontSize: 13 }}>{phase === 'play' ? s.msg : ''}</Text><Text style={{ color: C.dim, fontSize: 12 }}>IA nivel {Math.min(7, 1 + s.level)}</Text></>}>
+      <PlayArea fx={fx} bg="#0a0510" border={alpha(C.red, 0.35)} {...pan}>
+        <View style={{ position: 'absolute', left: bx - 6, top: by - 6, width: cs * NC + 12, height: cs * NR + 12, borderRadius: 16, backgroundColor: alpha(C.blue, 0.18), borderWidth: 3, borderColor: alpha(C.blue, 0.8), ...glow(C.blue, 12, 0.5) }} />
+        {s.b.map((row, r) => row.map((v, c) => (
+          <View key={`${r}-${c}`} style={{ position: 'absolute', left: bx + c * cs + 4, top: by + r * cs + 4, width: cs - 8, height: cs - 8, borderRadius: cs, backgroundColor: v ? (v === 1 ? C.red : C.amber) : 'rgba(0,0,0,0.55)', borderWidth: 2, borderColor: v ? '#fff6' : alpha(C.blue, 0.4), ...(v ? glow(v === 1 ? C.red : C.amber, 8, 0.6) : null) }} />
+        )))}
+        {s.anim && <View style={{ position: 'absolute', left: bx + s.anim.c * cs + 4, top: s.anim.y + 4, width: cs - 8, height: cs - 8, borderRadius: cs, backgroundColor: s.anim.who === 1 ? C.red : C.amber, borderWidth: 2, borderColor: '#fff6' }} />}
+        {s.line && s.line.map(([r, c], i) => <View key={`w${i}`} style={{ position: 'absolute', left: bx + c * cs + 1, top: by + r * cs + 1, width: cs - 2, height: cs - 2, borderRadius: cs, borderWidth: 4, borderColor: '#fff', opacity: 0.6 + Math.sin(s.t * 10) * 0.4 }} />)}
+        {phase === 'play' && !s.busy && <Text pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: by + NR * cs + 18, textAlign: 'center', color: alpha(C.dim, 0.8), fontSize: 12, fontWeight: '700' }}>Toca una columna para soltar tu ficha</Text>}
+        <Overlay show={phase !== 'play'} kind={phase} emoji={phase === 'win' ? '🏆' : phase === 'over' ? (res.draw ? '🤝' : '💀') : '🔴'} title={phase === 'win' ? `¡RONDA ${s.level} GANADA!` : phase === 'over' ? (res.draw ? 'EMPATE' : 'PERDISTE') : '4 EN LÍNEA'}
+          subtitle={phase === 'win' ? `La IA sube a nivel ${Math.min(7, 2 + s.level)}` : phase === 'over' ? `Llegaste a la ronda ${s.level}` : 'Conecta cuatro fichas contra la IA'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.red} startLabel={phase === 'win' ? 'SIGUIENTE RONDA' : undefined} onStart={phase === 'win' ? nextRound : start} onExit={onExit}
+          lines={phase === 'ready' ? ['Alinea 4 fichas en horizontal, vertical o diagonal', 'Cada victoria sube el nivel de la IA', 'Ganar con el tablero más vacío da más puntos'] : null} />
+      </PlayArea>
+    </GameScreen>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // REGISTRO DE JUEGOS + MENÚ
 // Para añadir un juego: crea el componente y añade una entrada aquí.
@@ -5142,9 +5511,13 @@ const GAMES = [
   { id: 'dinorun', name: 'DINO RUN', emoji: '🦖', tag: 'Salta cactus, agáchate de las aves', color: C.lime, cat: 'reflejos', Comp: DinoRun },
   { id: 'fruittap', name: 'FRUIT TAP', emoji: '🍉', tag: 'Corta frutas, evita bombas', color: C.lime, cat: 'reflejos', Comp: FruitTap },
   { id: 'pixelrpg', name: 'PIXEL RPG', emoji: '🧙', tag: 'Explora, combate y sube de nivel', color: C.amber, cat: 'aventura', Comp: PixelRPG },
+  { id: 'invaders', name: 'INVASORES', emoji: '👽', tag: 'Defiende la Tierra con escudos', color: C.lime, cat: 'accion', Comp: Invaders },
+  { id: 'skyhop', name: 'SKY HOP', emoji: '🦘', tag: 'Rebota hacia el cielo sin caer', color: C.cyan, cat: 'reflejos', Comp: SkyHop },
+  { id: 'minesweeper', name: 'BUSCAMINAS', emoji: '💣', tag: 'Despeja el campo con lógica', color: C.red, cat: 'puzzle', Comp: Buscaminas },
+  { id: 'connect4', name: '4 EN LÍNEA', emoji: '🔴', tag: 'Conecta cuatro contra la IA', color: C.red, cat: 'puzzle', Comp: Connect4 },
 ];
 
-function GameCard({ g, index, best, onPress, cardW }) {
+function GameCard({ g, index, best, fav, daily, onPress, onFav, cardW }) {
   const a = useRef(new Animated.Value(0)).current;
   const s = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -5155,20 +5528,53 @@ function GameCard({ g, index, best, onPress, cardW }) {
     <Pressable testID={`menu-${g.id}`} onPress={onPress} onPressIn={() => to(0.95)} onPressOut={() => to(1)}>
       <Animated.View style={{
         width: cardW, height: 128, borderRadius: 20, padding: 12, marginBottom: 12, overflow: 'hidden',
-        backgroundColor: alpha(g.color, 0.09), borderWidth: 1.5, borderColor: alpha(g.color, 0.5),
+        backgroundColor: alpha(g.color, 0.09), borderWidth: 1.5, borderColor: daily ? C.amber : alpha(g.color, 0.5),
         opacity: a, transform: [{ scale: s }, { translateY: a.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
-        ...glow(g.color, 10, 0.35),
+        ...glow(daily ? C.amber : g.color, 10, 0.35),
       }}>
         <View style={{ position: 'absolute', right: -16, top: -16, width: 84, height: 84, borderRadius: 42, backgroundColor: alpha(g.color, 0.12) }} />
         <Text style={{ fontSize: 34 }}>{g.emoji}</Text>
         <Text numberOfLines={1} style={{ color: g.color, fontSize: 14, fontWeight: '900', letterSpacing: 1, marginTop: 6 }}>{g.name}</Text>
-        <Text numberOfLines={2} style={{ color: C.dim, fontSize: 11, lineHeight: 15, marginTop: 2 }}>{g.tag}</Text>
+        <Text numberOfLines={2} style={{ color: C.dim, fontSize: 11, lineHeight: 15, marginTop: 2, paddingRight: 18 }}>{g.tag}</Text>
         {best > 0 && (
           <View style={{ position: 'absolute', right: 8, top: 8, backgroundColor: alpha('#000000', 0.45), borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 }}>
             <Text style={{ color: C.amber, fontSize: 11, fontWeight: '800' }}>🏆 {best}</Text>
           </View>
         )}
+        {daily && <View style={{ position: 'absolute', left: 8, top: 8, backgroundColor: C.amber, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1 }}><Text style={{ color: '#04040c', fontSize: 9, fontWeight: '900' }}>🎯 RETO</Text></View>}
+        <Pressable testID={`fav-${g.id}`} onPress={onFav} hitSlop={10} style={{ position: 'absolute', right: 8, bottom: 6 }}>
+          <Text style={{ fontSize: 18, opacity: fav ? 1 : 0.35 }}>{fav ? '⭐' : '☆'}</Text>
+        </Pressable>
       </Animated.View>
+    </Pressable>
+  );
+}
+
+const dayHash = () => { const d = new Date(); let h = d.getFullYear() * 372 + (d.getMonth() + 1) * 31 + d.getDate(); h = (h * 2654435761) >>> 0; return h; };
+
+function Panel({ title, onClose, children }) {
+  return (
+    <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: C.bg, zIndex: 50, alignItems: 'center' }}>
+      <View style={{ width: Math.min(width, 520), flex: 1, paddingHorizontal: 18, paddingTop: 50 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
+          <Text style={{ color: C.text, fontSize: 22, fontWeight: '900', letterSpacing: 2, flex: 1 }}>{title}</Text>
+          <Btn testID="panel-close" label="CERRAR" small ghost color={C.dim} onPress={onClose} />
+        </View>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>{children}</ScrollView>
+      </View>
+    </View>
+  );
+}
+
+function Toggle({ label, sub, on, onPress, testID }) {
+  return (
+    <Pressable testID={testID} onPress={onPress}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 16, marginBottom: 10, backgroundColor: C.panel2, borderWidth: 1, borderColor: C.line }}>
+        <View style={{ flex: 1 }}><Text style={{ color: C.text, fontWeight: '800', fontSize: 15 }}>{label}</Text><Text style={{ color: C.dim, fontSize: 12 }}>{sub}</Text></View>
+        <View style={{ width: 52, height: 30, borderRadius: 15, backgroundColor: on ? C.lime : '#2a2e52', justifyContent: 'center', padding: 3 }}>
+          <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: '#fff', alignSelf: on ? 'flex-end' : 'flex-start' }} />
+        </View>
+      </View>
     </Pressable>
   );
 }
@@ -5176,27 +5582,68 @@ function GameCard({ g, index, best, onPress, cardW }) {
 function Menu({ onPick }) {
   const [cat, setCat] = useState('all');
   const [bests, setBests] = useState({});
-  useEffect(() => {
+  const [panel, setPanel] = useState(null);       // null | settings | ach
+  const [confirm, setConfirm] = useState(false);
+  const prof = useProfile();
+  const [settings, setSetting] = useSettings();
+  const daily = GAMES[dayHash() % GAMES.length];
+  useEffect(() => { Profile.setTotal(GAMES.length); Profile.setDaily(daily.id); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const loadBests = () => {
     AsyncStorage.multiGet(GAMES.map(g => `@best:${g.id}`)).then(rows => {
       const o = {};
       rows.forEach(([k, v]) => { if (v) o[k.slice(6)] = parseFloat(v) || 0; });
       setBests(o);
     }).catch(() => {});
-  }, []);
-  const list = GAMES.filter(g => cat === 'all' || g.cat === cat);
+  };
+  useEffect(loadBests, []);
+  const list = GAMES.filter(g => cat === 'all' || (cat === 'fav' ? prof.favs[g.id] : g.cat === cat));
   const cardW = (Math.min(width, 520) - 16 * 2 - 12) / 2;
   const played = Object.keys(bests).length;
+  const lv = levelInfo(prof.xp);
+  const achN = Object.keys(prof.ach).length;
+  const dailyDone = prof.daily.done && prof.daily.date !== '';
   const surprise = () => { hx.tap(); onPick(GAMES[Math.floor(Math.random() * GAMES.length)].id); };
+  const cats = [...CATEGORIES.slice(0, 1), { id: 'fav', label: '⭐ FAVORITOS' }, ...CATEGORIES.slice(1)];
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
       <ScrollView contentContainerStyle={{ alignItems: 'center', paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
         <View style={{ width: Math.min(width, 520), paddingHorizontal: 16, paddingTop: 22 }}>
-          <Text style={{ color: C.text, fontSize: 38, fontWeight: '900', letterSpacing: 3, ...tglow(C.cyan, 16, 0.9) }}>ARCADE<Text style={{ color: C.cyan }}> HUB</Text></Text>
-          <Text style={{ color: C.dim, fontSize: 13, marginTop: 4, marginBottom: 14 }}>{GAMES.length} juegos · {played} con récord</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: C.text, fontSize: 30, fontWeight: '900', letterSpacing: 2, ...tglow(C.cyan, 16) }}>ARCADE<Text style={{ color: C.cyan }}> HUB</Text></Text>
+              <Text style={{ color: C.dim, fontSize: 13, marginTop: 2 }}>{GAMES.length} juegos · {played} con récord</Text>
+            </View>
+            <Pressable testID="open-ach" onPress={() => { hx.tick(); setPanel('ach'); }} style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: C.panel2, borderWidth: 1, borderColor: C.line, alignItems: 'center', justifyContent: 'center', marginRight: 8 }}><Text style={{ fontSize: 20 }}>🏆</Text></Pressable>
+            <Pressable testID="open-settings" onPress={() => { hx.tick(); setPanel('settings'); }} style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: C.panel2, borderWidth: 1, borderColor: C.line, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 20 }}>⚙️</Text></Pressable>
+          </View>
 
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
+          <View style={{ marginTop: 14, padding: 12, borderRadius: 18, backgroundColor: C.panel2, borderWidth: 1, borderColor: C.line }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: alpha(C.cyan, 0.15), borderWidth: 2, borderColor: C.cyan, alignItems: 'center', justifyContent: 'center', ...glow(C.cyan, 8, 0.5) }}><Text style={{ color: C.cyan, fontSize: 18, fontWeight: '900' }}>{lv.level}</Text></View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={{ color: C.text, fontWeight: '900', fontSize: 14 }}>Nivel {lv.level} <Text style={{ color: C.dim, fontWeight: '700', fontSize: 12 }}>· {lv.into}/{lv.need} XP</Text></Text>
+                <Bar value={lv.into} max={lv.need} color={C.cyan} h={8} style={{ marginTop: 6 }} />
+              </View>
+              <View style={{ alignItems: 'flex-end', marginLeft: 10 }}>
+                <Text style={{ color: C.amber, fontWeight: '900', fontSize: 13 }}>🔥 {prof.streak}</Text>
+                <Text style={{ color: C.dim, fontSize: 11 }}>🏅 {achN}/{ACHIEVEMENTS.length}</Text>
+              </View>
+            </View>
+          </View>
+
+          <Pressable testID="daily" onPress={() => { hx.tap(); onPick(daily.id); }} style={{ borderRadius: 18, padding: 14, marginTop: 12, backgroundColor: alpha(C.amber, dailyDone ? 0.05 : 0.12), borderWidth: 1.5, borderColor: alpha(C.amber, dailyDone ? 0.35 : 0.8), flexDirection: 'row', alignItems: 'center', ...glow(C.amber, 12, dailyDone ? 0.15 : 0.45) }}>
+            <Text style={{ fontSize: 30, marginRight: 12 }}>{daily.emoji}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: C.amber, fontSize: 12, fontWeight: '900', letterSpacing: 2 }}>🎯 RETO DEL DÍA {dailyDone ? '· ¡CUMPLIDO!' : '· +50 XP'}</Text>
+              <Text style={{ color: C.text, fontSize: 15, fontWeight: '800' }}>{daily.name}</Text>
+              <Text style={{ color: C.dim, fontSize: 11 }}>{dailyDone ? 'Vuelve mañana para mantener tu racha' : 'Termina una partida hoy para sumar racha'}</Text>
+            </View>
+            <Text style={{ color: C.amber, fontSize: 22 }}>{dailyDone ? '✓' : '›'}</Text>
+          </Pressable>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 14, marginBottom: 14 }}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ gap: 8 }}>
-              {CATEGORIES.map(c => {
+              {cats.map(c => {
                 const on = cat === c.id;
                 return (
                   <Pressable key={c.id} testID={`cat-${c.id}`} onPress={() => { hx.tick(); setCat(c.id); }}
@@ -5217,13 +5664,43 @@ function Menu({ onPick }) {
             <Text style={{ color: C.pink, fontSize: 22 }}>›</Text>
           </Pressable>
 
+          {cat === 'fav' && list.length === 0 && <Text style={{ color: C.dim, textAlign: 'center', marginVertical: 24 }}>Marca juegos con ☆ para verlos aquí.</Text>}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
             {list.map((g, i) => (
-              <GameCard key={g.id + cat} g={g} index={i} cardW={cardW} best={bests[g.id] || 0} onPress={() => { hx.tap(); onPick(g.id); }} />
+              <GameCard key={g.id + cat} g={g} index={i} cardW={cardW} best={bests[g.id] || 0} fav={!!prof.favs[g.id]} daily={g.id === daily.id && !dailyDone}
+                onPress={() => { hx.tap(); onPick(g.id); }} onFav={() => { hx.tick(); Profile.toggleFav(g.id); }} />
             ))}
           </View>
         </View>
       </ScrollView>
+
+      {panel === 'settings' && (
+        <Panel title="⚙️ AJUSTES" onClose={() => { setPanel(null); setConfirm(false); }}>
+          <Toggle testID="tg-sound" label="🔊 Sonido" sub="Efectos de sonido en los juegos" on={settings.sound} onPress={() => setSetting('sound', !settings.sound)} />
+          <Toggle testID="tg-haptics" label="📳 Vibración" sub="Respuesta háptica al jugar" on={settings.haptics} onPress={() => setSetting('haptics', !settings.haptics)} />
+          <View style={{ marginTop: 16, padding: 14, borderRadius: 16, borderWidth: 1, borderColor: alpha(C.red, 0.5), backgroundColor: alpha(C.red, 0.06) }}>
+            <Text style={{ color: C.text, fontWeight: '800', fontSize: 15 }}>Borrar progreso</Text>
+            <Text style={{ color: C.dim, fontSize: 12, marginVertical: 6 }}>Elimina récords, nivel, logros y favoritos (no borra las partidas guardadas de los juegos de aventura).</Text>
+            <Btn testID="reset" label={confirm ? 'TOCA DE NUEVO PARA CONFIRMAR' : 'BORRAR TODO'} small ghost color={C.red} onPress={() => { if (!confirm) { setConfirm(true); hx.warn(); } else { Profile.reset().then(() => { setBests({}); setConfirm(false); toast('Progreso borrado', '🗑️'); }); } }} />
+          </View>
+          <Text style={{ color: alpha(C.dim, 0.7), fontSize: 11, textAlign: 'center', marginTop: 24 }}>Arcade Hub · {GAMES.length} juegos</Text>
+        </Panel>
+      )}
+      {panel === 'ach' && (
+        <Panel title="🏆 LOGROS" onClose={() => setPanel(null)}>
+          <Text style={{ color: C.dim, fontSize: 12, marginBottom: 12 }}>{achN} de {ACHIEVEMENTS.length} desbloqueados · cada logro da +30 XP</Text>
+          {ACHIEVEMENTS.map(a => {
+            const ok = !!prof.ach[a.id];
+            return (
+              <View key={a.id} style={{ flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 16, marginBottom: 8, backgroundColor: ok ? alpha(C.amber, 0.1) : C.panel2, borderWidth: 1, borderColor: ok ? alpha(C.amber, 0.7) : C.line, opacity: ok ? 1 : 0.6 }}>
+                <Text style={{ fontSize: 28, marginRight: 12 }}>{ok ? a.emoji : '🔒'}</Text>
+                <View style={{ flex: 1 }}><Text style={{ color: ok ? C.amber : C.text, fontWeight: '900' }}>{a.name}</Text><Text style={{ color: C.dim, fontSize: 12 }}>{a.desc}</Text></View>
+                {ok && <Text style={{ color: C.lime, fontWeight: '900' }}>✓</Text>}
+              </View>
+            );
+          })}
+        </Panel>
+      )}
     </SafeAreaView>
   );
 }
@@ -5231,11 +5708,15 @@ function Menu({ onPick }) {
 export default function App() {
   const [screen, setScreen] = useState('menu');
   const g = GAMES.find(x => x.id === screen);
-  if (g) {
-    const G = g.Comp;
-    return <G onExit={() => setScreen('menu')} />;
-  }
-  return <Menu onPick={setScreen} />;
+  const G = g ? g.Comp : null;
+  return (
+    <View style={{ flex: 1, backgroundColor: C.bg }}>
+      {g ? (
+        <GameCtx.Provider value={g.id}><G key={g.id} onExit={() => setScreen('menu')} /></GameCtx.Provider>
+      ) : <Menu onPick={setScreen} />}
+      <ToastHost />
+    </View>
+  );
 }
 
 
