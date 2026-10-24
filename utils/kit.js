@@ -234,7 +234,7 @@ export function PlayArea({ fx, children, style, bg = C.panel, border = C.line, w
     <View
       ref={box}
       onLayout={onLayout}
-      style={[{ width: w, height: h, borderRadius: 18, overflow: 'hidden', backgroundColor: bg, borderWidth: 1, borderColor: border, alignSelf: 'center' }, style]}
+      style={[{ width: w, height: h, borderRadius: 18, overflow: 'hidden', backgroundColor: bg, borderWidth: 1, borderColor: border, alignSelf: 'center' }, Platform.OS === 'web' ? { userSelect: 'none' } : null, style]}
       {...rest}
     >
       <View style={{ flex: 1, transform: [{ translateX: sx }, { translateY: sy }] }}>{children}</View>

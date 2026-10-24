@@ -3419,177 +3419,169 @@ const ntRotate = (shape) => {
 };
 
 function NeonTetris({ onExit }) {
-  const [, setTick]         = useState(0);
-  const [running, setRunning] = useState(false);
-  const [gameOver, setGameOver] = useState(false);
-  const gridRef   = useRef(ntEmpty());
-  const pieceRef  = useRef(null);
-  const nextRef   = useRef(null);
-  const pxRef     = useRef(3);
-  const pyRef     = useRef(0);
-  const scoreRef  = useRef(0);
-  const linesRef  = useRef(0);
-  const levelRef  = useRef(1);
-  const runRef    = useRef(false);
-  const dropCtr   = useRef(0);
-
-  const tick = () => setTick(t=>t+1);
-  const rndPiece = () => NT_PIECES[Math.floor(Math.random()*NT_PIECES.length)];
-  const canPlace = (shape, x, y) => {
-    for (let r=0;r<shape.length;r++) for(let c=0;c<shape[r].length;c++) {
-      if (!shape[r][c]) continue;
-      const nr=y+r, nc=x+c;
-      if (nc<0||nc>=NT_COLS||nr>=NT_ROWS) return false;
-      if (nr>=0 && gridRef.current[nr][nc]) return false;
+  const COLS = 10, ROWS = 20;
+  const CS = Math.min(Math.floor((AREA_W - 98) / COLS), Math.floor((AREA_H - 8) / ROWS));
+  const BW = CS * COLS, BH = CS * ROWS;
+  const BX = 6, BY = Math.floor((AREA_H - BH) / 2);
+  const PX = BX + BW + 10;
+  const fx = useFX();
+  const [best, submitBest] = useBest('tetris');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const SHAPES = {
+    I: { n: 4, c: C.cyan, b: [[1, 0], [1, 1], [1, 2], [1, 3]] }, O: { n: 4, c: C.amber, b: [[0, 1], [0, 2], [1, 1], [1, 2]] },
+    T: { n: 3, c: C.violet, b: [[0, 1], [1, 0], [1, 1], [1, 2]] }, S: { n: 3, c: C.lime, b: [[0, 1], [0, 2], [1, 0], [1, 1]] },
+    Z: { n: 3, c: C.red, b: [[0, 0], [0, 1], [1, 1], [1, 2]] }, J: { n: 3, c: C.blue, b: [[0, 0], [1, 0], [1, 1], [1, 2]] },
+    L: { n: 3, c: C.orange, b: [[0, 2], [1, 0], [1, 1], [1, 2]] },
+  };
+  const cells = (t, rot) => {
+    const { n, b } = SHAPES[t];
+    let cs = b;
+    for (let i = 0; i < rot; i++) cs = cs.map(([r, c]) => [c, n - 1 - r]);
+    return cs;
+  };
+  const bag = () => shuffle(['I', 'O', 'T', 'S', 'Z', 'J', 'L']);
+  const initState = () => {
+    const s = { grid: Array.from({ length: ROWS }, () => Array(COLS).fill(null)), q: [...bag(), ...bag()], piece: null, hold: null, canHold: true, score: 0, lines: 0, level: 1, combo: -1, acc: 0, lock: 0, resets: 0, clearing: null, t: 0, over: false, lastX: 0, dxAcc: 0, dyAcc: 0, mv: 0, down: 0 };
+    spawn(s); return s;
+  };
+  const fits = (s, t, rot, x, y) => cells(t, rot).every(([r, c]) => { const gx = x + c, gy = y + r; return gx >= 0 && gx < COLS && gy < ROWS && (gy < 0 || !s.grid[gy][gx]); });
+  const spawn = (s, forceT) => {
+    if (s.q.length < 7) s.q.push(...bag());
+    const t = forceT || s.q.shift();
+    const p = { t, rot: 0, x: Math.floor((COLS - SHAPES[t].n) / 2), y: t === 'I' ? -1 : 0 };
+    s.piece = p; s.lock = 0; s.resets = 0; s.acc = 0; s.canHold = forceT ? s.canHold : true;
+    if (!fits(s, t, 0, p.x, p.y)) {
+      s.over = true; hx.die(); fx.shake(8, 0.4); fx.flash(C.red, 0.3);
+      setRes({ isNew: submitBest(s.score) }); setPhase('over');
     }
-    return true;
   };
-  const spawnPiece = () => {
-    const p = nextRef.current || rndPiece();
-    nextRef.current = rndPiece();
-    const sx = Math.floor(NT_COLS/2) - Math.floor(p.shape[0].length/2);
-    if (!canPlace(p.shape, sx, 0)) { runRef.current=false; setRunning(false); setGameOver(true); deathVibrate(); return; }
-    pieceRef.current = p; pxRef.current = sx; pyRef.current = 0; tick();
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
+  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
+  const drop = (s, p) => { let y = p.y; while (fits(s, p.t, p.rot, p.x, y + 1)) y += 1; return y; };
+  const touchGround = s => { if (s.resets < 14) { s.lock = 0; s.resets += 1; } };
+  const shift = dx => {
+    const s = g.current; const p = s.piece;
+    if (phase !== 'play' || s.over || s.clearing || !p) return false;
+    if (fits(s, p.t, p.rot, p.x + dx, p.y)) { p.x += dx; touchGround(s); hx.tick(); return true; }
+    return false;
   };
-  const lockPiece = () => {
-    const g = gridRef.current.map(r=>[...r]);
-    const {shape, color} = pieceRef.current;
-    shape.forEach((row,r)=>row.forEach((c,col)=>{ if(c&&pyRef.current+r>=0) g[pyRef.current+r][pxRef.current+col]=color; }));
-    let cleared = 0;
-    const kept = g.filter(row=>row.some(c=>!c));
-    cleared = NT_ROWS - kept.length;
-    while(kept.length < NT_ROWS) kept.unshift(Array(NT_COLS).fill(null));
-    gridRef.current = kept;
-    scoreRef.current += ([0,100,300,500,800][cleared]??800) * levelRef.current;
-    linesRef.current += cleared;
-    levelRef.current  = Math.floor(linesRef.current/10)+1;
-    if (cleared > 0) { popVibrate(); }
-    spawnPiece();
+  const rotate = () => {
+    const s = g.current; const p = s.piece;
+    if (phase !== 'play' || s.over || s.clearing || !p || p.t === 'O') return;
+    const nr = (p.rot + 1) % 4;
+    for (const [kx, ky] of [[0, 0], [-1, 0], [1, 0], [-2, 0], [2, 0], [0, -1], [-1, -1], [1, -1]]) {
+      if (fits(s, p.t, nr, p.x + kx, p.y + ky)) { p.rot = nr; p.x += kx; p.y += ky; touchGround(s); hx.tap(); return; }
+    }
   };
-  const startGame = () => {
-    gridRef.current = ntEmpty(); scoreRef.current=0; linesRef.current=0; levelRef.current=1;
-    dropCtr.current = 0; nextRef.current = rndPiece();
-    runRef.current = true; setGameOver(false); setRunning(true); spawnPiece();
+  const holdPiece = () => {
+    const s = g.current;
+    if (phase !== 'play' || s.over || s.clearing || !s.canHold) return;
+    const cur = s.piece.t; const h = s.hold; s.hold = cur; s.canHold = false; hx.hit();
+    if (h) spawn(s, h); else spawn(s);
+    s.canHold = false;
   };
-
-  useEffect(() => {
-    if (!running) return;
-    const id = setInterval(()=>{
-      if (!runRef.current || !pieceRef.current) return;
-      dropCtr.current++;
-      const every = Math.max(2, Math.floor((550-(levelRef.current-1)*45)/16));
-      if (dropCtr.current < every) { tick(); return; }
-      dropCtr.current = 0;
-      const ny = pyRef.current + 1;
-      if (canPlace(pieceRef.current.shape, pxRef.current, ny)) { pyRef.current=ny; tick(); }
-      else lockPiece();
-    }, 16);
-    return ()=>clearInterval(id);
-  }, [running]);
-
-  const moveLeft  = () => { if(!runRef.current||!pieceRef.current)return; const nx=pxRef.current-1; if(canPlace(pieceRef.current.shape,nx,pyRef.current)){pxRef.current=nx;Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);tick();} };
-  const moveRight = () => { if(!runRef.current||!pieceRef.current)return; const nx=pxRef.current+1; if(canPlace(pieceRef.current.shape,nx,pyRef.current)){pxRef.current=nx;Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);tick();} };
-  const rotate    = () => {
-    if(!runRef.current||!pieceRef.current)return;
-    const rot = ntRotate(pieceRef.current.shape);
-    if(canPlace(rot,pxRef.current,pyRef.current)){pieceRef.current={...pieceRef.current,shape:rot};Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);tick();}
+  const lockPiece = s => {
+    const p = s.piece;
+    cells(p.t, p.rot).forEach(([r, c]) => { const gy = p.y + r; if (gy >= 0) s.grid[gy][p.x + c] = SHAPES[p.t].c; });
+    const full = []; s.grid.forEach((row, i) => { if (row.every(Boolean)) full.push(i); });
+    hx.hit();
+    if (full.length) {
+      s.clearing = { rows: full, t: 0.28 }; s.piece = null;
+      s.combo += 1;
+      const base = [0, 100, 300, 500, 800][full.length] * s.level + (s.combo > 0 ? 50 * s.combo * s.level : 0);
+      s.score += base;
+      const label = full.length === 4 ? '¡TETRIS!' : full.length === 3 ? 'TRIPLE' : full.length === 2 ? 'DOBLE' : 'LÍNEA';
+      fx.pop(BX + BW / 2, BY + BH * 0.4, `${label} +${base}`, full.length === 4 ? C.amber : C.text, full.length === 4 ? 24 : 18);
+      full.forEach(i => fx.burst(BX + BW / 2, BY + i * CS + CS / 2, SHAPES[p.t].c, 6, 260, 0.6, 5));
+      if (full.length >= 3) { fx.shake(6, 0.25); fx.flash('#fff', 0.2); hx.win(); } else hx.good();
+    } else { s.combo = -1; spawn(s); }
   };
-  const hardDrop  = () => {
-    if(!runRef.current||!pieceRef.current)return;
-    let ny=pyRef.current; while(canPlace(pieceRef.current.shape,pxRef.current,ny+1))ny++;
-    pyRef.current=ny; Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); lockPiece();
-  };
-
-  const display = gridRef.current.map(r=>[...r]);
-  if (pieceRef.current && running) {
-    pieceRef.current.shape.forEach((row,r)=>row.forEach((c,col)=>{
-      const nr=pyRef.current+r, nc=pxRef.current+col;
-      if(c&&nr>=0&&nr<NT_ROWS&&nc>=0&&nc<NT_COLS) display[nr][nc]=pieceRef.current.color;
-    }));
-  }
-  // Ghost piece
-  if (pieceRef.current && running) {
-    let gy=pyRef.current; while(canPlace(pieceRef.current.shape,pxRef.current,gy+1))gy++;
-    if(gy!==pyRef.current) pieceRef.current.shape.forEach((row,r)=>row.forEach((c,col)=>{
-      const nr=gy+r, nc=pxRef.current+col;
-      if(c&&nr>=0&&nr<NT_ROWS&&nc>=0&&nc<NT_COLS&&!display[nr][nc]) display[nr][nc]='ghost';
-    }));
-  }
-
+  useLoop(phase === 'play', dt => {
+    const s = g.current;
+    s.t += dt;
+    if (s.over) return;
+    if (s.clearing) {
+      s.clearing.t -= dt;
+      if (s.clearing.t <= 0) {
+        const rows = s.clearing.rows;
+        s.grid = s.grid.filter((_, i) => !rows.includes(i));
+        while (s.grid.length < ROWS) s.grid.unshift(Array(COLS).fill(null));
+        s.lines += rows.length;
+        const lv = Math.floor(s.lines / 10) + 1;
+        if (lv > s.level) { s.level = lv; fx.pop(AREA_W / 2, AREA_H * 0.3, `NIVEL ${lv}`, C.lime, 26); hx.good(); }
+        s.clearing = null; spawn(s);
+      }
+      return;
+    }
+    const p = s.piece; if (!p) return;
+    const grav = s.down > 0 ? 0.04 : Math.max(0.04, Math.pow(0.8 - (s.level - 1) * 0.007, s.level - 1));
+    if (fits(s, p.t, p.rot, p.x, p.y + 1)) {
+      s.acc += dt; s.lock = 0;
+      while (s.acc >= grav && fits(s, p.t, p.rot, p.x, p.y + 1)) { s.acc -= grav; p.y += 1; if (s.down > 0) s.score += 1; }
+    } else {
+      s.lock += dt;
+      if (s.lock >= 0.45) lockPiece(s);
+    }
+  });
+  const pan = usePan(fx, {
+    down: (x, y) => { const s = g.current; s.lastX = x; s.lastY = y; s.dxAcc = 0; s.dyAcc = 0; s.moved = 0; s.t0 = Date.now(); s.down = 0; s.holdTap = x > PX - 4 && y < BY + 130; },
+    move: (x, y, gs) => {
+      const s = g.current;
+      if (phase !== 'play' || s.holdTap) return;
+      const dx = x - s.lastX, dy = y - s.lastY; s.lastX = x; s.lastY = y;
+      s.moved += Math.abs(dx) + Math.abs(dy);
+      s.dxAcc += dx;
+      const step = CS * 0.85;
+      while (s.dxAcc > step) { s.dxAcc -= step; shift(1); }
+      while (s.dxAcc < -step) { s.dxAcc += step; shift(-1); }
+      if (Math.abs(gs.dy) > Math.abs(gs.dx) * 1.2 && gs.dy > 18) s.down = 1; else s.down = 0;
+    },
+    up: (x, y, gs) => {
+      const s = g.current;
+      s.down = 0;
+      if (phase !== 'play') return;
+      if (s.holdTap) { if (Math.abs(gs.dx) < 12 && Math.abs(gs.dy) < 12) holdPiece(); return; }
+      if (gs.dy > 70 && gs.vy > 1.1 && Math.abs(gs.dx) < gs.dy * 0.6) { // flick: caída instantánea
+        const p = s.piece; if (p && !s.clearing) { const ny = drop(s, p); s.score += 2 * (ny - p.y); fx.ring(BX + (p.x + 1.5) * CS, BY + ny * CS, SHAPES[p.t].c, 40); p.y = ny; fx.shake(3, 0.12); lockPiece(s); }
+      } else if (s.moved < 14 && Date.now() - s.t0 < 300) rotate();
+    },
+  });
+  const s = g.current;
+  const p = s.piece;
+  const ghostY = p ? drop(s, p) : 0;
+  const cell = (r, c, color, extra) => ({ position: 'absolute', left: BX + c * CS + 1, top: BY + r * CS + 1, width: CS - 2, height: CS - 2, borderRadius: 5, backgroundColor: color, borderWidth: 1, borderColor: 'rgba(255,255,255,0.45)', ...extra });
+  const mini = (t, ox, oy, sz) => cells(t, 0).map(([r, c], i) => <View key={i} style={{ position: 'absolute', left: ox + c * sz, top: oy + r * sz, width: sz - 1, height: sz - 1, borderRadius: 3, backgroundColor: SHAPES[t].c }} />);
   return (
-    <SafeAreaView style={[styles.container,{backgroundColor:'#020212'}]}>
-      <View style={styles.header}>
-        <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
-        <Text style={[styles.title,{fontSize:20,color:'#0ff'}]}>🧊 NEON TETRIS</Text>
-        <View style={{alignItems:'flex-end'}}>
-          <Text style={{color:'#0ff',fontSize:13,fontWeight:'bold'}}>{scoreRef.current}</Text>
-          <Text style={{color:'#666',fontSize:11}}>Lv.{levelRef.current} • {linesRef.current}L</Text>
+    <GameScreen title="NEON TETRIS" emoji="🧊" accent={C.cyan} onExit={onExit} score={s.score} best={best}
+      hud={<><Text style={{ color: C.dim, fontSize: 12 }}>Nivel <Text style={{ color: C.cyan, fontWeight: '800' }}>{s.level}</Text> · Líneas <Text style={{ color: C.cyan, fontWeight: '800' }}>{s.lines}</Text></Text><View style={{ minWidth: 80, alignItems: 'flex-end' }}>{s.combo > 0 ? <Combo n={s.combo + 1} color={C.lime} /> : null}</View></>}>
+      <PlayArea fx={fx} bg="#04060f" border={alpha(C.cyan, 0.35)} {...pan}>
+        <View style={{ position: 'absolute', left: BX - 2, top: BY - 2, width: BW + 4, height: BH + 4, borderRadius: 8, borderWidth: 2, borderColor: alpha(C.cyan, 0.5), backgroundColor: 'rgba(8,12,28,0.9)', ...glow(C.cyan, 12, 0.4) }} />
+        {Array.from({ length: COLS - 1 }, (_, i) => <View key={`v${i}`} style={{ position: 'absolute', left: BX + (i + 1) * CS, top: BY, width: 1, height: BH, backgroundColor: alpha(C.cyan, 0.07) }} />)}
+        {Array.from({ length: ROWS - 1 }, (_, i) => <View key={`h${i}`} style={{ position: 'absolute', top: BY + (i + 1) * CS, left: BX, height: 1, width: BW, backgroundColor: alpha(C.cyan, 0.07) }} />)}
+        {s.grid.map((row, r) => row.map((c, ci) => {
+          if (!c) return null;
+          const flashing = s.clearing && s.clearing.rows.includes(r);
+          return <View key={`${r}-${ci}`} style={cell(r, ci, flashing ? (Math.floor(s.t * 24) % 2 ? '#fff' : c) : c)} />;
+        }))}
+        {p && !s.clearing && cells(p.t, p.rot).map(([r, c], i) => <View key={`gh${i}`} style={{ position: 'absolute', left: BX + (p.x + c) * CS + 1, top: BY + (ghostY + r) * CS + 1, width: CS - 2, height: CS - 2, borderRadius: 5, borderWidth: 2, borderColor: alpha(SHAPES[p.t].c, 0.5), backgroundColor: alpha(SHAPES[p.t].c, 0.08) }} />)}
+        {p && !s.clearing && cells(p.t, p.rot).map(([r, c], i) => (p.y + r >= 0) && <View key={`p${i}`} style={cell(p.y + r, p.x + c, SHAPES[p.t].c, glow(SHAPES[p.t].c, 10, 0.9))} />)}
+        {/* panel lateral */}
+        <Text style={{ position: 'absolute', left: PX, top: BY, color: C.dim, fontSize: 10, fontWeight: '900', letterSpacing: 2 }}>HOLD</Text>
+        <View style={{ position: 'absolute', left: PX, top: BY + 16, width: 76, height: 56, borderRadius: 10, borderWidth: 1.5, borderColor: s.canHold ? alpha(C.cyan, 0.5) : alpha(C.dim, 0.3), alignItems: 'center', justifyContent: 'center' }}>
+          {s.hold && <View style={{ width: 56, height: 34, opacity: s.canHold ? 1 : 0.35 }}>{mini(s.hold, SHAPES[s.hold].n === 4 ? 0 : 7, SHAPES[s.hold].n === 4 ? -4 : 0, 14)}</View>}
         </View>
-      </View>
-      <View style={{flexDirection:'row',justifyContent:'center',alignItems:'flex-start',flex:1,paddingTop:4}}>
-        {/* Grid */}
-        <View style={{width:NT_COLS*NT_CELL,height:NT_ROWS*NT_CELL,borderWidth:2,borderColor:'#0ff3',backgroundColor:'#020212',position:'relative',overflow:'hidden'}}>
-          {display.map((row,r)=>row.map((cell,c)=>(
-            <View key={`${r}-${c}`} style={{
-              position:'absolute',left:c*NT_CELL+1,top:r*NT_CELL+1,
-              width:NT_CELL-2,height:NT_CELL-2,borderRadius:2,
-              backgroundColor:cell==='ghost'?'#ffffff18':cell?cell:'#08081a',
-              shadowColor:cell&&cell!=='ghost'?cell:'transparent',
-              shadowOpacity:cell&&cell!=='ghost'?0.9:0,shadowRadius:4,
-            }}/>
-          )))}
-          {!running && (
-            <View style={[styles.overlay,{borderRadius:0}]}>
-              <Text style={[styles.overlayTitle,{color:'#0ff',fontSize:22}]}>{gameOver?'GAME OVER':'🧊 NEON TETRIS'}</Text>
-              <Text style={[styles.overlaySub,{fontSize:13,textAlign:'center'}]}>
-                {gameOver?`Score: ${scoreRef.current}\nLineas: ${linesRef.current}\nNivel: ${levelRef.current}`:'Clásico Tetris con efectos neon.\n¡Rompe tu record!'}
-              </Text>
-              <Pressable style={[styles.btn,{backgroundColor:'#0ff',paddingHorizontal:22,paddingVertical:12}]} onPress={startGame}>
-                <Text style={[styles.btnText,{fontSize:16}]}>{gameOver?'REINTENTAR':'START'}</Text>
-              </Pressable>
-            </View>
-          )}
-        </View>
-        {/* Side panel */}
-        <View style={{width:80,paddingLeft:10,paddingTop:4}}>
-          <Text style={{color:'#555',fontSize:10,marginBottom:4}}>NEXT</Text>
-          {nextRef.current && (
-            <View style={{backgroundColor:'#0a0a20',padding:6,borderRadius:8,marginBottom:14,borderWidth:1,borderColor:'#0ff3'}}>
-              {nextRef.current.shape.map((row,r)=>(
-                <View key={r} style={{flexDirection:'row',justifyContent:'center'}}>
-                  {row.map((c,col)=>(
-                    <View key={col} style={{width:11,height:11,margin:1,borderRadius:2,backgroundColor:c?nextRef.current.color:'transparent'}}/>
-                  ))}
-                </View>
-              ))}
-            </View>
-          )}
-          <Text style={{color:'#0ff8',fontSize:10,marginBottom:1}}>SCORE</Text>
-          <Text style={{color:'#fff',fontSize:12,fontWeight:'bold',marginBottom:8}}>{scoreRef.current}</Text>
-          <Text style={{color:'#0ff8',fontSize:10,marginBottom:1}}>LINEAS</Text>
-          <Text style={{color:'#fff',fontSize:12,fontWeight:'bold',marginBottom:8}}>{linesRef.current}</Text>
-          <Text style={{color:'#0ff8',fontSize:10,marginBottom:1}}>NIVEL</Text>
-          <Text style={{color:'#fff',fontSize:14,fontWeight:'bold'}}>{levelRef.current}</Text>
-        </View>
-      </View>
-      {/* Controls */}
-      {running && (
-        <View style={{flexDirection:'row',justifyContent:'space-around',alignItems:'center',paddingVertical:10,paddingHorizontal:10,backgroundColor:'rgba(0,0,0,0.45)'}}>
-          <Pressable onPress={moveLeft}  style={{width:68,height:68,backgroundColor:'#0ff1',borderRadius:34,justifyContent:'center',alignItems:'center',borderWidth:1,borderColor:'#0ff4'}}>
-            <Text style={{color:'#0ff',fontSize:28,fontWeight:'bold'}}>◀</Text>
-          </Pressable>
-          <Pressable onPress={rotate} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}    style={{width:68,height:68,backgroundColor:'#ffa0001a',borderRadius:34,justifyContent:'center',alignItems:'center',borderWidth:1,borderColor:'#ffa0004d'}}>
-            <Text style={{color:'#ffa500',fontSize:26,fontWeight:'bold'}}>↻</Text>
-          </Pressable>
-          <Pressable onPress={hardDrop} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}   style={{width:68,height:68,backgroundColor:'#ff00441a',borderRadius:34,justifyContent:'center',alignItems:'center',borderWidth:1,borderColor:'#ff00444d'}}>
-            <Text style={{color:'#ff0044',fontSize:22,fontWeight:'bold'}}>▼▼</Text>
-          </Pressable>
-          <Pressable onPress={moveRight} style={{width:68,height:68,backgroundColor:'#0ff1',borderRadius:34,justifyContent:'center',alignItems:'center',borderWidth:1,borderColor:'#0ff4'}}>
-            <Text style={{color:'#0ff',fontSize:28,fontWeight:'bold'}}>▶</Text>
-          </Pressable>
-        </View>
-      )}
-    </SafeAreaView>
+        <Text style={{ position: 'absolute', left: PX, top: BY + 96, color: C.dim, fontSize: 10, fontWeight: '900', letterSpacing: 2 }}>SIGUIENTE</Text>
+        {s.q.slice(0, 3).map((t, i) => <View key={i} style={{ position: 'absolute', left: PX + 8, top: BY + 114 + i * 46, width: 60, height: 36 }}>{mini(t, SHAPES[t].n === 4 ? 0 : 8, SHAPES[t].n === 4 ? -4 : 0, 14)}</View>)}
+        <Text style={{ position: 'absolute', left: PX, top: BY + 270, color: C.dim, fontSize: 10, fontWeight: '900', letterSpacing: 2 }}>CONTROLES</Text>
+        <Text style={{ position: 'absolute', left: PX, top: BY + 286, width: 80, color: alpha(C.dim, 0.9), fontSize: 10, lineHeight: 15 }}>{'↔ arrastra\n↻ toca = girar\n↓ baja = caer\n⤓ desliza rápido\n= soltar'}</Text>
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🧊" title={phase === 'over' ? 'GAME OVER' : 'NEON TETRIS'}
+          subtitle={phase === 'over' ? `${s.lines} líneas · nivel ${s.level}` : 'El clásico con pieza fantasma'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.cyan} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Arrastra ↔ para mover · toca para girar', 'Arrastra ↓ para bajar · desliza rápido para soltar', 'Toca HOLD (arriba a la derecha) para guardar una pieza'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 
@@ -4806,49 +4798,97 @@ function TowerStack({ onExit }) {
 // ─────────────────────────────────────────────────────────────────
 // NUMBER PUZZLE (Slide 15-puzzle)
 function NumberPuzzle({ onExit }) {
-  const SIZE = 4;
-  const solved = Array.from({ length: SIZE * SIZE - 1 }, (_, i) => i + 1).concat(0);
-  const shuffle = () => {
-    const arr = [...solved];
-    for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
-    return arr;
+  const fx = useFX();
+  const [best, submitBest] = useBest('puzzle');
+  const [phase, setPhase] = useState('ready');
+  const [size, setSize] = useState(4);
+  const [res, setRes] = useState({ isNew: false, pts: 0 });
+  const BS = Math.min(AREA_W - 24, AREA_H - 150, 420);
+  const mk = n => {
+    const grid = []; for (let i = 0; i < n * n - 1; i++) grid.push(i + 1); grid.push(0);
+    let e = n * n - 1;
+    let prev = -1;
+    for (let k = 0; k < 120 * n; k++) {
+      const r = Math.floor(e / n), c = e % n, opts = [];
+      if (r > 0) opts.push(e - n); if (r < n - 1) opts.push(e + n); if (c > 0) opts.push(e - 1); if (c < n - 1) opts.push(e + 1);
+      const o = pick(opts.filter(x => x !== prev));
+      grid[e] = grid[o]; grid[o] = 0; prev = e; e = o;
+    }
+    return grid;
   };
-  const [tiles, setTiles] = React.useState(shuffle());
-  const [moves, setMoves] = React.useState(0);
-  const [won, setWon] = React.useState(false);
-
-  const move = (idx) => {
-    if (won) return;
-    const empty = tiles.indexOf(0);
-    const row = Math.floor(idx / SIZE), col = idx % SIZE;
-    const erow = Math.floor(empty / SIZE), ecol = empty % SIZE;
-    if ((Math.abs(row - erow) === 1 && col === ecol) || (Math.abs(col - ecol) === 1 && row === erow)) {
-      const newT = [...tiles]; [newT[idx], newT[empty]] = [newT[empty], newT[idx]];
-      setTiles(newT); setMoves(m => m + 1);
-      if (newT.every((v, i) => v === solved[i])) setWon(true);
+  const initState = n => { const grid = mk(n); return { n, grid, moves: 0, t: 0, solved: false, pos: grid.map((v, i) => ({ x: (i % n), y: Math.floor(i / n) })), started: false }; };
+  const g = useRef(null);
+  if (!g.current) g.current = initState(4);
+  const start = () => { fx.clear(); g.current = initState(size); setPhase('play'); };
+  const gap = 6;
+  const cellOf = n => (BS - gap * (n + 1)) / n;
+  const tapCell = i => {
+    const s = g.current;
+    if (phase !== 'play' || s.solved) return;
+    const n = s.n; const r = Math.floor(i / n), c = i % n;
+    const e = s.grid.indexOf(0); const er = Math.floor(e / n), ec = e % n;
+    if (r !== er && c !== ec) { hx.tick(); return; }
+    if (r === er && c === ec) return;
+    const dr = Math.sign(er - r), dc = Math.sign(ec - c);
+    // mover en cadena desde el hueco hacia la ficha pulsada
+    let cr = er, cc = ec;
+    while (cr !== r || cc !== c) { const pr = cr - dr, pc = cc - dc; s.grid[cr * n + cc] = s.grid[pr * n + pc]; cr = pr; cc = pc; }
+    s.grid[r * n + c] = 0;
+    s.moves += 1; s.started = true; hx.tap();
+    if (s.grid.every((v, k) => v === (k === n * n - 1 ? 0 : k + 1))) {
+      s.solved = true;
+      const pts = Math.max(100, n * n * 100 - s.moves * 4 - Math.round(s.t) * 5);
+      hx.win(); fx.flash('#fff', 0.3);
+      for (let k = 0; k < 6; k++) fx.burst(rand(40, AREA_W - 40), rand(80, AREA_H * 0.5), pick([C.cyan, C.pink, C.amber, C.lime]), 16, 260, 0.9, 5);
+      setRes({ isNew: submitBest(pts), pts });
+      setTimeout(() => setPhase('over'), 900);
     }
   };
-  const reset = () => { setTiles(shuffle()); setMoves(0); setWon(false); };
-  const cellW = Math.floor((Dimensions.get('window').width - 60) / SIZE);
-
+  useLoop(phase === 'play', dt => {
+    const s = g.current;
+    if (s.started && !s.solved) s.t += dt;
+    s.pos.forEach((p, id) => { /* posiciones por ficha (id = valor) se calculan abajo */ });
+  });
+  const s = g.current; const n = s.n; const cell = cellOf(n);
+  // posición animada por valor
+  const anim = useRef({}).current;
+  s.grid.forEach((v, i) => {
+    if (!v) return;
+    const tx = gap + (i % n) * (cell + gap), ty = gap + Math.floor(i / n) * (cell + gap);
+    const a = anim[v] || (anim[v] = { x: tx, y: ty });
+    a.x += (tx - a.x) * 0.35; a.y += (ty - a.y) * 0.35;
+    if (Math.abs(a.x - tx) < 0.5) a.x = tx; if (Math.abs(a.y - ty) < 0.5) a.y = ty;
+  });
+  const mins = Math.floor(s.t / 60), secs = Math.floor(s.t % 60);
+  const hue = v => (v * 360 / (n * n)) % 360;
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#001020' }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 15 }}>
-        <Pressable onPress={onExit}><Text style={{ color: '#0ff', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
-        <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>Moves: {moves}</Text>
-        <Pressable onPress={reset}><Text style={{ color: '#0ff', fontSize: 16 }}>Reset</Text></Pressable>
-      </View>
-      <Text style={{ color: '#0ff', fontSize: 24, fontWeight: '900', textAlign: 'center', marginBottom: 10 }}>NUMBER PUZZLE</Text>
-      {won && <Text style={{ color: '#ff0', fontSize: 22, fontWeight: '900', textAlign: 'center', marginBottom: 10 }}>¡RESUELTO en {moves} movimientos! 🎉</Text>}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: cellW * SIZE + 8, alignSelf: 'center' }}>
-        {tiles.map((t, i) => (
-          <Pressable key={i} onPress={() => move(i)} style={{ width: cellW, height: cellW, margin: 2, borderRadius: 8, backgroundColor: t === 0 ? '#001' : '#0d3060', borderWidth: 2, borderColor: t === 0 ? '#001' : '#0ff', justifyContent: 'center', alignItems: 'center' }}>
-            <Text style={{ color: '#0ff', fontSize: 28, fontWeight: '900' }}>{t === 0 ? '' : t}</Text>
-          </Pressable>
-        ))}
-      </View>
-      <Text style={{ color: '#555', textAlign: 'center', marginTop: 20 }}>Ordena los números del 1 al 15</Text>
-    </SafeAreaView>
+    <GameScreen title="15 PUZZLE" emoji="🧩" accent={C.cyan} onExit={onExit} score={res.pts || 0} best={best}
+      hud={<><Text style={{ color: C.dim, fontSize: 12 }}>Movimientos <Text style={{ color: C.cyan, fontWeight: '800' }}>{s.moves}</Text></Text><Text style={{ color: C.text, fontWeight: '900', fontSize: 15 }}>⏱ {mins}:{String(secs).padStart(2, '0')}</Text><Text style={{ color: C.dim, fontSize: 12 }}>{n}×{n}</Text></>}>
+      <PlayArea fx={fx} bg="#050a14" border={alpha(C.cyan, 0.4)}>
+        <View style={{ position: 'absolute', left: (AREA_W - BS) / 2, top: 28, width: BS, height: BS, borderRadius: 18, backgroundColor: alpha(C.cyan, 0.06), borderWidth: 2, borderColor: alpha(C.cyan, 0.35) }}>
+          {s.grid.map((v, i) => {
+            if (!v) return null;
+            const a = anim[v] || { x: 0, y: 0 };
+            const inPlace = v === i + 1;
+            const h = hue(v);
+            return (
+              <Pressable key={v} testID={`pz-${v}`} onPress={() => tapCell(i)} style={{ position: 'absolute', left: a.x, top: a.y, width: cell, height: cell }}>
+                <View style={{ flex: 1, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: `hsla(${h},80%,50%,${inPlace ? 0.35 : 0.18})`, borderWidth: 2, borderColor: `hsl(${h},90%,${inPlace ? 68 : 58}%)`, ...glow(`hsl(${h},90%,60%)`, inPlace ? 10 : 4, 0.5) }}>
+                  <Text style={{ color: '#fff', fontWeight: '900', fontSize: cell * 0.42 }}>{v}</Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text pointerEvents="none" style={{ position: 'absolute', top: 28 + BS + 14, width: AREA_W, textAlign: 'center', color: alpha(C.dim, 0.8), fontSize: 12, fontWeight: '700' }}>Toca una ficha de la fila o columna del hueco para deslizarla</Text>
+        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 16, alignItems: 'center' }}><Btn label="🔀 REINICIAR" small ghost color={C.cyan} onPress={start} /></View>
+        <Overlay show={phase !== 'play'} kind={phase === 'over' ? 'win' : phase} emoji="🧩" title={phase === 'over' ? '¡RESUELTO!' : '15 PUZZLE'}
+          subtitle={phase === 'over' ? `${s.moves} movimientos · ${mins}:${String(secs).padStart(2, '0')}` : 'Ordena los números del 1 al ' + (size * size - 1)}
+          score={res.pts} best={best} isNew={res.isNew} accent={C.cyan} onStart={start} onExit={onExit}
+          extra={<View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>{[3, 4, 5].map(k => <Btn key={k} label={`${k}×${k}`} small ghost={size !== k} color={C.cyan} onPress={() => setSize(k)} />)}</View>}
+          lines={phase === 'ready' ? ['Menos movimientos y menos tiempo = más puntos', 'Tableros más grandes valen más'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 // ─────────────────────────────────────────────────────────────────
@@ -6009,85 +6049,129 @@ const NN_hasWon=(grid)=>grid.some(row=>row.some(v=>v===2048));
 const NN_hasMovesLeft=(grid)=>{for(let r=0;r<NN_SIZE;r++)for(let c=0;c<NN_SIZE;c++){if(grid[r][c]===0)return true;if(c+1<NN_SIZE&&grid[r][c]===grid[r][c+1])return true;if(r+1<NN_SIZE&&grid[r][c]===grid[r+1][c])return true;}return false;};
 
 function NeonGame2048({ onExit }) {
-  const [grid, setGrid] = useState(() => NN_initGrid());
-  const [score, setScore] = useState(0);
-  const [best, setBest] = useState(0);
-  const [status, setStatus] = useState('playing');
-  const gridRef = useRef(grid);
-  const scoreRef = useRef(0);
-  const statusRef = useRef('playing');
-
-  useEffect(() => { AsyncStorage.getItem('nn_best').then(v => { if (v) setBest(parseInt(v, 10)); }); }, []);
-
-  const saveBest = async (s) => { const stored = await AsyncStorage.getItem('nn_best'); const prev = stored ? parseInt(stored, 10) : 0; if (s > prev) { await AsyncStorage.setItem('nn_best', String(s)); setBest(s); } };
-
-  const newGame = () => { const g=NN_initGrid(); gridRef.current=g; setGrid(g); scoreRef.current=0; setScore(0); statusRef.current='playing'; setStatus('playing'); };
-
-  const applyMove = (dir) => {
-    if (statusRef.current !== 'playing') return;
-    const { grid: newGrid, score: gained, changed } = NN_move(gridRef.current, dir);
-    if (!changed) return;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const withNew = NN_addRandom(newGrid);
-    gridRef.current = withNew; setGrid(withNew);
-    const newScore = scoreRef.current + gained; scoreRef.current = newScore; setScore(newScore); saveBest(newScore);
-    if (NN_hasWon(withNew)) { statusRef.current='won'; setStatus('won'); celebrateVibrate(); }
-    else if (!NN_hasMovesLeft(withNew)) { statusRef.current='lost'; setStatus('lost'); deathVibrate(); }
+  const N = 4, GAP = 8;
+  const BS = Math.min(AREA_W - 24, AREA_H - 140, 400);
+  const CELLW = (BS - GAP * (N + 1)) / N;
+  const BX = (AREA_W - BS) / 2, BY = 24;
+  const px = c => BX + GAP + c * (CELLW + GAP);
+  const py = r => BY + GAP + r * (CELLW + GAP);
+  const fx = useFX();
+  const [best, submitBest] = useBest('2048');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false, won: false });
+  const initState = () => { const s = { tiles: [], score: 0, undo: null, undos: 3, won: false, lock: 0, over: false, t: 0, used: false }; spawn(s); spawn(s); return s; };
+  const spawn = s => {
+    const used = new Set(s.tiles.filter(t => !t.die).map(t => t.r * N + t.c));
+    const free = []; for (let i = 0; i < N * N; i++) if (!used.has(i)) free.push(i);
+    if (!free.length) return;
+    const i = pick(free);
+    const r = Math.floor(i / N), c = i % N;
+    s.tiles.push({ id: uid(), v: Math.random() < 0.9 ? 2 : 4, r, c, x: px(c), y: py(r), born: s.t, pop: 0 });
   };
-
-  const panResponder = useRef(PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderRelease: (_, g) => {
-      const { dx, dy } = g; const absDx = Math.abs(dx); const absDy = Math.abs(dy);
-      if (Math.max(absDx, absDy) < 20) return;
-      if (absDx > absDy) applyMove(dx > 0 ? 'right' : 'left');
-      else applyMove(dy > 0 ? 'down' : 'up');
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
+  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
+  const canMove = s => {
+    const live = s.tiles.filter(t => !t.die);
+    if (live.length < N * N) return true;
+    const at = {}; live.forEach(t => { at[t.r * N + t.c] = t.v; });
+    for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) { const v = at[r * N + c]; if ((c + 1 < N && at[r * N + c + 1] === v) || (r + 1 < N && at[(r + 1) * N + c] === v)) return true; }
+    return false;
+  };
+  const move = (dr, dc) => {
+    const s = g.current;
+    if (phase !== 'play' || s.over) return;
+    s.tiles = s.tiles.filter(t => !t.die);
+    const snap = { tiles: s.tiles.map(t => ({ v: t.v, r: t.r, c: t.c })), score: s.score };
+    let moved = false, gained = 0;
+    for (let line = 0; line < N; line++) {
+      let ts = s.tiles.filter(t => (dr === 0 ? t.r === line : t.c === line));
+      ts.sort((a, b) => (dr === 0 ? (dc > 0 ? b.c - a.c : a.c - b.c) : (dr > 0 ? b.r - a.r : a.r - b.r)));
+      let k = 0, last = null;
+      for (const t of ts) {
+        if (last && !last.merged && last.v === t.v) {
+          t.r = last.r; t.c = last.c; t.die = true; t.dieT = 0.12;
+          last.v *= 2; last.merged = true; last.pop = 0.18; gained += last.v; moved = true;
+          if (last.v === 2048 && !s.won) { s.won = true; fx.pop(AREA_W / 2, AREA_H * 0.4, '¡2048!', C.amber, 40); fx.flash('#fff', 0.4); hx.win(); }
+        } else {
+          const nr = dr === 0 ? t.r : (dr > 0 ? N - 1 - k : k);
+          const nc = dc === 0 ? t.c : (dc > 0 ? N - 1 - k : k);
+          if (nr !== t.r || nc !== t.c) moved = true;
+          t.r = nr; t.c = nc; last = t; k += 1;
+        }
+      }
+    }
+    s.tiles.forEach(t => { t.merged = false; });
+    if (!moved) { hx.tick(); return; }
+    s.undo = snap; s.score += gained;
+    if (gained) { fx.pop(AREA_W / 2, BY - 6, `+${gained}`, C.amber, 18); hx.hit(); } else hx.tap();
+    s.pending = true; s.lock = 0.1;
+  };
+  const doUndo = () => {
+    const s = g.current;
+    if (phase !== 'play' || !s.undo || s.undos <= 0) return;
+    s.tiles = s.undo.tiles.map(t => ({ id: uid(), v: t.v, r: t.r, c: t.c, x: px(t.c), y: py(t.r), born: s.t, pop: 0 }));
+    s.score = s.undo.score; s.undo = null; s.undos -= 1; s.pending = false; s.over = false; hx.tick();
+  };
+  useLoop(phase !== 'ready', dt => {
+    const s = g.current;
+    s.t += dt;
+    s.tiles.forEach(t => {
+      const k = Math.min(1, dt * 22);
+      t.x += (px(t.c) - t.x) * k; t.y += (py(t.r) - t.y) * k;
+      if (t.pop > 0) t.pop -= dt;
+      if (t.die) { t.dieT -= dt; }
+    });
+    s.tiles = s.tiles.filter(t => !(t.die && t.dieT <= 0));
+    if (s.pending) {
+      s.lock -= dt;
+      if (s.lock <= 0) {
+        s.pending = false; spawn(s);
+        if (!canMove(s) && !s.over) { s.over = true; hx.die(); fx.shake(6, 0.3); setRes({ isNew: submitBest(s.score), won: s.won }); setPhase('over'); }
+      }
+    }
+  });
+  const pan = usePan(fx, {
+    down: () => { g.current.used = false; },
+    move: (x, y, gs) => {
+      const s = g.current; if (s.used) return;
+      if (Math.abs(gs.dx) > 22 || Math.abs(gs.dy) > 22) {
+        s.used = true;
+        if (Math.abs(gs.dx) > Math.abs(gs.dy)) move(0, gs.dx > 0 ? 1 : -1); else move(gs.dy > 0 ? 1 : -1, 0);
+      }
     },
-  })).current;
-
-  const boardSize = NN_BOARD_PAD * 2 + NN_GAP * (NN_SIZE + 1) + NN_CELL * NN_SIZE;
+  });
+  const s = g.current;
+  const maxTile = s.tiles.reduce((m, t) => Math.max(m, t.v), 0);
+  const col = v => { const k = Math.log2(v); const h = (k * 37 + 170) % 360; return [`hsl(${h},85%,${v >= 128 ? 55 : 48}%)`, `hsl(${h},95%,${v >= 128 ? 72 : 66}%)`]; };
   return (
-    <View style={{ flex: 1, backgroundColor: '#0a0010', alignItems: 'center' }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', paddingHorizontal: 14, paddingTop: 36, paddingBottom: 4 }}>
-        <Pressable onPress={onExit} hitSlop={12}><Text style={{ color: '#888', fontSize: 20, fontWeight: 'bold' }}>✕</Text></Pressable>
-        <Text style={{ color: '#00f0ff', fontSize: 18, fontWeight: '900', letterSpacing: 3 }}>2048 NEON</Text>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          {[['SCORE', score], ['BEST', best]].map(([label, val]) => (
-            <View key={label} style={{ backgroundColor: '#1a0040', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4, alignItems: 'center', minWidth: 60, borderWidth: 1, borderColor: '#a259ff' }}>
-              <Text style={{ color: '#a259ff', fontSize: 10, fontWeight: '800' }}>{label}</Text>
-              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '900' }}>{val}</Text>
+    <GameScreen title="2048 NEON" emoji="🟦" accent={C.cyan} onExit={onExit} score={s.score} best={best}
+      hud={<><Text style={{ color: C.dim, fontSize: 12 }}>Mayor ficha <Text style={{ color: C.cyan, fontWeight: '800' }}>{maxTile}</Text></Text>{s.won ? <Text style={{ color: C.amber, fontWeight: '900', fontSize: 12 }}>🏆 ¡2048!</Text> : <Text style={{ color: C.dim, fontSize: 12 }}>Meta: 2048</Text>}</>}>
+      <PlayArea fx={fx} bg="#050a14" border={alpha(C.cyan, 0.4)} {...pan}>
+        <View style={{ position: 'absolute', left: BX, top: BY, width: BS, height: BS, borderRadius: 18, backgroundColor: alpha(C.cyan, 0.06), borderWidth: 2, borderColor: alpha(C.cyan, 0.35) }} />
+        {Array.from({ length: N * N }, (_, i) => <View key={i} style={{ position: 'absolute', left: px(i % N), top: py(Math.floor(i / N)), width: CELLW, height: CELLW, borderRadius: 12, backgroundColor: alpha(C.cyan, 0.07) }} />)}
+        {s.tiles.map(t => {
+          const age = Math.min(1, (s.t - t.born) / 0.16);
+          const sc = (t.pop > 0 ? 1 + Math.sin((1 - t.pop / 0.18) * Math.PI) * 0.18 : 1) * (0.55 + 0.45 * (1 - Math.pow(1 - age, 3)));
+          const [bg, bd] = col(t.v);
+          const digits = String(t.v).length;
+          return (
+            <View key={t.id} style={{ position: 'absolute', left: t.x, top: t.y, width: CELLW, height: CELLW, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: bg, borderWidth: 2, borderColor: bd, transform: [{ scale: sc }], opacity: t.die ? 0.6 : 1, zIndex: t.die ? 0 : 1, ...glow(bd, t.v >= 128 ? 16 : 6, 0.6) }}>
+              <Text style={{ color: '#fff', fontWeight: '900', fontSize: CELLW * (digits <= 2 ? 0.42 : digits === 3 ? 0.34 : 0.27), ...tglow('#000', 3) }}>{t.v}</Text>
             </View>
-          ))}
+          );
+        })}
+        <View style={{ position: 'absolute', left: 0, right: 0, top: BY + BS + 18, flexDirection: 'row', justifyContent: 'center', gap: 12 }}>
+          <Btn label={`↩ DESHACER (${s.undos})`} small ghost color={C.cyan} disabled={!s.undo || s.undos <= 0} onPress={doUndo} />
+          <Btn label="NUEVA" small ghost color={C.dim} onPress={start} />
         </View>
-      </View>
-      <Pressable onPress={newGame} style={{ backgroundColor: '#a259ff', paddingHorizontal: 28, paddingVertical: 10, borderRadius: 20, marginVertical: 8 }}>
-        <Text style={{ color: '#fff', fontSize: 14, fontWeight: '900' }}>NUEVO JUEGO</Text>
-      </Pressable>
-      <View style={{ width: boardSize, height: boardSize, backgroundColor: '#120025', borderRadius: 16, borderWidth: 2, borderColor: '#a259ff', overflow: 'hidden', position: 'relative' }} {...panResponder.panHandlers}>
-        {Array(NN_SIZE).fill(null).map((_,r)=>Array(NN_SIZE).fill(null).map((__,c)=>(
-          <View key={`bg-${r}-${c}`} style={{ position:'absolute', width:NN_CELL, height:NN_CELL, left:NN_BOARD_PAD+NN_GAP+c*(NN_CELL+NN_GAP), top:NN_BOARD_PAD+NN_GAP+r*(NN_CELL+NN_GAP), backgroundColor:'#1f0045', borderRadius:8 }} />
-        )))}
-        {grid.map((row,r)=>row.map((val,c)=>{
-          if(val===0) return null;
-          const{bg,fg}=NN_getTileStyle(val); const isMax=val===2048;
-          return (<View key={`tile-${r}-${c}`} style={{ position:'absolute', width:NN_CELL, height:NN_CELL, left:NN_BOARD_PAD+NN_GAP+c*(NN_CELL+NN_GAP), top:NN_BOARD_PAD+NN_GAP+r*(NN_CELL+NN_GAP), backgroundColor:bg, borderRadius:8, borderWidth:1.5, borderColor:fg, shadowColor:isMax?'#fff':fg, shadowOpacity:0.7, shadowRadius:isMax?16:6, elevation:isMax?16:4, alignItems:'center', justifyContent:'center' }}>
-            <Text style={{ color:fg, fontSize:val>=1024?18:val>=128?22:26, fontWeight:'900' }}>{val}</Text>
-          </View>);
-        }))}
-        {status==='won' && <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor:'#0a001088', alignItems:'center', justifyContent:'center', borderRadius:14 }}>
-          <Text style={{ fontSize:48, marginBottom:8 }}>🎉</Text>
-          <Text style={{ color:'#ffe600', fontSize:32, fontWeight:'900', marginBottom:6 }}>YOU WIN!</Text>
-          <Pressable onPress={newGame} style={{ backgroundColor:'#ff2d78', paddingHorizontal:32, paddingVertical:12, borderRadius:24, marginTop:10 }}><Text style={{ color:'#fff', fontSize:16, fontWeight:'900' }}>NUEVO JUEGO</Text></Pressable>
-        </View>}
-        {status==='lost' && <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor:'#0a001088', alignItems:'center', justifyContent:'center', borderRadius:14 }}>
-          <Text style={{ fontSize:48, marginBottom:8 }}>💀</Text>
-          <Text style={{ color:'#ff2d78', fontSize:32, fontWeight:'900', marginBottom:6 }}>GAME OVER</Text>
-          <Pressable onPress={newGame} style={{ backgroundColor:'#ff2d78', paddingHorizontal:32, paddingVertical:12, borderRadius:24, marginTop:10 }}><Text style={{ color:'#fff', fontSize:16, fontWeight:'900' }}>RETRY</Text></Pressable>
-        </View>}
-      </View>
-      <Text style={{ color:'#333', fontSize:12, marginTop:10 }}>Desliza para mover fichas</Text>
-    </View>
+        <Text pointerEvents="none" style={{ position: 'absolute', bottom: 16, width: AREA_W, textAlign: 'center', color: alpha(C.dim, 0.7), fontSize: 11, fontWeight: '800', letterSpacing: 2 }}>DESLIZA PARA MOVER LAS FICHAS</Text>
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🟦" title={phase === 'over' ? (res.won ? '¡LLEGASTE AL 2048!' : 'SIN MOVIMIENTOS') : '2048 NEON'}
+          subtitle={phase === 'over' ? `Ficha máxima: ${maxTile}` : 'Fusiona fichas iguales'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.cyan} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Desliza en cualquier dirección', 'Las fichas iguales se fusionan', 'Tienes 3 deshacer por partida'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 
@@ -6769,367 +6853,199 @@ function bs_initGrid() {
 }
 
 function BubbleShooter({ onExit }) {
-  const [grid, setGrid] = useState(() => bs_initGrid());
-  const [currentColor, setCurrentColor] = useState(bs_randomColor);
-  const [nextColor, setNextColor] = useState(bs_randomColor);
-  const [score, setScore] = useState(0);
-  const [best, setBest] = useState(0);
-  const [gameOver, setGameOver] = useState(false);
-  const [shotsFired, setShotsFired] = useState(0);
-  const [projectile, setProjectile] = useState(null);
-  const [aimDots, setAimDots] = useState([]);
-  const projRef = useRef(null);
-  const animRef = useRef(null);
-  const gridRef = useRef(grid);
-  const scoreRef = useRef(0);
-  const shotsFiredRef = useRef(0);
-  const currentColorRef = useRef(currentColor);
-  const nextColorRef = useRef(nextColor);
-  const gameOverRef = useRef(false);
-  const boardWidth = BS_COLS * BS_BUBBLE_D;
-  const boardLeft = (width - boardWidth) / 2;
-
-  useEffect(() => { gridRef.current = grid; }, [grid]);
-  useEffect(() => { currentColorRef.current = currentColor; }, [currentColor]);
-  useEffect(() => { nextColorRef.current = nextColor; }, [nextColor]);
-  useEffect(() => { gameOverRef.current = gameOver; }, [gameOver]);
-
-  useEffect(() => {
-    AsyncStorage.getItem('bs_best').then(v => { if (v) setBest(parseInt(v)); });
-  }, []);
-
-  const getColorsInGrid = (g) => {
-    const used = new Set();
-    g.forEach(row => row.forEach(b => { if (b.alive) used.add(b.color); }));
-    return used.size > 0 ? [...used] : BS_COLORS.slice(0, 4);
+  const COLS = 10, R = AREA_W / (COLS * 2), D = R * 2, RH = R * 1.7321;
+  const SY = AREA_H - 46, SX = AREA_W / 2;
+  const PAL = [C.red, C.cyan, C.lime, C.amber, C.violet, C.pink];
+  const fx = useFX();
+  const [best, submitBest] = useBest('bubbles');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const colsOf = row => (row.off ? COLS - 1 : COLS);
+  const cx = (row, c) => R + c * D + (row.off ? R : 0);
+  const mkRow = (off, ncol) => ({ off, cells: Array.from({ length: off ? COLS - 1 : COLS }, () => ({ k: randInt(0, ncol - 1) })) });
+  const initState = (level, score) => {
+    const ncol = Math.min(6, 3 + Math.floor(level / 2));
+    const rows = [];
+    const n = Math.min(8, 4 + level);
+    for (let i = 0; i < n; i++) rows.push(mkRow(i % 2, ncol));
+    const s = { level, score, ncol, rows, ball: null, cur: null, next: null, aim: null, misses: 0, limit: 6, shiftAnim: 0, falling: [], t: 0, shots: 0, combo: 0, over: false };
+    s.cur = newBubble(s); s.next = newBubble(s);
+    return s;
   };
-
-  const bs_computeAim = (tx, ty) => {
-    const shooterX = boardLeft + boardWidth / 2;
-    const shooterY = BS_SHOOTER_Y;
-    let dx = tx - shooterX;
-    let dy = ty - shooterY;
-    const len = Math.sqrt(dx * dx + dy * dy);
-    if (len === 0) return [];
-    dx /= len; dy /= len;
-    if (dy > -0.1) dy = -0.1;
-    const dots = [];
-    let x = shooterX, y = shooterY;
-    let vx = dx, vy = dy;
-    for (let i = 0; i < 20; i++) {
-      x += vx * 18;
-      y += vy * 18;
-      if (x - BS_BUBBLE_R < boardLeft) { x = boardLeft + BS_BUBBLE_R; vx = Math.abs(vx); }
-      if (x + BS_BUBBLE_R > boardLeft + boardWidth) { x = boardLeft + boardWidth - BS_BUBBLE_R; vx = -Math.abs(vx); }
-      if (y < 0) break;
-      dots.push({ x, y });
-    }
-    return dots;
+  const colorsOnBoard = s => { const set = new Set(); s.rows.forEach(r => r.cells.forEach(c => c && set.add(c.k))); return [...set]; };
+  const newBubble = s => {
+    const cols = colorsOnBoard(s);
+    const pool = cols.length ? cols : Array.from({ length: s.ncol }, (_, i) => i);
+    const r = Math.random();
+    if (s.level >= 2 && r < 0.05) return { k: 'bomb' };
+    if (s.level >= 3 && r < 0.09) return { k: 'rainbow' };
+    return { k: pick(pool) };
   };
+  const g = useRef(null);
+  if (!g.current) g.current = initState(1, 0);
+  const start = () => { fx.clear(); g.current = initState(1, 0); setPhase('play'); };
+  const colorOf = k => (k === 'bomb' ? '#ff9a3d' : k === 'rainbow' ? '#ffffff' : PAL[k]);
+  const pos = (s, ri, ci) => ({ x: cx(s.rows[ri], ci), y: ri * RH + R - s.shiftAnim });
 
-  const findConnectedSameColor = (g, startRow, startCol, color) => {
-    const visited = new Set();
-    const queue = [`${startRow},${startCol}`];
-    const result = [];
-    while (queue.length > 0) {
-      const key = queue.shift();
-      if (visited.has(key)) continue;
-      visited.add(key);
-      const [r, c] = key.split(',').map(Number);
-      const row = g[r];
-      if (!row) continue;
-      const b = row[c];
-      if (!b || !b.alive || b.color !== color) continue;
-      result.push({ r, c });
-      const neighbors = [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]];
-      neighbors.forEach(([nr, nc]) => {
-        if (nr >= 0 && nc >= 0 && nc < BS_COLS) queue.push(`${nr},${nc}`);
-      });
-    }
-    return result;
+  const neighbors = (s, r, c) => {
+    const row = s.rows[r]; const out = [];
+    const cand = row.off ? [[r, c - 1], [r, c + 1], [r - 1, c], [r - 1, c + 1], [r + 1, c], [r + 1, c + 1]] : [[r, c - 1], [r, c + 1], [r - 1, c - 1], [r - 1, c], [r + 1, c - 1], [r + 1, c]];
+    cand.forEach(([rr, cc]) => { if (rr >= 0 && rr < s.rows.length && cc >= 0 && cc < s.rows[rr].cells.length) out.push([rr, cc]); });
+    return out;
   };
-
-  const findDetached = (g) => {
-    const connected = new Set();
-    const queue = [];
-    g[0] && g[0].forEach((b, c) => { if (b && b.alive) { queue.push(`0,${c}`); connected.add(`0,${c}`); } });
-    while (queue.length > 0) {
-      const key = queue.shift();
-      const [r, c] = key.split(',').map(Number);
-      const neighbors = [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]];
-      neighbors.forEach(([nr, nc]) => {
-        const nkey = `${nr},${nc}`;
-        if (!connected.has(nkey) && nr >= 0 && nr < g.length && nc >= 0 && nc < BS_COLS) {
-          const row = g[nr];
-          if (row && row[nc] && row[nc].alive) {
-            connected.add(nkey);
-            queue.push(nkey);
-          }
-        }
-      });
-    }
-    const detached = [];
-    g.forEach((row, r) => {
-      row.forEach((b, c) => {
-        if (b && b.alive && !connected.has(`${r},${c}`)) detached.push({ r, c });
-      });
-    });
-    return detached;
+  const pop = (s, list, pts) => {
+    list.forEach(([r, c]) => { const b = s.rows[r].cells[c]; if (!b) return; const p = pos(s, r, c); fx.burst(p.x, p.y, colorOf(b.k), 8, 200, 0.5, 4); s.rows[r].cells[c] = null; });
+    if (pts) { const p = pos(s, list[0][0], list[0][1]); s.score += pts; fx.pop(p.x, p.y - 10, `+${pts}`, C.text, 17); }
   };
-
-  const landBubble = (bx, by, color) => {
-    const g = gridRef.current.map(row => row.map(b => ({ ...b })));
-    const col = Math.round((bx - boardLeft) / BS_BUBBLE_D - 0.5);
-    const row = Math.round(by / BS_BUBBLE_D - 0.5);
-    const clampedCol = Math.max(0, Math.min(BS_COLS - 1, col));
-    const clampedRow = Math.max(0, row);
-
-    while (g.length <= clampedRow) {
-      g.push(Array.from({ length: BS_COLS }, (_, c2) => ({ id: `${g.length}-${c2}`, color: '', row: g.length, col: c2, alive: false })));
+  const settle = (s, r, c) => {
+    const b = s.rows[r].cells[c];
+    let matched = [];
+    if (b.k === 'bomb') {
+      matched = [[r, c], ...neighbors(s, r, c).filter(([rr, cc]) => s.rows[rr].cells[cc])];
+      neighbors(s, r, c).forEach(([rr, cc]) => { if (s.rows[rr].cells[cc]) neighbors(s, rr, cc).forEach(([r2, c2]) => { if (s.rows[r2].cells[c2] && !matched.some(m => m[0] === r2 && m[1] === c2) && Math.random() < 0.4) matched.push([r2, c2]); }); });
+      const p = pos(s, r, c); fx.ring(p.x, p.y, C.orange, 90); fx.shake(7, 0.3); fx.flash(C.orange, 0.2); hx.heavy();
+    } else {
+      const seen = new Set([r * 100 + c]); const q = [[r, c]]; const target = b.k;
+      while (q.length) {
+        const [cr, cc] = q.pop(); matched.push([cr, cc]);
+        neighbors(s, cr, cc).forEach(([nr, nc]) => {
+          const nb = s.rows[nr].cells[nc]; const id = nr * 100 + nc;
+          if (!nb || seen.has(id)) return;
+          if (target === 'rainbow' ? true : (nb.k === target || nb.k === 'rainbow')) { seen.add(id); q.push([nr, nc]); }
+        });
+      }
+      if (b.k === 'rainbow' && matched.length > 1) { const first = matched.slice(1).find(([rr, cc]) => typeof s.rows[rr].cells[cc].k === 'number'); if (first) { const tk = s.rows[first[0]].cells[first[1]].k; matched = matched.filter(([rr, cc]) => s.rows[rr].cells[cc].k === tk || (rr === r && cc === c)); } }
     }
-    g[clampedRow][clampedCol] = { id: `${clampedRow}-${clampedCol}-new`, color, row: clampedRow, col: clampedCol, alive: true };
-
-    const matched = findConnectedSameColor(g, clampedRow, clampedCol, color);
-    let pts = 0;
-    if (matched.length >= 3) {
-      matched.forEach(({ r, c }) => { g[r][c] = { ...g[r][c], alive: false }; });
-      pts += matched.length * 10;
-      popVibrate();
-      const detached = findDetached(g);
-      if (detached.length > 0) {
-        detached.forEach(({ r, c }) => { g[r][c] = { ...g[r][c], alive: false }; });
-        pts += detached.length * 15;
+    if (matched.length >= 3 || b.k === 'bomb') {
+      s.combo += 1; s.misses = 0;
+      pop(s, matched, matched.length * 10 + (matched.length - 3) * 8);
+      hx.hit();
+      // desprender flotantes
+      const attached = new Set(); const q = [];
+      s.rows[0].cells.forEach((cell, ci) => { if (cell) { attached.add(0 * 100 + ci); q.push([0, ci]); } });
+      while (q.length) { const [cr, cc] = q.pop(); neighbors(s, cr, cc).forEach(([nr, nc]) => { const id = nr * 100 + nc; if (s.rows[nr].cells[nc] && !attached.has(id)) { attached.add(id); q.push([nr, nc]); } }); }
+      let dropped = 0;
+      s.rows.forEach((row, ri) => row.cells.forEach((cell, ci) => {
+        if (cell && !attached.has(ri * 100 + ci)) { const p = pos(s, ri, ci); s.falling.push({ id: uid(), x: p.x, y: p.y, vy: 0, vx: rand(-40, 40), k: cell.k }); row.cells[ci] = null; dropped += 1; }
+      }));
+      if (dropped) { const pts = dropped * 20 * Math.max(1, dropped - 1); s.score += pts; fx.pop(AREA_W / 2, AREA_H * 0.4, `¡${dropped} CAEN! +${pts}`, C.amber, 20); hx.good(); }
+    } else {
+      s.combo = 0; s.misses += 1; hx.tap();
+      if (s.misses >= s.limit) { // baja el techo
+        s.misses = 0;
+        s.rows.unshift(mkRow(s.rows[0].off ? 0 : 1, s.ncol)); s.shiftAnim = RH; fx.shake(4, 0.2); hx.warn();
       }
     }
-
-    const newShotsFired = shotsFiredRef.current + 1;
-    shotsFiredRef.current = newShotsFired;
-    let finalGrid = g;
-    if (newShotsFired % 8 === 0) {
-      const pool = getColorsInGrid(g);
-      const newRow = bs_makeRow(0, pool);
-      finalGrid = [newRow, ...g].map((rw, ri) =>
-        rw.map(b => ({ ...b, row: ri }))
-      );
+    // limpiar filas vacías del final
+    while (s.rows.length > 1 && s.rows[s.rows.length - 1].cells.every(x => !x)) s.rows.pop();
+    if (!s.rows.some(row => row.cells.some(Boolean))) {
+      s.score += 500; fx.flash('#fff', 0.35); fx.pop(AREA_W / 2, AREA_H / 2, `NIVEL ${s.level} SUPERADO +500`, C.lime, 22); hx.win();
+      const ns = initState(s.level + 1, s.score); Object.assign(s, ns);
+      return;
     }
-    finalGrid = finalGrid.filter(rw => rw.some(b => b.alive) || rw[0].row < 3);
-    while (finalGrid.length < 3) {
-      const pool = getColorsInGrid(finalGrid);
-      finalGrid.push(bs_makeRow(finalGrid.length, pool));
-    }
-
-    const isOver = finalGrid.some((rw, ri) => ri >= BS_MAX_ROWS_VISIBLE && rw.some(b => b.alive));
-    if (isOver) {
-      gameOverRef.current = true;
-      setGameOver(true);
-      deathVibrate();
-    }
-
-    if (pts > 0) {
-      scoreRef.current += pts;
-      setScore(scoreRef.current);
-      setBest(prev => {
-        const nb = Math.max(prev, scoreRef.current);
-        AsyncStorage.setItem('bs_best', String(nb));
-        return nb;
-      });
-    }
-
-    const pool2 = getColorsInGrid(finalGrid);
-    const nc = nextColorRef.current;
-    const nn = pool2[Math.floor(Math.random() * pool2.length)];
-    currentColorRef.current = nc;
-    nextColorRef.current = nn;
-    setCurrentColor(nc);
-    setNextColor(nn);
-    setShotsFired(newShotsFired);
-    setGrid(finalGrid);
-    setProjectile(null);
-    projRef.current = null;
+    // derrota
+    const lowest = s.rows.length - 1;
+    if (lowest * RH + R > SY - D * 1.1) { s.over = true; hx.die(); fx.shake(10, 0.4); fx.flash(C.red, 0.3); setRes({ isNew: submitBest(s.score) }); setPhase('over'); }
   };
-
-  const shoot = (tx, ty) => {
-    if (gameOverRef.current || projRef.current) return;
-    const shooterX = boardLeft + boardWidth / 2;
-    const shooterY = BS_SHOOTER_Y;
-    let dx = tx - shooterX;
-    let dy = ty - shooterY;
-    const len = Math.sqrt(dx * dx + dy * dy);
-    if (len === 0 || dy > -10) return;
-    dx /= len; dy /= len;
-    if (dy > -0.15) dy = -0.15;
-    const speed = 10;
-    const proj = { x: shooterX, y: shooterY, vx: dx * speed, vy: dy * speed, color: currentColorRef.current };
-    projRef.current = proj;
-    setProjectile({ ...proj });
-    setAimDots([]);
-
-    const step = () => {
-      if (!projRef.current) return;
-      const p = projRef.current;
-      let nx = p.x + p.vx;
-      let ny = p.y + p.vy;
-      let nvx = p.vx;
-
-      if (nx - BS_BUBBLE_R < boardLeft) { nx = boardLeft + BS_BUBBLE_R; nvx = Math.abs(nvx); }
-      if (nx + BS_BUBBLE_R > boardLeft + boardWidth) { nx = boardLeft + boardWidth - BS_BUBBLE_R; nvx = -Math.abs(nvx); }
-
-      if (ny - BS_BUBBLE_R <= 0) {
-        landBubble(nx, 0, p.color);
-        return;
-      }
-
-      const g = gridRef.current;
-      let landed = false;
-      for (let r = 0; r < g.length && !landed; r++) {
-        for (let c = 0; c < BS_COLS && !landed; c++) {
-          const b = g[r][c];
-          if (!b || !b.alive) continue;
-          const bx2 = boardLeft + c * BS_BUBBLE_D + BS_BUBBLE_R;
-          const by2 = r * BS_BUBBLE_D + BS_BUBBLE_R;
-          const dist = Math.sqrt((nx - bx2) ** 2 + (ny - by2) ** 2);
-          if (dist < BS_BUBBLE_D * 0.95) {
-            landBubble(nx, ny, p.color);
-            landed = true;
-          }
+  const snap = (s, x, y) => {
+    let bestD = 1e9, bestC = null;
+    for (let ri = Math.max(0, Math.floor((y - R) / RH) - 1); ri <= Math.floor((y - R) / RH) + 2; ri++) {
+      if (ri < 0) continue;
+      while (ri >= s.rows.length) s.rows.push({ off: s.rows[s.rows.length - 1].off ? 0 : 1, cells: Array(s.rows[s.rows.length - 1].off ? COLS : COLS - 1).fill(null) });
+      const row = s.rows[ri];
+      row.cells.forEach((cell, ci) => { if (cell) return; const px = cx(row, ci), py = ri * RH + R - s.shiftAnim; const d = Math.hypot(px - x, py - y); if (d < bestD) { bestD = d; bestC = [ri, ci]; } });
+    }
+    return bestC;
+  };
+  const fire = () => {
+    const s = g.current;
+    if (phase !== 'play' || s.ball || s.over || !s.aim) return;
+    const a = s.aim; const sp = 1000;
+    s.ball = { x: SX, y: SY, vx: Math.cos(a) * sp, vy: -Math.sin(a) * sp, k: s.cur.k };
+    s.cur = s.next; s.next = newBubble(s); s.shots += 1; hx.tap();
+  };
+  useLoop(phase === 'play', dt => {
+    const s = g.current;
+    s.t += dt;
+    if (s.shiftAnim > 0) s.shiftAnim = Math.max(0, s.shiftAnim - dt * 260);
+    s.falling.forEach(f => { f.vy += 1400 * dt; f.y += f.vy * dt; f.x += f.vx * dt; });
+    s.falling = s.falling.filter(f => f.y < AREA_H + 40);
+    const b = s.ball;
+    if (b) {
+      const steps = Math.ceil((Math.hypot(b.vx, b.vy) * dt) / 6);
+      for (let i = 0; i < steps && s.ball; i++) {
+        b.x += (b.vx * dt) / steps; b.y += (b.vy * dt) / steps;
+        if (b.x < R) { b.x = R; b.vx = Math.abs(b.vx); }
+        if (b.x > AREA_W - R) { b.x = AREA_W - R; b.vx = -Math.abs(b.vx); }
+        let hit = b.y <= R - s.shiftAnim + 1;
+        if (!hit) for (let ri = 0; ri < s.rows.length && !hit; ri++) { const row = s.rows[ri]; const ry = ri * RH + R - s.shiftAnim; if (Math.abs(ry - b.y) > D) continue; for (let ci = 0; ci < row.cells.length; ci++) { if (row.cells[ci] && Math.hypot(cx(row, ci) - b.x, ry - b.y) < D * 0.88) { hit = true; break; } } }
+        if (hit) {
+          const cell = snap(s, b.x, b.y);
+          const kind = b.k;
+          s.ball = null;
+          if (cell) { s.rows[cell[0]].cells[cell[1]] = { k: kind }; settle(s, cell[0], cell[1]); }
+          break;
         }
       }
-      if (!landed) {
-        const updated = { ...p, x: nx, y: ny, vx: nvx };
-        projRef.current = updated;
-        setProjectile({ ...updated });
-        animRef.current = requestAnimationFrame(step);
-      }
-    };
-    animRef.current = requestAnimationFrame(step);
+    }
+  });
+  const aimFrom = (x, y) => {
+    const dx = x - SX, dy = SY - y;
+    let a = Math.atan2(dy, dx);
+    a = clamp(a, 0.2, Math.PI - 0.2);
+    g.current.aim = a;
   };
-
-  const restart = () => {
-    const newGrid = bs_initGrid();
-    gridRef.current = newGrid;
-    scoreRef.current = 0;
-    shotsFiredRef.current = 0;
-    gameOverRef.current = false;
-    projRef.current = null;
-    const c = bs_randomColor();
-    const n = bs_randomColor();
-    currentColorRef.current = c;
-    nextColorRef.current = n;
-    setGrid(newGrid);
-    setScore(0);
-    setShotsFired(0);
-    setGameOver(false);
-    setProjectile(null);
-    setAimDots([]);
-    setCurrentColor(c);
-    setNextColor(n);
-  };
-
-  const handlePress = (e) => {
-    const { locationX, locationY } = e.nativeEvent;
-    shoot(locationX, locationY);
-  };
-
-  const handleMove = (e) => {
-    if (projRef.current || gameOverRef.current) return;
-    const { locationX, locationY } = e.nativeEvent;
-    setAimDots(bs_computeAim(locationX, locationY));
-  };
-
-  const renderGrid = () => {
-    const els = [];
-    grid.forEach((row, r) => {
-      row.forEach((b, c) => {
-        if (!b || !b.alive) return;
-        const x = boardLeft + c * BS_BUBBLE_D;
-        const y = r * BS_BUBBLE_D;
-        if (y > GAME_HEIGHT - 80) return;
-        els.push(
-          <View key={b.id} style={{
-            position: 'absolute', left: x, top: y,
-            width: BS_BUBBLE_D, height: BS_BUBBLE_D,
-            justifyContent: 'center', alignItems: 'center',
-          }}>
-            <View style={{ width: BS_BUBBLE_D - 3, height: BS_BUBBLE_D - 3, borderRadius: BS_BUBBLE_R, backgroundColor: b.color, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' }} />
-          </View>
-        );
-      });
-    });
-    return els;
-  };
-
+  const pan = usePan(fx, {
+    down: (x, y) => {
+      const s = g.current;
+      if (phase !== 'play') return;
+      if (Math.hypot(x - SX, y - SY) < 34) { const t = s.cur; s.cur = s.next; s.next = t; hx.tick(); s.aim = null; s.swapped = true; return; }
+      s.swapped = false; aimFrom(x, y);
+    },
+    move: (x, y) => { if (!g.current.swapped) aimFrom(x, y); },
+    up: () => { const s = g.current; if (!s.swapped) fire(); s.aim = null; },
+  });
+  const s = g.current;
+  // trayectoria de apuntado
+  const dots = [];
+  if (s.aim != null && !s.ball) {
+    let x = SX, y = SY, vx = Math.cos(s.aim), vy = -Math.sin(s.aim);
+    for (let i = 0; i < 70; i++) {
+      x += vx * 9; y += vy * 9;
+      if (x < R) { x = R; vx = Math.abs(vx); } if (x > AREA_W - R) { x = AREA_W - R; vx = -Math.abs(vx); }
+      let stop = y < R;
+      if (!stop) for (let ri = 0; ri < s.rows.length && !stop; ri++) { const ry = ri * RH + R; if (Math.abs(ry - y) > D) continue; for (let ci = 0; ci < s.rows[ri].cells.length; ci++) if (s.rows[ri].cells[ci] && Math.hypot(cx(s.rows[ri], ci) - x, ry - y) < D * 0.88) { stop = true; break; } }
+      if (stop) break;
+      if (i % 2 === 0) dots.push([x, y]);
+    }
+  }
+  const bubble = (x, y, k, extra) => (
+    <View key={extra && extra.key} style={{ position: 'absolute', left: x - R + 1, top: y - R + 1, width: D - 2, height: D - 2, borderRadius: R, backgroundColor: alpha(colorOf(k), 0.9), borderWidth: 2, borderColor: k === 'rainbow' ? C.pink : 'rgba(255,255,255,0.55)', alignItems: 'center', justifyContent: 'center', ...glow(colorOf(k), 8, 0.6) }}>
+      <View style={{ position: 'absolute', left: R * 0.35, top: R * 0.3, width: R * 0.5, height: R * 0.35, borderRadius: R * 0.3, backgroundColor: 'rgba(255,255,255,0.45)' }} />
+      {k === 'bomb' && <Text style={{ fontSize: R * 1.1 }}>💣</Text>}{k === 'rainbow' && <Text style={{ fontSize: R * 1.1 }}>🌈</Text>}
+    </View>
+  );
+  const dangerY = SY - D * 1.1;
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#0d0d1a' }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 }}>
-        <Pressable onPress={onExit} style={{ padding: 8 }}>
-          <Text style={{ color: '#aaa', fontSize: 15 }}>✕ Salir</Text>
-        </Pressable>
-        <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Burbuja</Text>
-        <View style={{ alignItems: 'flex-end' }}>
-          <Text style={{ color: '#FFD700', fontSize: 16, fontWeight: 'bold' }}>Pts: {score}</Text>
-          <Text style={{ color: '#aaa', fontSize: 12 }}>Mejor: {best}</Text>
-        </View>
-      </View>
-
-      <View
-        style={{ flex: 1, position: 'relative' }}
-        onStartShouldSetResponder={() => true}
-        onResponderGrant={handlePress}
-        onResponderMove={handleMove}
-      >
-        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
-          {renderGrid()}
-
-          {aimDots.map((d, i) => (
-            <View key={i} style={{
-              position: 'absolute',
-              left: d.x - 4, top: d.y - 4,
-              width: 8, height: 8, borderRadius: 4,
-              backgroundColor: `${currentColor}88`,
-            }} />
-          ))}
-
-          {projectile && (
-            <View style={{
-              position: 'absolute',
-              left: projectile.x - BS_BUBBLE_R,
-              top: projectile.y - BS_BUBBLE_R,
-              width: BS_BUBBLE_D, height: BS_BUBBLE_D,
-              borderRadius: BS_BUBBLE_R,
-              backgroundColor: projectile.color,
-              borderWidth: 2, borderColor: 'rgba(255,255,255,0.5)',
-            }} />
-          )}
-
-          <View style={{
-            position: 'absolute', bottom: 8, left: 0, right: 0,
-            flexDirection: 'row', justifyContent: 'center', alignItems: 'flex-end', gap: 24,
-          }}>
-            <View style={{ alignItems: 'center' }}>
-              <Text style={{ color: '#aaa', fontSize: 11, marginBottom: 4 }}>Siguiente</Text>
-              <View style={{ width: BS_BUBBLE_D + 4, height: BS_BUBBLE_D + 4, borderRadius: BS_BUBBLE_R + 2, backgroundColor: nextColor, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' }} />
-            </View>
-            <View style={{ alignItems: 'center' }}>
-              <Text style={{ color: '#fff', fontSize: 11, marginBottom: 4 }}>Actual</Text>
-              <View style={{ width: BS_BUBBLE_D + 12, height: BS_BUBBLE_D + 12, borderRadius: BS_BUBBLE_R + 6, backgroundColor: currentColor, borderWidth: 3, borderColor: 'rgba(255,255,255,0.6)' }} />
-            </View>
-          </View>
-        </View>
-
-        {gameOver && (
-          <View style={{
-            position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.8)',
-            justifyContent: 'center', alignItems: 'center',
-          }}>
-            <Text style={{ fontSize: 40, marginBottom: 8 }}>💥</Text>
-            <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold', marginBottom: 4 }}>¡Juego Terminado!</Text>
-            <Text style={{ color: '#FFD700', fontSize: 16, marginBottom: 20 }}>Puntos: {score}  |  Mejor: {best}</Text>
-            <Pressable onPress={restart} style={{ backgroundColor: '#9b59b6', paddingHorizontal: 32, paddingVertical: 12, borderRadius: 12 }}>
-              <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Jugar de Nuevo</Text>
-            </Pressable>
-          </View>
-        )}
-      </View>
-    </SafeAreaView>
+    <GameScreen title="BUBBLE SHOOTER" emoji="🫧" accent={C.red} onExit={onExit} score={s.score} best={best}
+      hud={<><Text style={{ color: C.dim, fontSize: 12 }}>Nivel <Text style={{ color: C.red, fontWeight: '800' }}>{s.level}</Text></Text><View style={{ flexDirection: 'row', alignItems: 'center' }}><Text style={{ color: C.dim, fontSize: 11, marginRight: 6 }}>Techo en</Text>{Array.from({ length: s.limit }, (_, i) => <View key={i} style={{ width: 8, height: 8, borderRadius: 4, marginHorizontal: 1.5, backgroundColor: i < s.limit - s.misses ? C.red : alpha(C.red, 0.2) }} />)}</View><View style={{ minWidth: 60, alignItems: 'flex-end' }}>{s.combo > 1 ? <Combo n={s.combo} color={C.red} /> : null}</View></>}>
+      <PlayArea fx={fx} bg="#0a0510" border={alpha(C.red, 0.4)} {...pan}>
+        <View style={{ position: 'absolute', left: 0, right: 0, top: dangerY, height: 2, backgroundColor: alpha(C.red, 0.6), ...glow(C.red, 8, 0.7) }} />
+        {s.rows.map((row, ri) => row.cells.map((cell, ci) => cell ? bubble(cx(row, ci), ri * RH + R - s.shiftAnim, cell.k, { key: `${ri}-${ci}` }) : null))}
+        {s.falling.map(f => bubble(f.x, f.y, f.k, { key: f.id }))}
+        {dots.map(([x, y], i) => <View key={i} pointerEvents="none" style={{ position: 'absolute', left: x - 2.5, top: y - 2.5, width: 5, height: 5, borderRadius: 3, backgroundColor: '#fff', opacity: 0.6 - i * 0.008 }} />)}
+        {s.ball && bubble(s.ball.x, s.ball.y, s.ball.k, { key: 'ball' })}
+        {/* cañón */}
+        <View style={{ position: 'absolute', left: SX - 22, top: SY - 22, width: 44, height: 44, borderRadius: 22, borderWidth: 2, borderColor: alpha(C.red, 0.6), backgroundColor: alpha(C.red, 0.1) }} />
+        {!s.ball && bubble(SX, SY, s.cur.k, { key: 'cur' })}
+        <View style={{ position: 'absolute', left: SX + 52, top: SY - R, opacity: 0.85, transform: [{ scale: 0.8 }] }}><View style={{ width: D, height: D }}>{bubble(R, R, s.next.k, { key: 'nx' })}</View></View>
+        <Text style={{ position: 'absolute', left: SX + 42, top: SY + 18, color: C.dim, fontSize: 9, fontWeight: '800', letterSpacing: 1 }}>SIGUIENTE</Text>
+        <Text pointerEvents="none" style={{ position: 'absolute', left: SX - 100, top: SY + 20, width: 76, color: alpha(C.dim, 0.7), fontSize: 9, fontWeight: '800', textAlign: 'right' }}>TOCA PARA CAMBIAR</Text>
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🫧" title={phase === 'over' ? 'LAS BURBUJAS LLEGARON' : 'BUBBLE SHOOTER'}
+          subtitle={phase === 'over' ? `Nivel ${s.level} · ${s.shots} disparos` : 'Une 3 burbujas del mismo color'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.red} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Arrastra para apuntar y suelta para disparar', 'Toca la burbuja del cañón para cambiarla', '💣 explota alrededor · 🌈 se une a cualquier color', 'Si fallas varias veces, el techo baja'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
