@@ -17,6 +17,8 @@ export const SCREEN_W = W;
 export const SCREEN_H = H;
 export const AREA_W = Math.min(W - 20, 460);
 export const AREA_H = Math.max(360, Math.min(H - 230, 640));
+// Alto del área de juego cuando la pantalla lleva una barra de controles abajo (footer)
+export const AREA_HF = Math.max(330, AREA_H - 60);
 
 // ─── Tema ─────────────────────────────────────────────────────────
 export const C = {
@@ -223,6 +225,7 @@ export function PlayArea({ fx, children, style, bg = C.panel, border = C.line, w
       box.current.measureInWindow((x, y) => { fx.ox = x; fx.oy = y; });
     }
   };
+  useEffect(() => { const id = setTimeout(onLayout, 350); return () => clearTimeout(id); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   let sx = 0; let sy = 0;
   if (fx && fx.shakeT > 0) {
@@ -234,6 +237,7 @@ export function PlayArea({ fx, children, style, bg = C.panel, border = C.line, w
     <View
       ref={box}
       onLayout={onLayout}
+      onTouchStart={onLayout}
       style={[{ width: w, height: h, borderRadius: 18, overflow: 'hidden', backgroundColor: bg, borderWidth: 1, borderColor: border, alignSelf: 'center' }, Platform.OS === 'web' ? { userSelect: 'none' } : null, style]}
       {...rest}
     >
@@ -249,7 +253,7 @@ export function PlayArea({ fx, children, style, bg = C.panel, border = C.line, w
             <View key={`p${i}`} style={{ position: 'absolute', left: p.x - p.size / 2, top: p.y - p.size / 2, width: p.size, height: p.size, borderRadius: p.size / 2, backgroundColor: p.color, opacity: Math.max(0, p.life / p.max), ...glow(p.color, 4, 0.8) }} />
           ))}
           {fx.pops.map((p, i) => (
-            <Text key={`t${i}`} style={{ position: 'absolute', left: p.x - 60, width: 120, top: p.y - p.size, textAlign: 'center', color: p.color, fontSize: p.size, fontWeight: '900', opacity: Math.min(1, (p.life / p.max) * 1.6), textShadowColor: p.color, textShadowRadius: 8, textShadowOffset: { width: 0, height: 0 } }}>{p.text}</Text>
+            <Text key={`t${i}`} style={{ position: 'absolute', left: p.x - 140, width: 280, top: p.y - p.size, textAlign: 'center', color: p.color, fontSize: p.size, fontWeight: '900', opacity: Math.min(1, (p.life / p.max) * 1.6), textShadowColor: p.color, textShadowRadius: 8, textShadowOffset: { width: 0, height: 0 } }}>{p.text}</Text>
           ))}
           {fx.flashA > 0 && <View style={[StyleSheet.absoluteFill, { backgroundColor: fx.flashC, opacity: fx.flashA }]} />}
         </View>
@@ -262,14 +266,19 @@ export function PlayArea({ fx, children, style, bg = C.panel, border = C.line, w
 export function usePan(fx, handlers) {
   const hRef = useRef(handlers);
   hRef.current = handlers;
-  return useRef(PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderGrant: (e, g) => { const h = hRef.current; if (h.down) h.down(g.x0 - fx.ox, g.y0 - fx.oy, e); },
-    onPanResponderMove: (e, g) => { const h = hRef.current; if (h.move) h.move(g.moveX - fx.ox, g.moveY - fx.oy, g); },
-    onPanResponderRelease: (e, g) => { const h = hRef.current; if (h.up) h.up(g.moveX - fx.ox, g.moveY - fx.oy, g); },
-    onPanResponderTerminate: (e, g) => { const h = hRef.current; if (h.up) h.up(g.moveX - fx.ox, g.moveY - fx.oy, g); },
-  })).current.panHandlers;
+  const pr = useRef(null);
+  if (!pr.current) {
+    pr.current = PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      // no robar el gesto a botones hijos por un pequeño temblor del dedo
+      onMoveShouldSetPanResponder: (e, g) => Math.abs(g.dx) + Math.abs(g.dy) > 8,
+      onPanResponderGrant: (e, g) => { const h = hRef.current; if (h.down) h.down(g.x0 - fx.ox, g.y0 - fx.oy, e); },
+      onPanResponderMove: (e, g) => { const h = hRef.current; if (h.move) h.move(g.moveX - fx.ox, g.moveY - fx.oy, g); },
+      onPanResponderRelease: (e, g) => { const h = hRef.current; if (h.up) h.up(g.moveX - fx.ox, g.moveY - fx.oy, g); },
+      onPanResponderTerminate: (e, g) => { const h = hRef.current; if (h.up) h.up(g.moveX - fx.ox, g.moveY - fx.oy, g); },
+    });
+  }
+  return pr.current.panHandlers;
 }
 
 // ─── Componentes ──────────────────────────────────────────────────
