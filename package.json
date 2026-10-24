@@ -14,10 +14,12 @@
     "expo": "~57.0.31",
     "expo-asset": "~57.0.20",
     "expo-audio": "~57.0.5",
+    "expo-gl": "~57.0.2",
     "expo-haptics": "~57.0.3",
     "expo-updates": "~57.0.26",
     "react": "19.2.3",
     "react-native": "0.86.3",
-    "react-native-safe-area-context": "~5.7.0"
+    "react-native-safe-area-context": "~5.7.0",
+    "three": "0.166.1"
   }
 }

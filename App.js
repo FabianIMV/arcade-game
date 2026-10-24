@@ -20,6 +20,8 @@ import {
   alpha, clamp, glow, tglow, hx, lerp, makeStars, overlap, pick, rand, randInt, shuffle,
   GameCtx, uid, useBest, useFX, useForce, useLoop, usePan, useTimeouts,
 } from './utils/kit';
+import { OW_COL, OW_H, OW_N, owGen } from './utils/ow';
+import { createGLWorld } from './utils/gl3d';
 import { ACHIEVEMENTS, Profile, ToastHost, levelInfo, toast, useProfile, useSettings } from './utils/meta';
 
 const { width, height } = Dimensions.get('window');
@@ -5461,45 +5463,7 @@ function Connect4({ onExit }) {
   );
 }
 
-// ─── MUNDO ABIERTO 3D (raycaster) ─────────────────────────────────
-const OW_N = 64;
-// 0 vacío · 1 árbol · 2 roca · 3 casa · 4 torre · 5 montaña
-const OW_H = [0, 1.7, 0.6, 1.25, 3, 2.6];
-const OW_COL = {
-  trunk: [112, 72, 36], leaf: [40, 142, 62], rock: [132, 132, 142], wall: [206, 176, 132], roof: [176, 62, 52],
-  tower: [150, 132, 205], band: [255, 214, 90], mount: [104, 110, 128], snow: [236, 241, 250],
-};
-function owGen(seed) {
-  const rnd = rpgRng(seed);
-  const lat = Array.from({ length: 14 * 14 }, () => rnd());
-  const vn = (x, y) => { const gx = x / 5, gy = y / 5; const i = Math.floor(gx), j = Math.floor(gy), fx_ = gx - i, fy = gy - j; const g = (a, b) => lat[((b % 14 + 14) % 14) * 14 + ((a % 14 + 14) % 14)]; const sx = fx_ * fx_ * (3 - 2 * fx_), sy = fy * fy * (3 - 2 * fy); return (g(i, j) * (1 - sx) + g(i + 1, j) * sx) * (1 - sy) + (g(i, j + 1) * (1 - sx) + g(i + 1, j + 1) * sx) * sy; };
-  const m = Array.from({ length: OW_N }, () => new Uint8Array(OW_N));
-  const C0 = OW_N / 2;
-  for (let y = 0; y < OW_N; y++) for (let x = 0; x < OW_N; x++) {
-    if (x < 3 || y < 3 || x >= OW_N - 3 || y >= OW_N - 3) { m[y][x] = 5; continue; }
-    const v = vn(x, y), r = rnd();
-    if (v > 0.8 && r < 0.5) m[y][x] = 5;
-    else if (v > 0.58 && r < 0.5) m[y][x] = 1;
-    else if (r < 0.014) m[y][x] = 1;
-    else if (r < 0.026) m[y][x] = 2;
-  }
-  const clear = (cx, cy, r) => { for (let y = cy - r; y <= cy + r; y++) for (let x = cx - r; x <= cx + r; x++) if (x > 2 && y > 2 && x < OW_N - 3 && y < OW_N - 3) m[y][x] = 0; };
-  clear(C0, C0, 5);
-  const villages = [];
-  for (let k = 0; k < 6; k++) {
-    let cx, cy, tries = 0;
-    do { cx = 8 + Math.floor(rnd() * (OW_N - 16)); cy = 8 + Math.floor(rnd() * (OW_N - 16)); tries++; } while (tries < 40 && (Math.hypot(cx - C0, cy - C0) < 12 || villages.some(v => Math.hypot(v[0] - cx, v[1] - cy) < 12)));
-    villages.push([cx, cy]); clear(cx, cy, 4);
-    const n = 4 + Math.floor(rnd() * 3);
-    for (let h = 0; h < n; h++) { const a = (h / n) * Math.PI * 2; const hx = Math.round(cx + Math.cos(a) * 3), hy = Math.round(cy + Math.sin(a) * 3); m[hy][hx] = 3; if (m[hy][hx + 1] === 0) m[hy][hx + 1] = 3; }
-  }
-  const towers = [];
-  for (let k = 0; k < 5; k++) { const tx = 8 + Math.floor(rnd() * (OW_N - 16)), ty = 8 + Math.floor(rnd() * (OW_N - 16)); if (Math.hypot(tx - C0, ty - C0) < 9) continue; clear(tx, ty, 1); m[ty][tx] = 4; towers.push([tx, ty]); }
-  // zona alcanzable desde el centro
-  const reach = new Uint8Array(OW_N * OW_N); const q = [[C0, C0]]; reach[C0 * OW_N + C0] = 1; const free = [];
-  while (q.length) { const [x, y] = q.pop(); free.push([x, y]); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (nx < 0 || ny < 0 || nx >= OW_N || ny >= OW_N || reach[ny * OW_N + nx] || m[ny][nx]) continue; reach[ny * OW_N + nx] = 1; q.push([nx, ny]); } }
-  return { m, free, villages, towers };
-}
+// ─── MUNDO ABIERTO 3D ─────────────────────────────────────────────
 function owShade(c, light, fog, fogC) {
   const f = clamp(fog, 0, 1);
   const r = Math.round(lerp(c[0] * light, fogC[0], f)), g = Math.round(lerp(c[1] * light, fogC[1], f)), b = Math.round(lerp(c[2] * light, fogC[2], f));
@@ -5524,6 +5488,14 @@ function OpenWorld3D({ onExit }) {
   const [move, moveH] = owStick(46);
   const [look, lookH] = owStick(46);
   const sprint = useRef({ on: false }).current;
+  // GPU (three.js sobre expo-gl) si está disponible; si falla, modo compatible (raycaster con Views)
+  const GLViewC = useRef(undefined);
+  if (GLViewC.current === undefined) { try { GLViewC.current = require('expo-gl').GLView; require('three'); } catch (e) { GLViewC.current = null; } }
+  const [glFail, setGlFail] = useState(false);
+  const useGL = !!GLViewC.current && !glFail;
+  const glOnRef = useRef(useGL); glOnRef.current = useGL;
+  const glRef = useRef(null); const stopRef = useRef(null);
+  useEffect(() => () => { if (stopRef.current) stopRef.current.v = true; }, []);
   const NCOL = Math.max(40, Math.floor(AREA_W / 6));
   const CW = AREA_W / NCOL;
   const HOR = AREA_H * 0.5;
@@ -5614,7 +5586,7 @@ function OpenWorld3D({ onExit }) {
   };
   if (!g.current.cols.length) cast(g.current);
 
-  const start = () => { fx.clear(); const s = initState(); g.current = s; cast(s); setPhase('play'); };
+  const start = () => { fx.clear(); const s = initState(); g.current = s; cast(s); if (glRef.current) glRef.current.setWorld(s.w); setPhase('play'); };
   const finish = (s, won, why) => {
     const sc = s.gems * 100 + s.coins * 10 + (won ? 500 : 0);
     s.final = sc; if (won) hx.win(); else hx.die();
@@ -5660,8 +5632,24 @@ function OpenWorld3D({ onExit }) {
       }
     }
     s.ents = s.ents.filter(e => !e.gone);
-    cast(s);
+    s.dl = daylight(s);
+    if (!glOnRef.current) cast(s);
   });
+  const onCtx = async gl => {
+    const stop = { v: false }; stopRef.current = stop;
+    try {
+      const THREE = require('three');
+      const world = createGLWorld({ gl, THREE, world: g.current.w, aspectRatio: AREA_W / AREA_H });
+      glRef.current = world; let n = 0;
+      const tick = () => {
+        if (stop.v) { world.dispose(); return; }
+        try { world.sync(g.current); world.render(); n += 1; if (n === 14 && !world.probe()) throw new Error('pantalla vacía'); } catch (e) { stop.v = true; glRef.current = null; setGlFail(true); return; }
+        requestAnimationFrame(tick);
+      };
+      tick();
+    } catch (e) { glRef.current = null; setGlFail(true); }
+  };
+  const GLV = GLViewC.current;
   const s = g.current;
   // brújula hacia el cristal más cercano
   let near = null, nd = 1e9;
@@ -5688,6 +5676,8 @@ function OpenWorld3D({ onExit }) {
     <GameScreen title="MUNDO 3D" emoji="🌍" accent={C.lime} onExit={onExit} score={sc} best={best}
       hud={<><Lives n={s.hp} max={3} /><Text style={{ color: C.text, fontWeight: '900', fontSize: 12 }}>💎 {s.gems}/{TOTAL_GEMS}  🪙 {s.coins}</Text><Text style={{ color: dl < 0.3 ? C.violet : C.amber, fontWeight: '900', fontSize: 12 }}>{dl < 0.3 ? '🌙 NOCHE' : '☀️ DÍA'}</Text></>}>
       <PlayArea fx={fx} bg="#000">
+        {useGL && GLV && <GLV style={StyleSheet.absoluteFill} onContextCreate={onCtx} />}
+        {!useGL && <>
         {/* cielo */}
         {Array.from({ length: skyBands }, (_, i) => { const k = i / (skyBands - 1); const c = [lerp(skyTop[0], fogC[0], k), lerp(skyTop[1], fogC[1], k), lerp(skyTop[2], fogC[2], k)]; return <View key={`s${i}`} style={{ position: 'absolute', left: 0, top: (HOR / skyBands) * i, width: AREA_W, height: HOR / skyBands + 1, backgroundColor: `rgb(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])})` }} />; })}
         {showCel && <Text style={{ position: 'absolute', left: celX - 26, top: HOR - 40 - Math.abs(sunH) * AREA_H * 0.32, width: 52, textAlign: 'center', fontSize: 40, lineHeight: 48, opacity: 0.95 }}>{sunH > 0 ? '☀️' : '🌙'}</Text>}
@@ -5697,6 +5687,7 @@ function OpenWorld3D({ onExit }) {
         {s.cols.map((parts, i) => parts.map((p, k) => <View key={`${i}-${k}`} style={{ position: 'absolute', left: i * CW, top: p.y, width: CW + 0.8, height: p.h, backgroundColor: p.c }} />))}
         {/* sprites */}
         {s.sprites.map(sp => <Text key={sp.id} style={{ position: 'absolute', left: sp.x - sp.size, top: sp.y, width: sp.size * 2, textAlign: 'center', fontSize: Math.max(8, sp.size * 0.9), lineHeight: sp.size * 1.15, opacity: clamp(1 - sp.fog * 0.8, 0.25, 1), ...(sp.kind === 'gem' ? tglow(C.cyan, 8) : null) }}>{sp.e}</Text>)}
+        </>}
         {s.inv > 0 && <View pointerEvents="none" style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,60,80,0.18)' }} />}
         {dl < 0.3 && <View pointerEvents="none" style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,30,0.12)' }} />}
         {/* brújula */}
@@ -5729,6 +5720,7 @@ function OpenWorld3D({ onExit }) {
           title={phase === 'win' ? '¡TODOS LOS CRISTALES!' : phase === 'over' ? (res.why === 'lobos' ? 'DEVORADO POR LOBOS' : 'EXPEDICIÓN TERMINADA') : 'MUNDO ABIERTO 3D'}
           subtitle={phase === 'ready' ? 'Explora un mundo en primera persona' : `💎 ${s.gems}/${TOTAL_GEMS} · 🪙 ${s.coins} · ${Math.round(s.dist)} m recorridos`}
           score={s.final != null && phase !== 'ready' ? s.final : sc} best={best} isNew={res.isNew} accent={C.lime} onStart={start} onExit={onExit}
+          extra={GLViewC.current ? <View style={{ marginTop: 12 }}><Btn testID="ow-gfx" label={useGL ? '🎮 GRÁFICOS 3D (GPU)' : '🧱 MODO COMPATIBLE'} small ghost color={C.lime} onPress={() => setGlFail(f => !f)} /></View> : null}
           lines={phase === 'ready' ? ['Joystick izquierdo: moverte · derecho: girar la cámara', '🏃 mantén pulsado para correr', 'Encuentra 20 💎 (la brújula te guía) y junta 🪙', 'De noche salen 🐺: corre o escóndete tras las casas', 'Aldeas, bosques, torres y montañas por descubrir'] : null} />
       </PlayArea>
     </GameScreen>
