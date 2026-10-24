@@ -5504,226 +5504,352 @@ function FruitTap({ onExit }) {
     </GameScreen>
   );
 }
-// ─────────────────────────────────────────────────────────────────
-// PIXEL RPG
-const RPG_MAP = [
-  [3,3,3,3,3,3,3,3,3,3,3,3],
-  [3,4,1,1,0,0,0,3,3,3,3,3],
-  [3,1,3,3,0,0,0,0,0,3,3,3],
-  [3,1,3,3,0,3,3,0,0,3,3,3],
-  [3,1,1,1,1,1,1,0,0,0,3,3],
-  [3,3,3,3,1,3,3,3,0,0,3,3],
-  [3,3,3,3,1,0,0,0,0,0,0,3],
-  [3,3,3,3,1,0,3,3,3,0,0,3],
-  [3,3,3,3,0,0,3,5,3,0,0,3],
-  [3,3,3,3,0,0,0,0,0,0,3,3],
-  [3,3,3,3,3,0,0,0,3,3,3,3],
-  [3,3,3,3,3,3,3,3,3,3,3,3],
+// ─── PIXEL RPG ────────────────────────────────────────────────────
+const RPG_W = 28;
+const RPG_H = 28;
+const RPG_SAVE_KEY = '@rpg_save2';
+const RPG_TILE = {
+  '.': { bg: '#1d3b14', e: '' }, T: { bg: '#10260c', e: '🌲', block: true }, f: { bg: '#18340f', e: '🌿' },
+  '~': { bg: '#0b2a55', e: '🌊', block: true }, m: { bg: '#3a3430', e: '⛰️' }, '^': { bg: '#2a2624', e: '🪨', block: true },
+  v: { bg: '#2b1712', e: '' }, '#': { bg: '#1a1012', e: '🧱', block: true }, '=': { bg: '#5a4326', e: '' },
+  H: { bg: '#5a4326', e: '🏘️' }, V: { bg: '#5a4326', e: '🏰' }, L: { bg: '#3a0c0c', e: '🌋' }, c: { bg: '#1d3b14', e: '📦' }, N: { bg: '#1d3b14', e: '🧓' },
+};
+const RPG_ZONES = [
+  { name: 'Praderas', enc: 0.1, pool: [0, 1, 2] }, { name: 'Bosque', enc: 0.2, pool: [1, 3, 4, 5] },
+  { name: 'Pantano', enc: 0.22, pool: [6, 7, 8] }, { name: 'Montañas', enc: 0.26, pool: [9, 10, 11] },
+  { name: 'Tierras de ceniza', enc: 0.3, pool: [12, 13, 14] },
 ];
-const RPG_TILE = ['🌿','🪨','🌊','🌲','🏘️','⛩️'];
-// 0=grass(battle) 1=path 2=water 3=tree 4=town 5=dungeon
 const RPG_ENEMIES = [
-  { name:'Slime',    emoji:'🟢', hp:12, atk:3,  xp:8,   gold:3  },
-  { name:'Goblin',   emoji:'👺', hp:18, atk:5,  xp:14,  gold:6  },
-  { name:'Lobo',     emoji:'🐺', hp:22, atk:7,  xp:20,  gold:8  },
-  { name:'Orco',     emoji:'👹', hp:35, atk:10, xp:35,  gold:14 },
-  { name:'Dragón',   emoji:'🐉', hp:60, atk:16, xp:80,  gold:40 },
+  { name: 'Slime', e: '🟢', hp: 14, atk: 5, xp: 8, gold: 4 }, { name: 'Goblin', e: '👺', hp: 20, atk: 7, xp: 13, gold: 7 }, { name: 'Murciélago', e: '🦇', hp: 14, atk: 8, xp: 11, gold: 5 },
+  { name: 'Lobo', e: '🐺', hp: 28, atk: 10, xp: 20, gold: 9 }, { name: 'Bandido', e: '🥷', hp: 30, atk: 11, xp: 24, gold: 18 }, { name: 'Araña gigante', e: '🕷️', hp: 26, atk: 12, xp: 22, gold: 8 },
+  { name: 'Cocodrilo', e: '🐊', hp: 44, atk: 14, xp: 34, gold: 14 }, { name: 'Zombi', e: '🧟', hp: 48, atk: 13, xp: 36, gold: 12 }, { name: 'Slime tóxico', e: '🟣', hp: 38, atk: 15, xp: 32, gold: 16 },
+  { name: 'Golem', e: '🗿', hp: 68, atk: 17, xp: 52, gold: 22 }, { name: 'Arpía', e: '🦅', hp: 52, atk: 19, xp: 50, gold: 20 }, { name: 'Troll', e: '👹', hp: 80, atk: 20, xp: 62, gold: 28 },
+  { name: 'Demonio', e: '😈', hp: 90, atk: 24, xp: 85, gold: 38 }, { name: 'Esqueleto', e: '💀', hp: 76, atk: 23, xp: 78, gold: 30 }, { name: 'Elemental', e: '🔥', hp: 84, atk: 26, xp: 90, gold: 40 },
 ];
-const RPG_DUNGEON_POOL = [2, 3, 4];
-const RPG_SAVE_KEY = '@rpg_save';
-function makePlayer() { return { hp: 30, maxHp: 30, atk: 8, def: 3, lv: 1, xp: 0, xpNext: 20, gold: 10, potions: 2 }; }
+const RPG_BOSS = { name: 'Dragón Ancestral', e: '🐉', hp: 220, atk: 30, xp: 400, gold: 300, boss: true };
+const RPG_HINTS = ['«El Dragón duerme en el volcán, al noreste. Ve preparado… nivel 7 como mínimo.»', '«En las montañas hay golems. ¡Lleva pociones y éter!»', '«Defenderte reduce mucho el daño cuando el enemigo carga un golpe.»'];
+function rpgRng(seed) { let a = seed >>> 0; return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function rpgProgress(x, y) { return (x + (RPG_H - 1 - y)) / (RPG_W + RPG_H - 2); }
+function rpgZone(x, y) { const p = rpgProgress(x, y); return RPG_ZONES[p < 0.25 ? 0 : p < 0.5 ? 1 : p < 0.7 ? 2 : p < 0.88 ? 3 : 4]; }
+const RPG_START = { x: 3, y: RPG_H - 4 };
+function rpgGenWorld(seed) {
+  const rnd = rpgRng(seed);
+  const t = Array.from({ length: RPG_H }, () => Array(RPG_W).fill('.'));
+  for (let y = 0; y < RPG_H; y++) for (let x = 0; x < RPG_W; x++) {
+    if (x < 2 || y < 2 || x >= RPG_W - 2 || y >= RPG_H - 2) { t[y][x] = 'T'; continue; }
+    const p = rpgProgress(x, y); const r = rnd();
+    if (p < 0.25) t[y][x] = r < 0.08 ? 'T' : '.';
+    else if (p < 0.5) t[y][x] = r < 0.3 ? 'T' : r < 0.55 ? 'f' : '.';
+    else if (p < 0.7) t[y][x] = r < 0.12 ? '~' : r < 0.2 ? 'T' : r < 0.45 ? 'f' : '.';
+    else if (p < 0.88) t[y][x] = r < 0.12 ? '^' : r < 0.2 ? 'T' : r < 0.75 ? 'm' : '.';
+    else t[y][x] = r < 0.1 ? '#' : r < 0.2 ? '^' : 'v';
+  }
+  // camino seguro de la aldea al volcán
+  const target = { x: RPG_W - 6, y: 5 };
+  let cx = RPG_START.x, cy = RPG_START.y; const road = [];
+  while (cx !== target.x || cy !== target.y) {
+    t[cy][cx] = '='; road.push([cx, cy]);
+    const dx = target.x - cx, dy = target.y - cy;
+    const horiz = Math.abs(dx) > 0 && (Math.abs(dy) === 0 || rnd() < Math.abs(dx) / (Math.abs(dx) + Math.abs(dy)));
+    if (horiz) cx += Math.sign(dx); else cy += Math.sign(dy);
+    if (rnd() < 0.18) { const wob = rnd() < 0.5 ? -1 : 1; const nx = cx, ny = cy + wob; if (ny > 2 && ny < RPG_H - 3) { t[ny][nx] = '='; road.push([nx, ny]); } }
+  }
+  t[cy][cx] = '=';
+  // pueblos, lair, cofres, npcs
+  const clear = (x, y, r) => { for (let j = -r; j <= r; j++) for (let i = -r; i <= r; i++) if (t[y + j] && t[y + j][x + i] !== undefined && t[y + j][x + i] !== '=') t[y + j][x + i] = '.'; };
+  clear(RPG_START.x, RPG_START.y, 2); t[RPG_START.y][RPG_START.x] = 'H';
+  const vil = road[Math.floor(road.length * 0.52)];
+  clear(vil[0], vil[1], 1); t[vil[1]][vil[0]] = 'V';
+  clear(target.x, target.y, 1); t[target.y - 1][target.x] = 'L'; t[target.y][target.x] = '=';
+  for (let j = -2; j <= 0; j++) for (let i = -2; i <= 2; i++) if (!(i === 0 && j === -1) && !(i === 0 && j === 0) && t[target.y + j - 1] && !(j === 0 && i === 0)) { if (t[target.y + j - 1][target.x + i] !== 'L' && j < 0) t[target.y + j - 1][target.x + i] = '#'; }
+  t[target.y - 1][target.x] = 'L';
+  let placed = 0;
+  while (placed < 7) { const x = 3 + Math.floor(rnd() * (RPG_W - 6)), y = 3 + Math.floor(rnd() * (RPG_H - 6)); if (t[y][x] === '.' || t[y][x] === 'f' || t[y][x] === 'v' || t[y][x] === 'm') { if (Math.abs(x - RPG_START.x) + Math.abs(y - RPG_START.y) > 4) { t[y][x] = 'c'; placed++; } } }
+  [0.18, 0.4, 0.7].forEach((f, i) => { const p = road[Math.floor(road.length * f)]; const nx = p[0], ny = p[1] - 1; if (t[ny] && t[ny][nx] !== '=' && t[ny][nx] !== 'H' && t[ny][nx] !== 'V') t[ny][nx] = 'N'; else if (t[p[1] + 1] && t[p[1] + 1][p[0]] !== '=') t[p[1] + 1][p[0]] = 'N'; });
+  return t.map(r => r.join(''));
+}
+const rpgMakePlayer = () => ({ hp: 36, maxHp: 36, mp: 10, maxMp: 10, atk: 9, def: 3, lv: 1, xp: 0, xpNext: 24, gold: 20, potions: 2, ethers: 1, weapon: 0, armor: 0 });
+const RPG_WEAPONS = [['Daga oxidada', 0, 0], ['Espada de hierro', 4, 60], ['Hoja rúnica', 5, 150], ['Filo del alba', 7, 320]];
+const RPG_ARMORS = [['Túnica', 0, 0], ['Cota de cuero', 2, 50], ['Armadura de acero', 3, 140], ['Coraza de dragón', 5, 300]];
+const RPG_SPELLS = [{ id: 'fire', name: '🔥 Fuego', mp: 4, lv: 1 }, { id: 'heal', name: '💚 Curar', mp: 5, lv: 1 }, { id: 'bolt', name: '⚡ Rayo', mp: 9, lv: 4 }];
+
+const RpgTiles = React.memo(function RpgTiles({ world, x0, y0, cols, rows, T }) {
+  const out = [];
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+    const wx = x0 + i, wy = y0 + j;
+    const ch = world[wy] && world[wy][wx] !== undefined ? world[wy][wx] : 'T';
+    const d = RPG_TILE[ch];
+    out.push(
+      <View key={`${i}-${j}`} style={{ position: 'absolute', left: i * T, top: j * T, width: T, height: T, backgroundColor: d.bg, borderWidth: 0.5, borderColor: 'rgba(0,0,0,0.25)', alignItems: 'center', justifyContent: 'center' }}>
+        {d.e ? <Text style={{ fontSize: T * 0.6 }}>{d.e}</Text> : null}
+      </View>
+    );
+  }
+  return <>{out}</>;
+});
+
 function PixelRPG({ onExit }) {
-  const TILE = 46;
-  const [pos, setPos] = React.useState({ x: 1, y: 1 });
-  const [player, setPlayer] = React.useState(makePlayer());
-  const [battle, setBattle] = React.useState(null); // { enemy, enemyHp, log, turn }
-  const [msg, setMsg] = React.useState('Bienvenido al pueblo. Explora el mapa.');
-  const [scene, setScene] = React.useState('map'); // map | battle | town | gameover | win
-
-  // Load save
-  React.useEffect(() => {
-    AsyncStorage.getItem(RPG_SAVE_KEY).then(v => {
-      if (v) { try { const s = JSON.parse(v); setPlayer(s.player); setPos(s.pos); setMsg('Partida cargada.'); } catch(e){} }
-    });
+  const T = Math.floor(AREA_W / 8);
+  const VC = 9, VR = Math.floor((AREA_H - 214) / T);
+  const fx = useFX();
+  const later = useTimeouts();
+  const [best, submitBest] = useBest('rpg');
+  const [scene, setScene] = useState('menu');          // menu | map | battle | town | over | win
+  const [, force] = useReducer(x => x + 1, 0);
+  const g = useRef(null);
+  const holdRef = useRef(null);
+  const newWorld = () => { const seed = Math.floor(Math.random() * 1e9); return { seed, world: rpgGenWorld(seed), opened: [] }; };
+  const initState = () => { const w = newWorld(); return { ...w, p: rpgMakePlayer(), x: RPG_START.x, y: RPG_START.y, vx: RPG_START.x, vy: RPG_START.y, msg: '¡Bienvenido, aventurero! Derrota al dragón del volcán.', battle: null, menu: false, t: 0, hasSave: false, steps: 0, won: false, shop: null }; };
+  if (!g.current) g.current = initState();
+  const scoreOf = s => s.p.lv * 100 + s.p.gold + (s.won ? 1000 : 0);
+  const save = s => { AsyncStorage.setItem(RPG_SAVE_KEY, JSON.stringify({ seed: s.seed, opened: s.opened, p: s.p, x: s.x, y: s.y, won: s.won })).catch(() => {}); };
+  useEffect(() => {
+    AsyncStorage.getItem(RPG_SAVE_KEY).then(v => { if (v) { try { const d = JSON.parse(v); g.current.save = d; g.current.hasSave = true; force(); } catch (e) {} } }).catch(() => {});
   }, []);
-  const save = (p, po) => AsyncStorage.setItem(RPG_SAVE_KEY, JSON.stringify({ player: p, pos: po }));
-
-  const move = (dx, dy) => {
+  const newGame = () => { fx.clear(); AsyncStorage.removeItem(RPG_SAVE_KEY).catch(() => {}); g.current = initState(); setScene('map'); };
+  const continueGame = () => {
+    const d = g.current.save; if (!d) return newGame();
+    const world = rpgGenWorld(d.seed).map(r => r.split(''));
+    d.opened.forEach(([x, y]) => { world[y][x] = '.'; });
+    const s = initState(); Object.assign(s, { seed: d.seed, world: world.map(r => r.join('')), opened: d.opened, p: { ...rpgMakePlayer(), ...d.p }, x: d.x, y: d.y, vx: d.x, vy: d.y, won: !!d.won, msg: 'Partida cargada.', hasSave: true });
+    g.current = s; setScene('map');
+  };
+  const levelUp = (s, cx, cy) => {
+    const p = s.p; let up = 0;
+    while (p.xp >= p.xpNext) { p.xp -= p.xpNext; p.lv += 1; p.maxHp += 10; p.maxMp += 3; p.atk += 2; p.def += 1; p.xpNext = Math.floor(p.xpNext * 1.42) + 4; p.hp = p.maxHp; p.mp = p.maxMp; up += 1; }
+    if (up) { fx.pop(cx, cy, `¡NIVEL ${p.lv}!`, C.amber, 26); fx.flash(C.amber, 0.3); hx.win(); const sp = RPG_SPELLS.find(q => q.lv === p.lv && q.lv > 1); if (sp) s.battle && (s.battle.log = `✨ ¡Aprendiste ${sp.name}!`); submitBest(scoreOf(s)); }
+    return up;
+  };
+  const startBattle = (s, enemy, boss) => {
+    const sc = boss ? 1 : 1 + Math.max(0, s.p.lv - 6) * 0.04;
+    s.battle = { enemy, hp: Math.round(enemy.hp * sc), max: Math.round(enemy.hp * sc), atk: Math.round(enemy.atk * sc), turn: 'player', log: boss ? '¡El dragón ruge desde el volcán!' : `¡Un ${enemy.name} salvaje aparece!`, count: 0, charging: false, defending: false, spellMenu: false, t: 0, hit: 0, boss: !!boss };
+    fx.flash('#fff', 0.5); fx.shake(6, 0.3); hx.warn();
+    setScene('battle');
+  };
+  const tryMove = (dx, dy) => {
+    const s = g.current;
     if (scene !== 'map') return;
-    const nx = pos.x + dx, ny = pos.y + dy;
-    if (nx < 0 || nx > 11 || ny < 0 || ny > 11) return;
-    const tile = RPG_MAP[ny][nx];
-    if (tile === 3 || tile === 2) return;
-    const newPos = { x: nx, y: ny };
-    setPos(newPos);
-    if (tile === 4) { setScene('town'); setMsg('Entraste al pueblo. El posadero te cura.'); return; }
-    if (tile === 5) { setMsg('Cueva oscura... hay monstruos más fuertes.'); }
-    // random encounter on grass/dungeon
-    const encounterChance = tile === 0 ? 0.25 : tile === 5 ? 0.40 : 0;
-    if (Math.random() < encounterChance) {
-      const pool = tile === 5 ? RPG_DUNGEON_POOL : [0, 1, 2];
-      const eData = RPG_ENEMIES[pool[Math.floor(Math.random() * pool.length)]];
-      setBattle({ enemy: eData, enemyHp: eData.hp, log: `¡Apareció un ${eData.name}!`, turn: 'player' });
-      setScene('battle');
+    const nx = s.x + dx, ny = s.y + dy;
+    if (nx < 0 || ny < 0 || nx >= RPG_W || ny >= RPG_H) return;
+    const ch = s.world[ny][nx]; const d = RPG_TILE[ch];
+    if (d.block) return;
+    if (ch === 'L') { if (s.p.lv < 5) { s.msg = '🔥 Una fuerza ardiente te repele. Necesitas ser al menos nivel 5.'; hx.warn(); return; } s.x = nx; s.y = ny; startBattle(s, RPG_BOSS, true); return; }
+    s.x = nx; s.y = ny; s.steps += 1; hx.tick();
+    if (ch === 'H' || ch === 'V') { s.msg = ch === 'H' ? 'Llegaste a Aldea Luminar.' : 'Llegaste al Fuerte del Camino.'; later(() => { setScene('town'); }, 220); save(s); return; }
+    if (ch === 'c') { const gold = randInt(15, 40) + s.p.lv * 4; s.p.gold += gold; const pot = Math.random() < 0.5; if (pot) s.p.potions += 1; s.opened.push([nx, ny]); const row = s.world[ny].split(''); row[nx] = '.'; s.world[ny] = row.join(''); s.msg = `📦 ¡Cofre! +${gold} 💰${pot ? ' y una poción 🧪' : ''}`; hx.good(); save(s); return; }
+    if (ch === 'N') { s.msg = pick(RPG_HINTS); return; }
+    const z = rpgZone(nx, ny);
+    const enc = ch === '=' ? 0 : z.enc;
+    s.msg = ch === '=' ? '🛤️ Camino seguro.' : `${z.name} · cuidado con los monstruos`;
+    if (Math.random() < enc) { later(() => startBattle(s, RPG_ENEMIES[pick(z.pool)], false), 180); }
+    else if (s.steps % 6 === 0) save(s);
+  };
+  // ── batalla
+  const dmgNum = (txt, color, onEnemy) => fx.pop(onEnemy ? AREA_W / 2 : AREA_W / 2, onEnemy ? 150 : AREA_H - 210, txt, color, 26);
+  const endBattle = (s, won) => {
+    const b = s.battle;
+    if (won) {
+      s.p.xp += b.boss ? RPG_BOSS.xp : b.enemy.xp; const gold = b.enemy.gold; s.p.gold += gold;
+      fx.burst(AREA_W / 2, 150, C.amber, 30, 300, 0.9, 6); hx.win();
+      const up = levelUp(s, AREA_W / 2, 220);
+      if (b.boss) { s.won = true; save(s); setRes2(s); setScene('win'); s.battle = null; return; }
+      s.msg = `Derrotaste al ${b.enemy.name}: +${b.enemy.xp} XP +${gold} 💰${up ? ' · ¡subiste de nivel!' : ''}`;
+      s.battle = null; save(s); setScene('map');
     } else {
-      save(player, newPos);
+      s.p.gold = Math.floor(s.p.gold / 2); s.p.hp = Math.ceil(s.p.maxHp / 2); s.p.mp = s.p.maxMp; s.x = RPG_START.x; s.y = RPG_START.y; s.vx = s.x; s.vy = s.y;
+      s.msg = 'Caíste en combate… despiertas en la aldea con la mitad del oro.'; s.battle = null; hx.die(); save(s); setScene('over');
     }
   };
-
-  const battleAction = (action) => {
-    if (!battle || battle.turn !== 'player') return;
-    let { enemy, enemyHp, log } = battle;
-    let p = { ...player };
-    if (action === 'attack') {
-      const dmg = Math.max(1, p.atk - Math.floor(Math.random() * 3));
-      enemyHp -= dmg; log = `Atacaste por ${dmg} daño.`;
-    } else if (action === 'magic') {
-      const dmg = Math.max(3, Math.floor(p.atk * 1.6) - Math.floor(Math.random() * 4));
-      enemyHp -= dmg; log = `✨ Magia: ${dmg} daño!`;
-    } else if (action === 'potion') {
-      if (p.potions <= 0) { setBattle({ ...battle, log: 'No tienes pociones.' }); return; }
-      const heal = Math.floor(p.maxHp * 0.4);
-      p.hp = Math.min(p.maxHp, p.hp + heal); p.potions -= 1;
-      log = `Bebiste poción (+${heal} HP).`;
-      setBattle({ ...battle, enemy, enemyHp, log, turn: 'enemy', player: p });
-      setPlayer(p);
-      setTimeout(() => enemyTurn(p, { ...battle, enemyHp }), 700);
-      return;
-    } else if (action === 'run') {
-      if (Math.random() < 0.5) { setScene('map'); setBattle(null); setMsg('Escapaste.'); return; }
-      log = 'No pudiste escapar.';
-      setBattle({ ...battle, log, turn: 'enemy' });
-      setTimeout(() => enemyTurn(p, { ...battle, enemyHp }), 700);
-      return;
+  const setRes2 = s => { submitBest(scoreOf(s)); };
+  const enemyTurn = () => {
+    const s = g.current; const b = s.battle; if (!b) return;
+    b.count += 1;
+    let dmg = 0; let text;
+    if (b.charging) {
+      dmg = Math.round(b.atk * (b.boss ? 2.2 : 1.9)); text = `${b.enemy.e} ¡descarga un ataque brutal!`; b.charging = false;
+    } else if (b.count % 3 === 0 || (b.boss && b.count % 2 === 0)) {
+      b.charging = true; text = `${b.enemy.e} ${b.boss ? 'inhala fuego…' : 'prepara un golpe fuerte…'} ¡Defiéndete!`;
+    } else { dmg = Math.max(1, Math.round(b.atk - s.p.def * 0.6 + randInt(-1, 3))); text = `${b.enemy.e} ${b.enemy.name} ataca.`; }
+    if (dmg > 0) {
+      if (b.defending) dmg = Math.max(1, Math.round(dmg * 0.35));
+      dmg = Math.max(1, dmg - Math.floor(s.p.def * 0.3));
+      s.p.hp = Math.max(0, s.p.hp - dmg); dmgNum(`-${dmg}`, C.red, false); fx.shake(6, 0.2); fx.flash(C.red, 0.2); hx.bad();
+      text += ` Recibes ${dmg}.`;
     }
-    if (enemyHp <= 0) {
-      // Victory
-      p.xp += enemy.xp; p.gold += enemy.gold;
-      let levelMsg = '';
-      while (p.xp >= p.xpNext) { p.xp -= p.xpNext; p.lv += 1; p.maxHp += 8; p.hp = p.maxHp; p.atk += 2; p.def += 1; p.xpNext = Math.floor(p.xpNext * 1.5); levelMsg = ` ⬆️ ¡Nivel ${p.lv}!`; }
-      setPlayer(p); save(p, pos); setBattle(null); setScene('map');
-      setMsg(`Derrotaste al ${enemy.name}! +${enemy.xp}XP +${enemy.gold}💰${levelMsg}`);
-      return;
-    }
-    setBattle({ enemy, enemyHp, log, turn: 'enemy' });
-    setTimeout(() => enemyTurn(p, { enemy, enemyHp, log, turn: 'enemy' }), 700);
+    b.defending = false; b.log = text;
+    if (s.p.hp <= 0) { later(() => endBattle(s, false), 700); force(); return; }
+    b.turn = 'player'; force();
   };
-
-  const enemyTurn = (p, bState) => {
-    const { enemy, enemyHp } = bState;
-    const dmg = Math.max(1, enemy.atk - p.def - Math.floor(Math.random() * 3));
-    const newHp = p.hp - dmg;
-    const newP = { ...p, hp: newHp };
-    setPlayer(newP);
-    if (newHp <= 0) { setScene('gameover'); setBattle(null); setMsg(`Fuiste derrotado por ${enemy.name}...`); return; }
-    setBattle({ enemy, enemyHp, log: `${enemy.emoji} ${enemy.name} atacó por ${dmg} daño.`, turn: 'player' });
+  const finishPlayerAction = (s, log) => {
+    const b = s.battle; b.log = log;
+    if (b.hp <= 0) { b.hp = 0; force(); later(() => endBattle(s, true), 700); return; }
+    b.turn = 'enemy'; force();
+    later(enemyTurn, 800);
   };
-
-  const healTown = () => {
-    const p = { ...player, hp: player.maxHp, potions: player.potions + 1 };
-    setPlayer(p); save(p, pos); setScene('map'); setMsg('La posada te curó. ¡Sigue aventurando!');
+  const act = a => {
+    const s = g.current; const b = s.battle; const p = s.p;
+    if (!b || b.turn !== 'player') return;
+    b.spellMenu = false;
+    if (a === 'attack') {
+      const crit = Math.random() < 0.15; let dmg = p.atk + randInt(0, 3); if (crit) dmg *= 2;
+      b.hp -= dmg; b.hit = 0.25; dmgNum(`${crit ? '💥' : ''}${dmg}`, crit ? C.amber : C.text, true); fx.burst(AREA_W / 2, 150, crit ? C.amber : '#fff', 10, 220); hx.hit();
+      finishPlayerAction(s, `Atacas por ${dmg}${crit ? ' (¡CRÍTICO!)' : ''}.`);
+    } else if (a === 'defend') {
+      b.defending = true; p.mp = Math.min(p.maxMp, p.mp + 2); fx.ring(AREA_W / 2, AREA_H - 210, C.cyan, 60); hx.tap();
+      finishPlayerAction(s, '🛡️ Te proteges y recuperas 2 MP.');
+    } else if (a === 'potion') {
+      if (p.potions <= 0) { b.log = 'No tienes pociones.'; force(); return; }
+      const heal = Math.round(p.maxHp * 0.45); p.hp = Math.min(p.maxHp, p.hp + heal); p.potions -= 1; dmgNum(`+${heal}`, C.lime, false); hx.good();
+      finishPlayerAction(s, `🧪 Bebes una poción (+${heal} HP).`);
+    } else if (a === 'ether') {
+      if (p.ethers <= 0) { b.log = 'No tienes éter.'; force(); return; }
+      p.mp = Math.min(p.maxMp, p.mp + 10); p.ethers -= 1; dmgNum('+10 MP', C.cyan, false); hx.good();
+      finishPlayerAction(s, '💧 Recuperas 10 MP.');
+    } else if (a === 'run') {
+      if (b.boss) { b.log = '¡No puedes huir del dragón!'; force(); return; }
+      if (Math.random() < 0.55) { s.battle = null; s.msg = 'Escapaste.'; setScene('map'); hx.tick(); return; }
+      finishPlayerAction(s, 'No lograste escapar…');
+    } else if (a === 'spell') { b.spellMenu = true; force(); }
   };
-  const newGame = () => { setPlayer(makePlayer()); setPos({ x: 1, y: 1 }); setScene('map'); setMsg('Nueva partida. ¡Buena suerte!'); AsyncStorage.removeItem(RPG_SAVE_KEY); };
+  const cast = id => {
+    const s = g.current; const b = s.battle; const p = s.p; const sp = RPG_SPELLS.find(q => q.id === id);
+    if (!b || b.turn !== 'player') return;
+    if (p.mp < sp.mp) { b.log = 'No tienes suficiente MP.'; force(); return; }
+    p.mp -= sp.mp; b.spellMenu = false;
+    if (id === 'heal') { const heal = Math.round(p.maxHp * 0.4); p.hp = Math.min(p.maxHp, p.hp + heal); dmgNum(`+${heal}`, C.lime, false); fx.ring(AREA_W / 2, AREA_H - 210, C.lime, 70); hx.good(); finishPlayerAction(s, `💚 Te curas ${heal} HP.`); return; }
+    const dmg = Math.round(p.atk * (id === 'fire' ? 1.9 : 2.8) + randInt(1, 5));
+    b.hp -= dmg; b.hit = 0.3; dmgNum(`${dmg}`, id === 'fire' ? C.orange : C.cyan, true); fx.burst(AREA_W / 2, 150, id === 'fire' ? C.orange : C.cyan, 26, 300, 0.8, 6); fx.ring(AREA_W / 2, 150, id === 'fire' ? C.orange : C.cyan, 80); fx.shake(5, 0.2); hx.heavy();
+    finishPlayerAction(s, `${sp.name}: ${dmg} de daño.`);
+  };
+  // ── pueblo
+  const buy = what => {
+    const s = g.current; const p = s.p;
+    const spend = c => { if (p.gold < c) { s.shop = 'No tienes suficiente oro.'; hx.bad(); return false; } p.gold -= c; hx.good(); return true; };
+    if (what === 'potion' && spend(15)) { p.potions += 1; s.shop = '🧪 Poción comprada.'; }
+    if (what === 'ether' && spend(25)) { p.ethers += 1; s.shop = '💧 Éter comprado.'; }
+    if (what === 'weapon') { const nx = RPG_WEAPONS[p.weapon + 1]; if (nx && spend(nx[2])) { p.weapon += 1; p.atk += nx[1]; s.shop = `⚔️ ¡Equipas ${nx[0]}!`; } }
+    if (what === 'armor') { const nx = RPG_ARMORS[p.armor + 1]; if (nx && spend(nx[2])) { p.armor += 1; p.def += nx[1]; s.shop = `🛡️ ¡Equipas ${nx[0]}!`; } }
+    save(s); force();
+  };
+  const rest = () => { const s = g.current; s.p.hp = s.p.maxHp; s.p.mp = s.p.maxMp; s.shop = '🛏️ Descansas y recuperas todo.'; fx.flash(C.lime, 0.2); hx.good(); save(s); force(); };
 
-  const visRowStart = Math.max(0, Math.min(pos.y - 3, 12 - 7));
-  const visColStart = Math.max(0, Math.min(pos.x - 3, 12 - 7));
+  // ── animación del mapa
+  useLoop(scene === 'map' || scene === 'battle', dt => {
+    const s = g.current; s.t += dt;
+    s.vx += (s.x - s.vx) * Math.min(1, dt * 14); s.vy += (s.y - s.vy) * Math.min(1, dt * 14);
+    if (s.battle) { s.battle.t += dt; if (s.battle.hit > 0) s.battle.hit -= dt; }
+  });
+  const pan = usePan(fx, {
+    down: () => { g.current.used = false; },
+    move: (x, y, gs) => { const s = g.current; if (s.used || scene !== 'map') return; if (Math.abs(gs.dx) > 24 || Math.abs(gs.dy) > 24) { s.used = true; if (Math.abs(gs.dx) > Math.abs(gs.dy)) tryMove(gs.dx > 0 ? 1 : -1, 0); else tryMove(0, gs.dy > 0 ? 1 : -1); } },
+  });
+  const startHold = (dx, dy) => { tryMove(dx, dy); clearInterval(holdRef.current); holdRef.current = setInterval(() => tryMove(dx, dy), 170); };
+  const stopHold = () => { clearInterval(holdRef.current); holdRef.current = null; };
+  useEffect(() => () => clearInterval(holdRef.current), []);
 
+  const s = g.current; const p = s.p; const b = s.battle;
+  const camX = clamp(s.vx - (VC - 1) / 2, 0, RPG_W - VC), camY = clamp(s.vy - (VR - 1) / 2, 0, RPG_H - VR);
+  const ix = Math.floor(camX), iy = Math.floor(camY);
+  const dpad = (label, dx, dy, st) => (
+    <Pressable testID={`dp-${label}`} onPressIn={() => startHold(dx, dy)} onPressOut={stopHold} style={[{ width: 56, height: 56, borderRadius: 18, backgroundColor: alpha(C.amber, 0.14), borderWidth: 2, borderColor: alpha(C.amber, 0.6), alignItems: 'center', justifyContent: 'center' }, st]}>
+      <Text style={{ color: C.amber, fontSize: 24, fontWeight: '900' }}>{label}</Text>
+    </Pressable>
+  );
+  const Btn2 = ({ label, onPress, color = C.amber, disabled, wide }) => (
+    <Pressable onPress={onPress} disabled={disabled} style={{ width: wide ? '100%' : '48%', opacity: disabled ? 0.35 : 1 }}>
+      <View style={{ paddingVertical: 12, borderRadius: 14, backgroundColor: alpha(color, 0.16), borderWidth: 2, borderColor: alpha(color, 0.8), alignItems: 'center' }}><Text style={{ color: C.text, fontWeight: '900', fontSize: 14 }}>{label}</Text></View>
+    </Pressable>
+  );
+  const BarRow = (label, v, m, col) => <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><Text style={{ color: col, fontSize: 10, fontWeight: '900', width: 18 }}>{label}</Text><Bar value={v} max={m} color={col} h={8} w={90} /><Text style={{ color: C.dim, fontSize: 10 }}>{v}/{m}</Text></View>;
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#0a0a00' }}>
-      {/* Header */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 8, backgroundColor: '#111' }}>
-        <Pressable onPress={onExit}><Text style={{ color: '#fa0', fontSize: 14, fontWeight: 'bold' }}>← Salir</Text></Pressable>
-        <Text style={{ color: '#fff', fontSize: 12, fontWeight: '900' }}>Lv{player.lv} ❤️{player.hp}/{player.maxHp} ⚔️{player.atk} 💰{player.gold} 🧪{player.potions}</Text>
-      </View>
-      {/* Message */}
-      <View style={{ backgroundColor: '#1a1500', padding: 8, minHeight: 36 }}>
-        <Text style={{ color: '#ffd700', fontSize: 13 }}>{msg}</Text>
-      </View>
-
-      {/* MAP */}
-      {scene === 'map' && (
-        <>
-          <View style={{ alignSelf: 'center', marginVertical: 6 }}>
-            {Array.from({ length: 7 }, (_, rowOff) => (
-              <View key={rowOff} style={{ flexDirection: 'row' }}>
-                {Array.from({ length: 7 }, (_, colOff) => {
-                  const r = visRowStart + rowOff, c = visColStart + colOff;
-                  const tile = RPG_MAP[r]?.[c] ?? 3;
-                  const isPlayer = r === pos.y && c === pos.x;
-                  return (
-                    <View key={colOff} style={{ width: TILE, height: TILE, justifyContent: 'center', alignItems: 'center', backgroundColor: tile === 0 ? '#1a3300' : tile === 1 ? '#2a1800' : tile === 2 ? '#001a33' : tile === 3 ? '#0a1a00' : tile === 4 ? '#2a1a00' : '#1a0020' }}>
-                      <Text style={{ fontSize: 26 }}>{isPlayer ? '🧙' : RPG_TILE[tile]}</Text>
-                    </View>
-                  );
-                })}
+    <GameScreen title="PIXEL RPG" emoji="🧙" accent={C.amber} onExit={onExit} score={scoreOf(s)} best={best} scoreLabel="PUNTOS"
+      hud={scene === 'menu' ? null : <>{BarRow('HP', p.hp, p.maxHp, C.red)}{BarRow('MP', p.mp, p.maxMp, C.cyan)}<Text style={{ color: C.amber, fontWeight: '900', fontSize: 12 }}>Nv.{p.lv}</Text></>}>
+      <PlayArea fx={fx} bg="#0a0803" border={alpha(C.amber, 0.4)} {...(scene === 'map' ? pan : {})}>
+        {scene === 'map' && (
+          <>
+            <View style={{ position: 'absolute', left: 0, top: 0, width: AREA_W, height: VR * T, overflow: 'hidden' }}>
+              <View style={{ position: 'absolute', left: (AREA_W - VC * T) / 2 - (camX - ix) * T, top: -(camY - iy) * T, width: (VC + 1) * T, height: (VR + 1) * T }}>
+                <RpgTiles world={s.world} x0={ix} y0={iy} cols={VC + 1} rows={VR + 1} T={T} />
+                <Text style={{ position: 'absolute', left: (s.vx - ix) * T, top: (s.vy - iy) * T - 2, width: T, textAlign: 'center', fontSize: T * 0.66, lineHeight: T, ...tglow('#000', 4) }}>🧙</Text>
               </View>
-            ))}
-          </View>
-          {/* D-Pad */}
-          <View style={{ alignItems: 'center', marginTop: 4 }}>
-            <Pressable onPress={() => move(0, -1)} style={{ backgroundColor: '#333', padding: 14, borderRadius: 10, marginBottom: 4 }}><Text style={{ fontSize: 22 }}>⬆️</Text></Pressable>
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <Pressable onPress={() => move(-1, 0)} style={{ backgroundColor: '#333', padding: 14, borderRadius: 10 }}><Text style={{ fontSize: 22 }}>⬅️</Text></Pressable>
-              <Pressable onPress={() => move(0, 1)} style={{ backgroundColor: '#333', padding: 14, borderRadius: 10 }}><Text style={{ fontSize: 22 }}>⬇️</Text></Pressable>
-              <Pressable onPress={() => move(1, 0)} style={{ backgroundColor: '#333', padding: 14, borderRadius: 10 }}><Text style={{ fontSize: 22 }}>➡️</Text></Pressable>
+              <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 30, backgroundColor: 'rgba(0,0,0,0.35)' }} />
+            </View>
+            <View style={{ position: 'absolute', left: 10, right: 190, top: VR * T + 6 }}>
+              <Text numberOfLines={4} style={{ color: C.amber, fontSize: 12, lineHeight: 16, minHeight: 32 }}>{s.msg}</Text>
+            </View>
+            <View style={{ position: 'absolute', left: 14, bottom: 14, gap: 8 }}>
+              <Text style={{ color: C.dim, fontSize: 11 }}>💰 {p.gold}  🧪 {p.potions}  💧 {p.ethers}</Text>
+              <Text style={{ color: C.dim, fontSize: 11 }}>XP {p.xp}/{p.xpNext}</Text>
+              <Text style={{ color: C.dim, fontSize: 11 }}>⚔️ {p.atk}  🛡️ {p.def}</Text>
+              <Text style={{ color: alpha(C.dim, 0.8), fontSize: 10 }}>Desliza o usa la cruz</Text>
+            </View>
+            <View style={{ position: 'absolute', right: 14, bottom: 12, width: 56 * 3 + 12, height: 56 * 3 + 6 }}>
+              {dpad('▲', 0, -1, { position: 'absolute', left: 56 + 6, top: 0 })}
+              {dpad('◀', -1, 0, { position: 'absolute', left: 0, top: 56 + 3 })}
+              {dpad('▶', 1, 0, { position: 'absolute', left: (56 + 6) * 2, top: 56 + 3 })}
+              {dpad('▼', 0, 1, { position: 'absolute', left: 56 + 6, top: (56 + 3) * 2 })}
+            </View>
+          </>
+        )}
+        {scene === 'battle' && b && (
+          <View style={{ flex: 1, backgroundColor: b.boss ? '#1a0505' : '#0d0a14' }}>
+            <View style={{ alignItems: 'center', marginTop: 16 }}>
+              <Text style={{ color: C.text, fontSize: 18, fontWeight: '900', letterSpacing: 1 }}>{b.enemy.name}</Text>
+              <Bar value={b.hp} max={b.max} color={C.red} h={12} w={AREA_W * 0.6} style={{ marginTop: 6 }} />
+              <Text style={{ color: C.dim, fontSize: 11, marginTop: 2 }}>{Math.max(0, b.hp)} / {b.max}</Text>
+            </View>
+            <View style={{ height: 150, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ fontSize: b.boss ? 110 : 84, transform: [{ translateY: Math.sin(b.t * 3) * 6 }, { translateX: b.hit > 0 ? (Math.random() - 0.5) * 16 : 0 }, { scale: b.charging ? 1.12 + Math.sin(b.t * 14) * 0.04 : 1 }], opacity: b.hit > 0 ? 0.55 : 1, ...tglow(b.charging ? C.red : '#000', b.charging ? 20 : 4) }}>{b.enemy.e}</Text>
+            </View>
+            <View style={{ marginHorizontal: 14, padding: 12, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: alpha(C.amber, 0.3), minHeight: 56, justifyContent: 'center' }}>
+              <Text style={{ color: b.charging ? C.red : C.text, fontSize: 14, lineHeight: 19 }}>{b.log}</Text>
+            </View>
+            <View style={{ position: 'absolute', left: 14, right: 14, bottom: 14 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 }}>{BarRow('HP', p.hp, p.maxHp, C.red)}{BarRow('MP', p.mp, p.maxMp, C.cyan)}</View>
+              {b.turn === 'player' && !b.spellMenu && (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between' }}>
+                  <Btn2 label="⚔️ Atacar" onPress={() => act('attack')} color={C.red} />
+                  <Btn2 label="✨ Magia" onPress={() => act('spell')} color={C.violet} />
+                  <Btn2 label="🛡️ Defender" onPress={() => act('defend')} color={C.cyan} />
+                  <Btn2 label={`🧪 Poción (${p.potions})`} onPress={() => act('potion')} color={C.lime} />
+                  <Btn2 label={`💧 Éter (${p.ethers})`} onPress={() => act('ether')} color={C.blue} />
+                  <Btn2 label="🏃 Huir" onPress={() => act('run')} color={C.dim} />
+                </View>
+              )}
+              {b.turn === 'player' && b.spellMenu && (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between' }}>
+                  {RPG_SPELLS.filter(q => p.lv >= q.lv).map(q => <Btn2 key={q.id} label={`${q.name} · ${q.mp} MP`} onPress={() => cast(q.id)} color={C.violet} disabled={p.mp < q.mp} />)}
+                  <Btn2 label="← Volver" onPress={() => { b.spellMenu = false; force(); }} color={C.dim} wide />
+                </View>
+              )}
+              {b.turn === 'enemy' && <Text style={{ color: C.dim, textAlign: 'center', paddingVertical: 14 }}>Turno del enemigo…</Text>}
             </View>
           </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 8 }}>
-            <Text style={{ color: '#888', fontSize: 12 }}>XP: {player.xp}/{player.xpNext}  </Text>
-            <Text style={{ color: '#888', fontSize: 12 }}>Pos: ({pos.x},{pos.y})</Text>
-          </View>
-        </>
-      )}
-
-      {/* BATTLE */}
-      {scene === 'battle' && battle && (
-        <View style={{ flex: 1, padding: 16 }}>
-          <View style={{ backgroundColor: '#1a0010', borderRadius: 12, padding: 16, borderWidth: 2, borderColor: '#f0f', alignItems: 'center', marginBottom: 12 }}>
-            <Text style={{ fontSize: 60 }}>{battle.enemy.emoji}</Text>
-            <Text style={{ color: '#fff', fontSize: 22, fontWeight: '900' }}>{battle.enemy.name}</Text>
-            <Text style={{ color: '#f44', fontSize: 16 }}>HP: {battle.enemyHp} / {battle.enemy.hp}</Text>
-            <View style={{ width: 200, height: 10, backgroundColor: '#400', borderRadius: 5, marginTop: 6 }}>
-              <View style={{ width: Math.max(0, 200 * battle.enemyHp / battle.enemy.hp), height: 10, backgroundColor: '#f44', borderRadius: 5 }} />
+        )}
+        {scene === 'town' && (
+          <View style={{ flex: 1, padding: 18, alignItems: 'center' }}>
+            <Text style={{ fontSize: 54, marginTop: 6 }}>🏘️</Text>
+            <Text style={{ color: C.amber, fontSize: 22, fontWeight: '900', letterSpacing: 1 }}>TIENDA Y POSADA</Text>
+            <Text style={{ color: C.dim, fontSize: 12, marginVertical: 6, textAlign: 'center' }}>💰 {p.gold}  ·  🧪 {p.potions}  ·  💧 {p.ethers}  ·  ⚔️ {p.atk}  ·  🛡️ {p.def}</Text>
+            <Text style={{ color: C.lime, fontSize: 12, minHeight: 18, marginBottom: 8 }}>{s.shop || ' '}</Text>
+            <View style={{ width: '100%', gap: 8 }}>
+              <Btn2 wide label="🛏️ Descansar (gratis): HP y MP al máximo" onPress={rest} color={C.lime} />
+              <Btn2 wide label="🧪 Poción · 15 💰" onPress={() => buy('potion')} color={C.red} />
+              <Btn2 wide label="💧 Éter · 25 💰" onPress={() => buy('ether')} color={C.blue} />
+              <Btn2 wide label={RPG_WEAPONS[p.weapon + 1] ? `⚔️ ${RPG_WEAPONS[p.weapon + 1][0]} (+${RPG_WEAPONS[p.weapon + 1][1]} ATK) · ${RPG_WEAPONS[p.weapon + 1][2]} 💰` : '⚔️ Arma al máximo'} onPress={() => buy('weapon')} color={C.orange} disabled={!RPG_WEAPONS[p.weapon + 1]} />
+              <Btn2 wide label={RPG_ARMORS[p.armor + 1] ? `🛡️ ${RPG_ARMORS[p.armor + 1][0]} (+${RPG_ARMORS[p.armor + 1][1]} DEF) · ${RPG_ARMORS[p.armor + 1][2]} 💰` : '🛡️ Armadura al máximo'} onPress={() => buy('armor')} color={C.cyan} disabled={!RPG_ARMORS[p.armor + 1]} />
             </View>
+            <View style={{ marginTop: 16 }}><Btn label="SALIR AL MAPA" color={C.amber} onPress={() => { s.shop = null; setScene('map'); }} /></View>
           </View>
-          <View style={{ backgroundColor: '#001a10', borderRadius: 10, padding: 10, marginBottom: 12 }}>
-            <Text style={{ color: '#0f0', fontSize: 14 }}>{battle.log}</Text>
-          </View>
-          {battle.turn === 'player' && (
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' }}>
-              {[['attack','⚔️ Atacar','#c00'],['magic','✨ Magia','#00c'],['potion',`🧪 Poción (${player.potions})`,'#080'],['run','🏃 Huir','#555']].map(([act,lbl,bg])=>(
-                <Pressable key={act} onPress={() => battleAction(act)} style={{ backgroundColor: bg, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 10, minWidth: 130, alignItems: 'center' }}>
-                  <Text style={{ color: '#fff', fontSize: 16, fontWeight: '900' }}>{lbl}</Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
-          {battle.turn === 'enemy' && <Text style={{ color: '#aaa', textAlign: 'center', marginTop: 10 }}>Turno enemigo...</Text>}
-        </View>
-      )}
-
-      {/* TOWN */}
-      {scene === 'town' && (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-          <Text style={{ fontSize: 60 }}>🏘️</Text>
-          <Text style={{ color: '#fa0', fontSize: 26, fontWeight: '900', marginTop: 10 }}>Pueblo Luminar</Text>
-          <Text style={{ color: '#aaa', textAlign: 'center', marginVertical: 10 }}>El posadero te ofrece descanso y una poción.</Text>
-          <Text style={{ color: '#fff', fontSize: 16, marginBottom: 16 }}>HP: {player.hp}/{player.maxHp}  🧪 {player.potions}</Text>
-          <Pressable onPress={healTown} style={{ backgroundColor: '#2a8', padding: 16, borderRadius: 12, marginBottom: 12, width: 220, alignItems: 'center' }}><Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>Descansar (gratis)</Text></Pressable>
-          <Pressable onPress={() => setScene('map')} style={{ backgroundColor: '#444', padding: 14, borderRadius: 12, width: 220, alignItems: 'center' }}><Text style={{ color: '#fff', fontSize: 16 }}>Volver al mapa</Text></Pressable>
-        </View>
-      )}
-
-      {/* GAME OVER */}
-      {scene === 'gameover' && (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 }}>
-          <Text style={{ fontSize: 60 }}>💀</Text>
-          <Text style={{ color: '#f44', fontSize: 30, fontWeight: '900', marginTop: 10 }}>GAME OVER</Text>
-          <Text style={{ color: '#aaa', marginTop: 8 }}>Llegaste al nivel {player.lv}</Text>
-          <Pressable onPress={newGame} style={{ backgroundColor: '#c00', padding: 16, borderRadius: 12, marginTop: 24, width: 200, alignItems: 'center' }}><Text style={{ color: '#fff', fontSize: 18, fontWeight: '900' }}>Nueva Partida</Text></Pressable>
-        </View>
-      )}
-    </SafeAreaView>
+        )}
+        <Overlay show={scene === 'menu'} kind="start" emoji="🧙" title="PIXEL RPG" subtitle="Explora un mundo nuevo cada partida y derrota al Dragón Ancestral"
+          accent={C.amber} startLabel={s.hasSave ? 'NUEVA PARTIDA' : 'JUGAR'} onStart={newGame} onExit={onExit}
+          extra={s.hasSave ? <View style={{ marginTop: 14 }}><Btn label="CONTINUAR" ghost color={C.amber} onPress={continueGame} /></View> : null}
+          lines={['Explora, recoge cofres y combate por turnos', 'Compra equipo en las aldeas · Nivel 5 para el volcán', 'Defiende cuando el enemigo "carga" un golpe']} />
+        <Overlay show={scene === 'over'} kind="over" emoji="💀" title="DERROTADO" subtitle={s.msg} score={scoreOf(s)} best={best} accent={C.red} startLabel="SEGUIR" onStart={() => setScene('map')} onExit={onExit} />
+        <Overlay show={scene === 'win'} kind="win" emoji="🏆" title="¡DRAGÓN DERROTADO!" subtitle={`Nivel ${p.lv} · ${p.gold} 💰. La región vuelve a la paz.`} score={scoreOf(s)} best={best} isNew accent={C.amber} startLabel="NUEVA AVENTURA" onStart={newGame} onExit={onExit} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 // ─────────────────────────────────────────────────────────────────
