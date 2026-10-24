@@ -1590,16 +1590,16 @@ function PixelQuest({ onExit }) {
         <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: AREA_H * 0.45, bottom: 0, backgroundColor: TH.sky2, opacity: 0.55 }} />
         {Array.from({ length: 5 }, (_, i) => <Text key={`c${i}`} style={{ position: 'absolute', left: ((i * 170 - cam * 0.25 + s.t * 6) % (AREA_W + 170) + AREA_W + 170) % (AREA_W + 170) - 80, top: 30 + (i % 3) * 46, fontSize: 40, opacity: 0.8 }}>☁️</Text>)}
         {Array.from({ length: 4 }, (_, i) => <View key={`h${i}`} pointerEvents="none" style={{ position: 'absolute', left: ((i * 230 - cam * 0.5) % (AREA_W + 230) + AREA_W + 230) % (AREA_W + 230) - 120, top: GY - 70 - (i % 2) * 24, width: 200, height: 140, borderRadius: 100, backgroundColor: TH.top, opacity: 0.35 }} />)}
-        <View style={{ position: 'absolute', left: -cam, top: 0, width: 1, height: 1 }}>
+        <View style={{ position: 'absolute', left: -cam, top: 0, width: s.world.length + 600, height: AREA_H }}>
           {s.world.platforms.filter(pl => vis(pl.x, pl.w)).map((pl, i) => pl.h > 30 ? (
             <View key={`p${i}`} style={{ position: 'absolute', left: pl.x, top: pl.y, width: pl.w, height: pl.h, backgroundColor: TH.ground, borderTopWidth: 8, borderTopColor: TH.top }} />
           ) : (
             <View key={`p${i}`} style={{ position: 'absolute', left: pl.x, top: pl.y, width: pl.w, height: pl.h, backgroundColor: TH.plat, borderRadius: 4, borderTopWidth: 5, borderTopColor: TH.ptop, borderWidth: 1, borderColor: 'rgba(0,0,0,0.25)' }} />
           ))}
-          {s.world.coins.filter(c => !c.got && vis(c.x, 18)).map(c => <Text key={c.id} style={{ position: 'absolute', left: c.x - 2, top: c.y - 4, fontSize: 20 }}>🪙</Text>)}
-          {s.world.blocks.filter(b => vis(b.x, 35)).map((b, i) => <Text key={`b${i}`} style={{ position: 'absolute', left: b.x, top: b.y - 5, fontSize: 28 }}>{b.hit ? '📦' : '❓'}</Text>)}
-          {s.world.powerups.filter(u => u.active && vis(u.x, 25)).map((u, i) => <Text key={`u${i}`} style={{ position: 'absolute', left: u.x, top: u.y - 5 + Math.sin(s.t * 4 + i) * 3, fontSize: 25, ...tglow(C.amber, 8) }}>{u.type === 'life' ? '❤️' : u.type === 'doublejump' ? '🦅' : '⭐'}</Text>)}
-          {s.world.enemies.filter(e => e.active && vis(e.x, 30)).map((e, i) => <Text key={`e${i}`} style={{ position: 'absolute', left: e.x, top: e.y - 5 + Math.abs(Math.sin(s.t * 6 + i)) * -3, fontSize: 30 }}>👾</Text>)}
+          {s.world.coins.filter(c => !c.got && vis(c.x, 18)).map(c => <Text key={c.id} style={{ position: 'absolute', width: 34, lineHeight: 28, left: c.x - 2, top: c.y - 4, fontSize: 20 }}>🪙</Text>)}
+          {s.world.blocks.filter(b => vis(b.x, 35)).map((b, i) => <Text key={`b${i}`} style={{ position: 'absolute', width: 42, lineHeight: 36, left: b.x, top: b.y - 5, fontSize: 28 }}>{b.hit ? '📦' : '❓'}</Text>)}
+          {s.world.powerups.filter(u => u.active && vis(u.x, 25)).map((u, i) => <Text key={`u${i}`} style={{ position: 'absolute', width: 39, lineHeight: 33, left: u.x, top: u.y - 5 + Math.sin(s.t * 4 + i) * 3, fontSize: 25, ...tglow(C.amber, 8) }}>{u.type === 'life' ? '❤️' : u.type === 'doublejump' ? '🦅' : '⭐'}</Text>)}
+          {s.world.enemies.filter(e => e.active && vis(e.x, 30)).map((e, i) => <Text key={`e${i}`} style={{ position: 'absolute', width: 44, lineHeight: 38, left: e.x, top: e.y - 5 + Math.abs(Math.sin(s.t * 6 + i)) * -3, fontSize: 30 }}>👾</Text>)}
           {s.world.goal && (
             <View style={{ position: 'absolute', left: s.world.goal.x, top: s.world.goal.y, width: s.world.goal.w, height: s.world.goal.h, alignItems: 'center' }}>
               <View style={{ width: 6, flex: 1, backgroundColor: '#ddd', borderRadius: 3 }} />
@@ -1608,7 +1608,7 @@ function PixelQuest({ onExit }) {
             </View>
           )}
           {s.proj.map((q, i) => <View key={`q${i}`} style={{ position: 'absolute', left: q.x, top: q.y, width: q.w, height: q.h, backgroundColor: C.orange, borderRadius: 5, ...glow(C.orange, 8, 1) }} />)}
-          <Text style={{ position: 'absolute', left: p.x - 2, top: p.y - 6, fontSize: 32, opacity: s.inv > 0 && Math.floor(s.inv * 10) % 2 ? 0.45 : 1, transform: [{ scaleX: p.face }], ...tglow(s.inv > 0 ? C.amber : '#000', s.inv > 0 ? 12 : 3) }}>{s.gun ? '🤠' : '😎'}</Text>
+          <Text style={{ position: 'absolute', width: 46, lineHeight: 40, left: p.x - 2, top: p.y - 6, fontSize: 32, opacity: s.inv > 0 && Math.floor(s.inv * 10) % 2 ? 0.45 : 1, transform: [{ scaleX: p.face }], ...tglow(s.inv > 0 ? C.amber : '#000', s.inv > 0 ? 12 : 3) }}>{s.gun ? '🤠' : '😎'}</Text>
         </View>
         {s.banner && <Text pointerEvents="none" style={{ position: 'absolute', top: AREA_H * 0.2, width: AREA_W, textAlign: 'center', color: '#fff', fontSize: 30, fontWeight: '900', letterSpacing: 3, opacity: Math.min(1, s.banner.t), ...tglow('#000', 8) }}>{s.banner.text}</Text>}
         {s.toast && <Text pointerEvents="none" style={{ position: 'absolute', top: 12, width: AREA_W, textAlign: 'center', color: '#fff', fontWeight: '900', ...tglow('#000', 5) }}>{s.toast.m}</Text>}
@@ -5461,6 +5461,280 @@ function Connect4({ onExit }) {
   );
 }
 
+// ─── MUNDO ABIERTO 3D (raycaster) ─────────────────────────────────
+const OW_N = 64;
+// 0 vacío · 1 árbol · 2 roca · 3 casa · 4 torre · 5 montaña
+const OW_H = [0, 1.7, 0.6, 1.25, 3, 2.6];
+const OW_COL = {
+  trunk: [112, 72, 36], leaf: [40, 142, 62], rock: [132, 132, 142], wall: [206, 176, 132], roof: [176, 62, 52],
+  tower: [150, 132, 205], band: [255, 214, 90], mount: [104, 110, 128], snow: [236, 241, 250],
+};
+function owGen(seed) {
+  const rnd = rpgRng(seed);
+  const lat = Array.from({ length: 14 * 14 }, () => rnd());
+  const vn = (x, y) => { const gx = x / 5, gy = y / 5; const i = Math.floor(gx), j = Math.floor(gy), fx_ = gx - i, fy = gy - j; const g = (a, b) => lat[((b % 14 + 14) % 14) * 14 + ((a % 14 + 14) % 14)]; const sx = fx_ * fx_ * (3 - 2 * fx_), sy = fy * fy * (3 - 2 * fy); return (g(i, j) * (1 - sx) + g(i + 1, j) * sx) * (1 - sy) + (g(i, j + 1) * (1 - sx) + g(i + 1, j + 1) * sx) * sy; };
+  const m = Array.from({ length: OW_N }, () => new Uint8Array(OW_N));
+  const C0 = OW_N / 2;
+  for (let y = 0; y < OW_N; y++) for (let x = 0; x < OW_N; x++) {
+    if (x < 3 || y < 3 || x >= OW_N - 3 || y >= OW_N - 3) { m[y][x] = 5; continue; }
+    const v = vn(x, y), r = rnd();
+    if (v > 0.8 && r < 0.5) m[y][x] = 5;
+    else if (v > 0.58 && r < 0.5) m[y][x] = 1;
+    else if (r < 0.014) m[y][x] = 1;
+    else if (r < 0.026) m[y][x] = 2;
+  }
+  const clear = (cx, cy, r) => { for (let y = cy - r; y <= cy + r; y++) for (let x = cx - r; x <= cx + r; x++) if (x > 2 && y > 2 && x < OW_N - 3 && y < OW_N - 3) m[y][x] = 0; };
+  clear(C0, C0, 5);
+  const villages = [];
+  for (let k = 0; k < 6; k++) {
+    let cx, cy, tries = 0;
+    do { cx = 8 + Math.floor(rnd() * (OW_N - 16)); cy = 8 + Math.floor(rnd() * (OW_N - 16)); tries++; } while (tries < 40 && (Math.hypot(cx - C0, cy - C0) < 12 || villages.some(v => Math.hypot(v[0] - cx, v[1] - cy) < 12)));
+    villages.push([cx, cy]); clear(cx, cy, 4);
+    const n = 4 + Math.floor(rnd() * 3);
+    for (let h = 0; h < n; h++) { const a = (h / n) * Math.PI * 2; const hx = Math.round(cx + Math.cos(a) * 3), hy = Math.round(cy + Math.sin(a) * 3); m[hy][hx] = 3; if (m[hy][hx + 1] === 0) m[hy][hx + 1] = 3; }
+  }
+  const towers = [];
+  for (let k = 0; k < 5; k++) { const tx = 8 + Math.floor(rnd() * (OW_N - 16)), ty = 8 + Math.floor(rnd() * (OW_N - 16)); if (Math.hypot(tx - C0, ty - C0) < 9) continue; clear(tx, ty, 1); m[ty][tx] = 4; towers.push([tx, ty]); }
+  // zona alcanzable desde el centro
+  const reach = new Uint8Array(OW_N * OW_N); const q = [[C0, C0]]; reach[C0 * OW_N + C0] = 1; const free = [];
+  while (q.length) { const [x, y] = q.pop(); free.push([x, y]); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy; if (nx < 0 || ny < 0 || nx >= OW_N || ny >= OW_N || reach[ny * OW_N + nx] || m[ny][nx]) continue; reach[ny * OW_N + nx] = 1; q.push([nx, ny]); } }
+  return { m, free, villages, towers };
+}
+function owShade(c, light, fog, fogC) {
+  const f = clamp(fog, 0, 1);
+  const r = Math.round(lerp(c[0] * light, fogC[0], f)), g = Math.round(lerp(c[1] * light, fogC[1], f)), b = Math.round(lerp(c[2] * light, fogC[2], f));
+  return `rgb(${r},${g},${b})`;
+}
+function owStick(R) {
+  const v = useRef({ x: 0, y: 0, on: false }).current;
+  const pr = useRef(null);
+  if (!pr.current) {
+    const set = g => { let dx = g.dx, dy = g.dy; const m = Math.hypot(dx, dy); if (m > R) { dx *= R / m; dy *= R / m; } v.x = dx / R; v.y = dy / R; v.on = true; };
+    const end = () => { v.x = 0; v.y = 0; v.on = false; };
+    pr.current = PanResponder.create({ onStartShouldSetPanResponder: () => true, onMoveShouldSetPanResponder: () => true, onPanResponderGrant: () => { v.on = true; }, onPanResponderMove: (e, g) => set(g), onPanResponderRelease: end, onPanResponderTerminate: end });
+  }
+  return [v, pr.current.panHandlers];
+}
+
+function OpenWorld3D({ onExit }) {
+  const fx = useFX();
+  const [best, submitBest] = useBest('openworld');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false, won: false });
+  const [move, moveH] = owStick(46);
+  const [look, lookH] = owStick(46);
+  const sprint = useRef({ on: false }).current;
+  const NCOL = Math.max(40, Math.floor(AREA_W / 6));
+  const CW = AREA_W / NCOL;
+  const HOR = AREA_H * 0.5;
+  const FOV = 1.05;
+  const planeLen = Math.tan(FOV / 2);
+  const TOTAL_GEMS = 20;
+
+  const initState = () => {
+    const w = owGen(Math.floor(Math.random() * 1e9));
+    const C0 = OW_N / 2 + 0.5;
+    const ents = []; const spots = w.free.filter(([x, y]) => Math.hypot(x - OW_N / 2, y - OW_N / 2) > 7);
+    const take = () => { const i = Math.floor(Math.random() * spots.length); const [x, y] = spots.splice(i, 1)[0] || [OW_N / 2 + 3, OW_N / 2]; return { x: x + 0.5, y: y + 0.5 }; };
+    for (let i = 0; i < TOTAL_GEMS; i++) ents.push({ id: uid(), kind: 'gem', e: '💎', ...take(), s: 0.38, ph: Math.random() * 6 });
+    for (let i = 0; i < 46; i++) ents.push({ id: uid(), kind: 'coin', e: '🪙', ...take(), s: 0.3, ph: Math.random() * 6 });
+    for (let i = 0; i < 16; i++) ents.push({ id: uid(), kind: 'animal', e: pick(['🐄', '🐑', '🦌', '🐇', '🐖']), ...take(), s: 0.45, a: rand(0, 6.28), tm: rand(1, 4), ph: 0 });
+    return { w, px: C0, py: C0, a: rand(0, 6.28), ents, cols: [], sprites: [], z: new Float32Array(NCOL), t: 0, tod: 0.18, gems: 0, coins: 0, hp: 3, inv: 0, wolfT: 3, dist: 0, bob: 0, banner: { text: 'MUNDO ABIERTO', t: 2 }, toast: null };
+  };
+  const g = useRef(null);
+  if (!g.current) { g.current = initState(); }
+  const blocked = (s, x, y) => { const cx = Math.floor(x), cy = Math.floor(y); return cx < 0 || cy < 0 || cx >= OW_N || cy >= OW_N || s.w.m[cy][cx] > 0; };
+  const tryMove = (s, nx, ny, r) => {
+    let ok = true;
+    for (const [ox, oy] of [[r, r], [-r, r], [r, -r], [-r, -r]]) if (blocked(s, nx + ox, s.py + oy)) ok = false;
+    if (ok) s.px = nx;
+    ok = true;
+    for (const [ox, oy] of [[r, r], [-r, r], [r, -r], [-r, -r]]) if (blocked(s, s.px + ox, ny + oy)) ok = false;
+    if (ok) s.py = ny;
+  };
+  const daylight = s => clamp(Math.sin(s.tod * Math.PI * 2) * 1.5 + 0.55, 0, 1);
+
+  const cast = s => {
+    const dl = daylight(s); const light = 0.32 + 0.68 * dl;
+    const fogC = [Math.round(lerp(14, 205, dl)), Math.round(lerp(18, 232, dl)), Math.round(lerp(48, 255, dl))];
+    const dirX = Math.cos(s.a), dirY = Math.sin(s.a), plX = -dirY * planeLen, plY = dirX * planeLen;
+    const cols = [];
+    for (let i = 0; i < NCOL; i++) {
+      const camX = (2 * (i + 0.5)) / NCOL - 1;
+      const rdx = dirX + plX * camX, rdy = dirY + plY * camX;
+      let mx = Math.floor(s.px), my = Math.floor(s.py);
+      const ddx = Math.abs(1 / (rdx || 1e-9)), ddy = Math.abs(1 / (rdy || 1e-9));
+      let sx, sy, sdx, sdy;
+      if (rdx < 0) { sx = -1; sdx = (s.px - mx) * ddx; } else { sx = 1; sdx = (mx + 1 - s.px) * ddx; }
+      if (rdy < 0) { sy = -1; sdy = (s.py - my) * ddy; } else { sy = 1; sdy = (my + 1 - s.py) * ddy; }
+      let side = 0, hit = 0, guard = 0;
+      while (!hit && guard++ < 40) {
+        if (sdx < sdy) { sdx += ddx; mx += sx; side = 0; } else { sdy += ddy; my += sy; side = 1; }
+        if (mx < 0 || my < 0 || mx >= OW_N || my >= OW_N) { hit = 5; break; }
+        hit = s.w.m[my][mx];
+      }
+      const dist = Math.max(0.05, side === 0 ? sdx - ddx : sdy - ddy);
+      s.z[i] = dist;
+      const unit = (AREA_H * 0.92) / dist;
+      const bottom = HOR + 0.5 * unit;
+      const top = HOR - (OW_H[hit] - 0.5) * unit;
+      const fog = Math.pow(dist / 21, 2);
+      const sideK = side ? 0.78 : 1;
+      const vr = 0.92 + ((mx * 73 + my * 151) % 17) / 100;
+      const L = light * sideK * vr;
+      const parts = [];
+      const push = (y0, y1, c) => { if (y1 - y0 > 0.5) parts.push({ y: y0, h: y1 - y0, c: owShade(c, L, fog, fogC) }); };
+      if (hit === 1) { const tt = bottom - 0.55 * unit; push(tt, bottom, OW_COL.trunk); push(top, tt, OW_COL.leaf); }
+      else if (hit === 2) push(top, bottom, OW_COL.rock);
+      else if (hit === 3) { const rf = top + 0.32 * unit; push(rf, bottom, OW_COL.wall); push(top, rf, OW_COL.roof); const wy = bottom - 0.75 * unit; if (((i + mx) % 5) < 2) push(wy, wy + 0.3 * unit, [90, 140, 200]); }
+      else if (hit === 4) { const bd = top + 0.4 * unit; push(bd, bottom, OW_COL.tower); push(top, bd, OW_COL.band); }
+      else { const sn = top + 0.7 * unit; push(sn, bottom, OW_COL.mount); push(top, sn, OW_COL.snow); }
+      cols.push(parts);
+    }
+    s.cols = cols; s.light = light; s.fogC = fogC; s.dl = dl;
+    // sprites
+    const det = plX * dirY - dirX * plY;
+    const inv = 1 / det; const sp = [];
+    for (const e of s.ents) {
+      if (e.gone) continue;
+      const rx = e.x - s.px, ry = e.y - s.py;
+      if (rx * rx + ry * ry > 17 * 17) continue;
+      const tx = inv * (dirY * rx - dirX * ry), ty = inv * (-plY * rx + plX * ry);
+      if (ty < 0.25) continue;
+      const sxp = (AREA_W / 2) * (1 + tx / ty);
+      const col = clamp(Math.floor(sxp / CW), 0, NCOL - 1);
+      if (s.z[col] < ty - 0.15) continue;
+      const size = (AREA_H * 0.92 * e.s) / ty;
+      const ground = HOR + (0.5 * AREA_H * 0.92) / ty;
+      const bob = e.kind === 'gem' || e.kind === 'coin' ? Math.sin(s.t * 3 + e.ph) * 0.06 + 0.12 : 0;
+      sp.push({ id: e.id, e: e.e, x: sxp, y: ground - size - bob * (AREA_H * 0.92) / ty, size, ty, fog: Math.pow(ty / 21, 2), kind: e.kind });
+    }
+    sp.sort((a, b) => b.ty - a.ty);
+    s.sprites = sp;
+  };
+  if (!g.current.cols.length) cast(g.current);
+
+  const start = () => { fx.clear(); const s = initState(); g.current = s; cast(s); setPhase('play'); };
+  const finish = (s, won, why) => {
+    const sc = s.gems * 100 + s.coins * 10 + (won ? 500 : 0);
+    s.final = sc; if (won) hx.win(); else hx.die();
+    setRes({ isNew: submitBest(sc), won, why }); setPhase(won ? 'win' : 'over');
+  };
+  useLoop(phase === 'play', dt => {
+    const s = g.current; s.t += dt; s.tod = (s.tod + dt / 160) % 1; s.inv = Math.max(0, s.inv - dt);
+    if (s.banner) { s.banner.t -= dt; if (s.banner.t <= 0) s.banner = null; }
+    if (s.toast) { s.toast.t -= dt; if (s.toast.t <= 0) s.toast = null; }
+    // giro y movimiento
+    s.a += look.x * 2.7 * dt;
+    const spd = (sprint.on ? 4.4 : 2.7) * dt;
+    const fwd = -move.y * spd, str = move.x * spd * 0.8;
+    const dx = Math.cos(s.a) * fwd - Math.sin(s.a) * str, dy = Math.sin(s.a) * fwd + Math.cos(s.a) * str;
+    const ox = s.px, oy = s.py; tryMove(s, s.px + dx, s.py + dy, 0.34);
+    const moved = Math.hypot(s.px - ox, s.py - oy); s.dist += moved; s.bob += moved * 9;
+    const night = daylight(s) < 0.3;
+    // entidades
+    s.wolfT -= dt;
+    if (night && s.wolfT <= 0 && s.ents.filter(e => e.kind === 'wolf' && !e.gone).length < 3) {
+      s.wolfT = 7;
+      for (let k = 0; k < 20; k++) { const a = rand(0, 6.28), r = rand(9, 13); const x = s.px + Math.cos(a) * r, y = s.py + Math.sin(a) * r; if (!blocked(s, x, y)) { s.ents.push({ id: uid(), kind: 'wolf', e: '🐺', x, y, s: 0.5, ph: 0 }); break; } }
+    }
+    for (const e of s.ents) {
+      if (e.gone) continue;
+      const d = Math.hypot(e.x - s.px, e.y - s.py);
+      if (e.kind === 'gem' || e.kind === 'coin') {
+        if (d < 0.55) {
+          e.gone = true; hx.good();
+          if (e.kind === 'gem') { s.gems += 1; s.toast = { m: `💎 Cristal ${s.gems}/${TOTAL_GEMS}`, t: 1.6 }; fx.flash(C.cyan, 0.2); if (s.gems >= TOTAL_GEMS) { finish(s, true); return; } } else { s.coins += 1; hx.tick(); }
+        }
+      } else if (e.kind === 'animal') {
+        e.tm -= dt; if (e.tm <= 0) { e.a = rand(0, 6.28); e.tm = rand(1.5, 4); }
+        const nx = e.x + Math.cos(e.a) * 0.5 * dt, ny = e.y + Math.sin(e.a) * 0.5 * dt;
+        if (blocked(s, nx, ny)) e.a += 2; else { e.x = nx; e.y = ny; }
+      } else if (e.kind === 'wolf') {
+        if (!night && Math.random() < dt * 0.5) { e.gone = true; continue; }
+        if (d > 28) { e.gone = true; continue; }
+        const sp = (d < 11 ? 2.1 : 0.8) * dt; const ux = (s.px - e.x) / (d || 1), uy = (s.py - e.y) / (d || 1);
+        const nx = e.x + (d < 11 ? ux : Math.cos(s.t + e.id)) * sp, ny = e.y + (d < 11 ? uy : Math.sin(s.t + e.id)) * sp;
+        if (!blocked(s, nx, ny)) { e.x = nx; e.y = ny; } else { if (!blocked(s, nx, e.y)) e.x = nx; else if (!blocked(s, e.x, ny)) e.y = ny; }
+        if (d < 0.7 && s.inv <= 0) { s.hp -= 1; s.inv = 1.6; hx.bad(); fx.shake(8, 0.3); fx.flash(C.red, 0.35); s.toast = { m: '🐺 ¡Un lobo te mordió!', t: 1.4 }; e.x -= ux * 1.5; e.y -= uy * 1.5; if (s.hp <= 0) { finish(s, false, 'lobos'); return; } }
+      }
+    }
+    s.ents = s.ents.filter(e => !e.gone);
+    cast(s);
+  });
+  const s = g.current;
+  // brújula hacia el cristal más cercano
+  let near = null, nd = 1e9;
+  s.ents.forEach(e => { if (e.kind === 'gem') { const d = Math.hypot(e.x - s.px, e.y - s.py); if (d < nd) { nd = d; near = e; } } });
+  const ang = near ? Math.atan2(near.y - s.py, near.x - s.px) - s.a : 0;
+  const dl = s.dl != null ? s.dl : 1; const fogC = s.fogC || [205, 232, 255];
+  const skyTop = [Math.round(lerp(4, 82, dl)), Math.round(lerp(6, 160, dl)), Math.round(lerp(26, 235, dl))];
+  const skyBands = 7; const floorBands = 8;
+  const gl = [Math.round(lerp(10, 60, dl)), Math.round(lerp(26, 150, dl)), Math.round(lerp(16, 64, dl))];
+  const sunA = s.tod * Math.PI * 2; const sunH = Math.sin(sunA);
+  const azim = (Math.PI * 0.35) - s.a; const rel = Math.atan2(Math.sin(azim), Math.cos(azim));
+  const celX = AREA_W / 2 + (Math.tan(rel) / planeLen) * (AREA_W / 2);
+  const showCel = Math.abs(rel) < 0.85;
+  const mm = (v, r) => ({ left: r + v.x * r - 17, top: r + v.y * r - 17 });
+  const pad = (v, cx, label) => (
+    <View style={{ position: 'absolute', left: cx - 62, bottom: 10, width: 124, height: 124, alignItems: 'center', justifyContent: 'center' }} pointerEvents="none">
+      <View style={{ width: 108, height: 108, borderRadius: 54, backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.25)' }} />
+      <View style={{ position: 'absolute', width: 40, height: 40, borderRadius: 20, backgroundColor: v.on ? 'rgba(34,230,255,0.55)' : 'rgba(255,255,255,0.22)', borderWidth: 2, borderColor: '#fff8', left: 62 - 20 + v.x * 46, top: 62 - 20 + v.y * 46 }} />
+      <Text style={{ position: 'absolute', bottom: -2, color: 'rgba(255,255,255,0.5)', fontSize: 9, fontWeight: '900', letterSpacing: 1 }}>{label}</Text>
+    </View>
+  );
+  const sc = s.gems * 100 + s.coins * 10;
+  return (
+    <GameScreen title="MUNDO 3D" emoji="🌍" accent={C.lime} onExit={onExit} score={sc} best={best}
+      hud={<><Lives n={s.hp} max={3} /><Text style={{ color: C.text, fontWeight: '900', fontSize: 12 }}>💎 {s.gems}/{TOTAL_GEMS}  🪙 {s.coins}</Text><Text style={{ color: dl < 0.3 ? C.violet : C.amber, fontWeight: '900', fontSize: 12 }}>{dl < 0.3 ? '🌙 NOCHE' : '☀️ DÍA'}</Text></>}>
+      <PlayArea fx={fx} bg="#000">
+        {/* cielo */}
+        {Array.from({ length: skyBands }, (_, i) => { const k = i / (skyBands - 1); const c = [lerp(skyTop[0], fogC[0], k), lerp(skyTop[1], fogC[1], k), lerp(skyTop[2], fogC[2], k)]; return <View key={`s${i}`} style={{ position: 'absolute', left: 0, top: (HOR / skyBands) * i, width: AREA_W, height: HOR / skyBands + 1, backgroundColor: `rgb(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])})` }} />; })}
+        {showCel && <Text style={{ position: 'absolute', left: celX - 26, top: HOR - 40 - Math.abs(sunH) * AREA_H * 0.32, width: 52, textAlign: 'center', fontSize: 40, lineHeight: 48, opacity: 0.95 }}>{sunH > 0 ? '☀️' : '🌙'}</Text>}
+        {/* suelo */}
+        {Array.from({ length: floorBands }, (_, i) => { const k = i / (floorBands - 1); const c = [lerp(fogC[0], gl[0], Math.pow(k, 0.6)), lerp(fogC[1], gl[1], Math.pow(k, 0.6)), lerp(fogC[2], gl[2], Math.pow(k, 0.6))]; const y0 = HOR + ((AREA_H - HOR) / floorBands) * i; return <View key={`f${i}`} style={{ position: 'absolute', left: 0, top: y0, width: AREA_W, height: (AREA_H - HOR) / floorBands + 1, backgroundColor: `rgb(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])})` }} />; })}
+        {/* paredes */}
+        {s.cols.map((parts, i) => parts.map((p, k) => <View key={`${i}-${k}`} style={{ position: 'absolute', left: i * CW, top: p.y, width: CW + 0.8, height: p.h, backgroundColor: p.c }} />))}
+        {/* sprites */}
+        {s.sprites.map(sp => <Text key={sp.id} style={{ position: 'absolute', left: sp.x - sp.size, top: sp.y, width: sp.size * 2, textAlign: 'center', fontSize: Math.max(8, sp.size * 0.9), lineHeight: sp.size * 1.15, opacity: clamp(1 - sp.fog * 0.8, 0.25, 1), ...(sp.kind === 'gem' ? tglow(C.cyan, 8) : null) }}>{sp.e}</Text>)}
+        {s.inv > 0 && <View pointerEvents="none" style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,60,80,0.18)' }} />}
+        {dl < 0.3 && <View pointerEvents="none" style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,30,0.12)' }} />}
+        {/* brújula */}
+        <View pointerEvents="none" style={{ position: 'absolute', top: 10, left: 0, right: 0, alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 }}>
+            <Text style={{ color: C.cyan, fontSize: 18, fontWeight: '900', transform: [{ rotate: `${ang + Math.PI / 2}rad` }] }}>▲</Text>
+            <Text style={{ color: C.text, fontWeight: '800', fontSize: 12, marginLeft: 8 }}>{near ? `Cristal a ${Math.round(nd)} m` : '¡Todos los cristales!'}</Text>
+          </View>
+        </View>
+        {s.toast && <Text pointerEvents="none" style={{ position: 'absolute', top: 48, width: AREA_W, textAlign: 'center', color: '#fff', fontWeight: '900', fontSize: 14, ...tglow('#000', 6) }}>{s.toast.m}</Text>}
+        {s.banner && <Text pointerEvents="none" style={{ position: 'absolute', top: AREA_H * 0.28, width: AREA_W, textAlign: 'center', color: '#fff', fontSize: 26, fontWeight: '900', letterSpacing: 3, opacity: Math.min(1, s.banner.t), ...tglow('#000', 8) }}>{s.banner.text}</Text>}
+        {/* mira */}
+        <View pointerEvents="none" style={{ position: 'absolute', left: AREA_W / 2 - 3, top: HOR - 3, width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.35)' }} />
+        {/* controles */}
+        {phase === 'play' && (
+          <>
+            <View testID="ow-move" {...moveH} style={{ position: 'absolute', left: 0, bottom: 0, width: AREA_W * 0.42, height: 150 }} />
+            <View testID="ow-look" {...lookH} style={{ position: 'absolute', right: 0, bottom: 0, width: AREA_W * 0.42, height: 150 }} />
+            {pad(move, 62 + 0, 'MOVER')}
+            {pad(look, AREA_W - 62, 'GIRAR')}
+            <Pressable testID="ow-sprint" onPressIn={() => { sprint.on = true; }} onPressOut={() => { sprint.on = false; }} style={{ position: 'absolute', left: AREA_W / 2 - 30, bottom: 16, width: 60, height: 60 }}>
+              <View style={{ flex: 1, borderRadius: 30, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,194,51,0.2)', borderWidth: 2, borderColor: alpha(C.amber, 0.8) }}><Text style={{ fontSize: 26 }}>🏃</Text></View>
+            </Pressable>
+            <Pressable testID="ow-end" onPress={() => finish(s, false, 'fin')} style={{ position: 'absolute', right: 8, top: 8 }} hitSlop={8}>
+              <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.5)', borderWidth: 1, borderColor: C.line }}><Text style={{ color: C.dim, fontSize: 11, fontWeight: '800' }}>🏁 TERMINAR</Text></View>
+            </Pressable>
+          </>
+        )}
+        <Overlay show={phase !== 'play'} kind={phase} emoji={phase === 'win' ? '🏆' : phase === 'over' ? (res.why === 'lobos' ? '🐺' : '🌍') : '🌍'}
+          title={phase === 'win' ? '¡TODOS LOS CRISTALES!' : phase === 'over' ? (res.why === 'lobos' ? 'DEVORADO POR LOBOS' : 'EXPEDICIÓN TERMINADA') : 'MUNDO ABIERTO 3D'}
+          subtitle={phase === 'ready' ? 'Explora un mundo en primera persona' : `💎 ${s.gems}/${TOTAL_GEMS} · 🪙 ${s.coins} · ${Math.round(s.dist)} m recorridos`}
+          score={s.final != null && phase !== 'ready' ? s.final : sc} best={best} isNew={res.isNew} accent={C.lime} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Joystick izquierdo: moverte · derecho: girar la cámara', '🏃 mantén pulsado para correr', 'Encuentra 20 💎 (la brújula te guía) y junta 🪙', 'De noche salen 🐺: corre o escóndete tras las casas', 'Aldeas, bosques, torres y montañas por descubrir'] : null} />
+      </PlayArea>
+    </GameScreen>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // REGISTRO DE JUEGOS + MENÚ
 // Para añadir un juego: crea el componente y añade una entrada aquí.
@@ -5511,6 +5785,7 @@ const GAMES = [
   { id: 'dinorun', name: 'DINO RUN', emoji: '🦖', tag: 'Salta cactus, agáchate de las aves', color: C.lime, cat: 'reflejos', Comp: DinoRun },
   { id: 'fruittap', name: 'FRUIT TAP', emoji: '🍉', tag: 'Corta frutas, evita bombas', color: C.lime, cat: 'reflejos', Comp: FruitTap },
   { id: 'pixelrpg', name: 'PIXEL RPG', emoji: '🧙', tag: 'Explora, combate y sube de nivel', color: C.amber, cat: 'aventura', Comp: PixelRPG },
+  { id: 'openworld', name: 'MUNDO 3D', emoji: '🌍', tag: 'Mundo abierto en primera persona', color: C.lime, cat: 'aventura', Comp: OpenWorld3D },
   { id: 'invaders', name: 'INVASORES', emoji: '👽', tag: 'Defiende la Tierra con escudos', color: C.lime, cat: 'accion', Comp: Invaders },
   { id: 'skyhop', name: 'SKY HOP', emoji: '🦘', tag: 'Rebota hacia el cielo sin caer', color: C.cyan, cat: 'reflejos', Comp: SkyHop },
   { id: 'minesweeper', name: 'BUSCAMINAS', emoji: '💣', tag: 'Despeja el campo con lógica', color: C.red, cat: 'puzzle', Comp: Buscaminas },
