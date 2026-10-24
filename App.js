@@ -2447,441 +2447,267 @@ function SnakePower({ onExit }) {
   );
 }
 
-// ============================================================
-// 8. VOID CRAWLER  —  Neon Roguelike Dungeon Crawler
-// ============================================================
-const VC_FLOOR_THEMES = [
-  { bg: '#08081a', wall: '#16163a', floor: '#0d0d28', accent: '#6677ff', name: 'DUNGEON DEPTHS'  },
-  { bg: '#081408', wall: '#163a16', floor: '#0d280d', accent: '#44ff88', name: 'POISON SWAMP'    },
-  { bg: '#1a0808', wall: '#3a1616', floor: '#280d0d', accent: '#ff5544', name: 'FIRE CAVERN'     },
-  { bg: '#180818', wall: '#381638', floor: '#260d26', accent: '#ee44ff', name: 'SHADOW REALM'    },
-  { bg: '#1a1808', wall: '#3a3816', floor: '#28260d', accent: '#ffdd00', name: 'DRAGON LAIR 🐉'  },
+// ─── VOID CRAWLER ─────────────────────────────────────────────────
+const VC2_W = 30;
+const VC2_H = 26;
+const VC2_THEMES = [
+  { floor: '#101030', wall: '#1d1d4a', accent: C.blue, name: 'CATACUMBAS' }, { floor: '#0c2410', wall: '#17401f', accent: C.lime, name: 'PANTANO TÓXICO' },
+  { floor: '#2a0e0c', wall: '#4a1a16', accent: C.orange, name: 'CAVERNA DE FUEGO' }, { floor: '#240c2a', wall: '#431a4a', accent: C.pink, name: 'REINO SOMBRÍO' },
+  { floor: '#2a240c', wall: '#4a3f16', accent: C.amber, name: 'GUARIDA DEL DRAGÓN' },
 ];
-const VC_ENEMY_DEFS = {
-  skeleton: { emoji: '💀', hp: 6,  atk: 2, def: 0, xp: 5   },
-  goblin:   { emoji: '👺', hp: 4,  atk: 3, def: 0, xp: 8   },
-  orc:      { emoji: '👹', hp: 10, atk: 4, def: 1, xp: 12  },
-  demon:    { emoji: '😈', hp: 15, atk: 6, def: 2, xp: 20  },
-  dragon:   { emoji: '🐉', hp: 50, atk: 12,def: 3, xp: 100, isBoss: true },
+const VC2_ENEMIES = {
+  skeleton: { e: '💀', hp: 7, atk: 3, def: 0, xp: 6, ai: 'melee' }, goblin: { e: '👺', hp: 5, atk: 4, def: 0, xp: 7, ai: 'melee' },
+  bat: { e: '🦇', hp: 3, atk: 2, def: 0, xp: 5, ai: 'fast' }, slime: { e: '🟢', hp: 8, atk: 2, def: 0, xp: 6, ai: 'melee', split: true },
+  archer: { e: '🏹', hp: 6, atk: 4, def: 0, xp: 10, ai: 'archer' }, orc: { e: '👹', hp: 16, atk: 6, def: 1, xp: 14, ai: 'melee' },
+  mage: { e: '🔮', hp: 9, atk: 7, def: 0, xp: 16, ai: 'mage' }, demon: { e: '😈', hp: 24, atk: 9, def: 2, xp: 26, ai: 'melee' },
+  dragon: { e: '🐉', hp: 90, atk: 13, def: 3, xp: 200, ai: 'boss', boss: true },
 };
-const VC_FLOOR_ENEMIES = [
-  ['skeleton','skeleton','goblin'],
-  ['goblin','goblin','orc','orc'],
-  ['orc','orc','orc','demon'],
-  ['demon','demon','demon','orc'],
-  ['dragon','demon','demon'],
-];
-const VC_ITEM_DEFS = [
-  { emoji: '⚔️',  type: 'atk',   value: 2,  label: '+2 ATK'   },
-  { emoji: '🛡️', type: 'def',   value: 1,  label: '+1 DEF'   },
-  { emoji: '❤️',  type: 'heal',  value: 8,  label: '+8 HP'    },
-  { emoji: '💊',  type: 'maxhp', value: 5,  label: '+5 MaxHP' },
-  { emoji: '💎',  type: 'xp',    value: 25, label: '+25 XP'   },
-];
+const VC2_FLOORS = [['skeleton', 'goblin', 'bat', 'slime'], ['skeleton', 'goblin', 'bat', 'archer', 'orc'], ['orc', 'archer', 'mage', 'bat', 'slime'], ['demon', 'mage', 'orc', 'archer'], ['dragon', 'demon', 'demon', 'mage']];
+const VC2_WEAPONS = [['Daga', 1], ['Espada', 3], ['Hacha', 5], ['Lanza rúnica', 7], ['Filo del vacío', 10]];
+const VC2_ARMORS = [['Harapos', 0], ['Cuero', 1], ['Malla', 2], ['Placas', 4], ['Egida', 6]];
 
 function VoidCrawler({ onExit }) {
-  const [phase, setPhase] = useState('idle');
-  const [msgLog, setMsgLog] = useState(['⚔️ Fight. 🏚️ Explore. 🚪 Reach the exit.']);
-  const [, setTick] = useState(0);
+  const CELL = Math.floor(AREA_W / 9);
+  const VW = 9, VH = Math.floor((AREA_H - 196) / CELL);
+  const fx = useFX();
+  const [best, submitBest] = useBest('void');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false, won: false });
+  const [, force] = useReducer(x => x + 1, 0);
+  const holdRef = useRef(null);
+  const g = useRef(null);
 
-  const mapRef     = useRef([]);
-  const stairsRef  = useRef({ x: 0, y: 0 });
-  const playerRef  = useRef({ x:1, y:1, hp:20, maxHp:20, atk:3, def:1, floor:1, xp:0, level:1 });
-  const enemiesRef = useRef([]);
-  const itemsRef   = useRef([]);
-  const eidRef     = useRef(0);
-  const iidRef     = useRef(0);
-  const phaseRef   = useRef('idle');
-
-  const addMsg = (msg) => setMsgLog(prev => [msg, ...prev].slice(0, 4));
-
-  const xpNeeded = (lvl) => lvl * 20;
-
-  const checkLevelUp = () => {
-    const p = playerRef.current;
-    while (p.xp >= xpNeeded(p.level)) {
-      p.xp   -= xpNeeded(p.level);
-      p.level += 1;
-      p.atk   += 1;
-      p.maxHp += 5;
-      p.hp     = Math.min(p.hp + 5, p.maxHp);
-      addMsg(`⬆️ LEVEL UP! Lv.${p.level} — ATK+1 MaxHP+5`);
-      celebrateVibrate();
-    }
-  };
-
-  // ── Dungeon generation ──────────────────────────────────
-  const generateFloor = (floorNum) => {
-    const m = Array.from({ length: VC_ROWS }, () =>
-      Array(VC_COLS).fill(VC_WALL)
-    );
+  const initPlayer = () => ({ x: 1, y: 1, hp: 26, maxHp: 26, atk: 3, def: 0, lv: 1, xp: 0, gold: 0, potions: 2, bombs: 1, weapon: 0, armor: 0, vx: 1, vy: 1 });
+  const gen = (floor, p) => {
+    const map = Array.from({ length: VC2_H }, () => Array(VC2_W).fill(0));
     const rooms = [];
-
-    const tryRoom = () => {
-      for (let attempt = 0; attempt < 40; attempt++) {
-        const rw = 4 + Math.floor(Math.random() * 4);
-        const rh = 3 + Math.floor(Math.random() * 3);
-        const rx = 1 + Math.floor(Math.random() * (VC_COLS - rw - 2));
-        const ry = 1 + Math.floor(Math.random() * (VC_ROWS - rh - 2));
-        if (!rooms.some(r =>
-          rx <= r.x + r.w && rx + rw >= r.x &&
-          ry <= r.y + r.h && ry + rh >= r.y
-        )) { rooms.push({ x: rx, y: ry, w: rw, h: rh }); return; }
-      }
-    };
-    for (let i = 0; i < 6 + Math.floor(Math.random() * 3); i++) tryRoom();
-
-    // Carve rooms
-    for (const room of rooms)
-      for (let r = room.y; r < room.y + room.h; r++)
-        for (let c = room.x; c < room.x + room.w; c++)
-          m[r][c] = VC_FLOOR;
-
-    // Connect consecutive rooms with L corridors
+    for (let k = 0; k < 60 && rooms.length < 10; k++) {
+      const w = randInt(4, 8), h = randInt(4, 7), x = randInt(1, VC2_W - w - 2), y = randInt(1, VC2_H - h - 2);
+      if (rooms.some(r => x <= r.x + r.w + 1 && x + w + 1 >= r.x && y <= r.y + r.h + 1 && y + h + 1 >= r.y)) continue;
+      rooms.push({ x, y, w, h });
+    }
+    rooms.forEach(r => { for (let j = r.y; j < r.y + r.h; j++) for (let i = r.x; i < r.x + r.w; i++) map[j][i] = 1; });
     for (let i = 0; i < rooms.length - 1; i++) {
       const a = rooms[i], b = rooms[i + 1];
-      const ax = Math.floor(a.x + a.w / 2), ay = Math.floor(a.y + a.h / 2);
-      const bx = Math.floor(b.x + b.w / 2), by = Math.floor(b.y + b.h / 2);
-      for (let c = Math.min(ax, bx); c <= Math.max(ax, bx); c++) m[ay][c] = VC_FLOOR;
-      for (let r = Math.min(ay, by); r <= Math.max(ay, by); r++) m[r][bx] = VC_FLOOR;
+      const ax = Math.floor(a.x + a.w / 2), ay = Math.floor(a.y + a.h / 2), bx = Math.floor(b.x + b.w / 2), by = Math.floor(b.y + b.h / 2);
+      for (let x = Math.min(ax, bx); x <= Math.max(ax, bx); x++) map[ay][x] = 1;
+      for (let y = Math.min(ay, by); y <= Math.max(ay, by); y++) map[y][bx] = 1;
     }
-    mapRef.current = m;
-
-    // Place stairs in center of last room
-    const last = rooms[rooms.length - 1];
-    stairsRef.current = {
-      x: Math.floor(last.x + last.w / 2),
-      y: Math.floor(last.y + last.h / 2),
-    };
-
-    // Respawn player at center of first room
-    const p = playerRef.current;
-    const first = rooms[0];
-    p.x = Math.floor(first.x + first.w / 2);
-    p.y = Math.floor(first.y + first.h / 2);
-
-    // Place enemies (avoid first room)
-    enemiesRef.current = [];
-    const enemyTypes = VC_FLOOR_ENEMIES[Math.min(floorNum - 1, 4)];
-    for (const type of enemyTypes) {
-      const def = VC_ENEMY_DEFS[type];
-      let ex = 0, ey = 0, tries = 60;
-      do {
-        const ri = 1 + Math.floor(Math.random() * (rooms.length - 1));
-        const room = rooms[Math.min(ri, rooms.length - 1)];
-        ex = room.x + 1 + Math.floor(Math.random() * Math.max(1, room.w - 2));
-        ey = room.y + 1 + Math.floor(Math.random() * Math.max(1, room.h - 2));
-        tries--;
-      } while (tries > 0 && (
-        m[ey]?.[ex] !== VC_FLOOR ||
-        (ex === p.x && ey === p.y) ||
-        enemiesRef.current.some(e => e.x === ex && e.y === ey)
-      ));
-      if (tries <= 0) continue;
-      enemiesRef.current.push({
-        id: eidRef.current++, type, emoji: def.emoji,
-        x: ex, y: ey,
-        hp:    def.hp    + (floorNum - 1) * 3,
-        maxHp: def.hp    + (floorNum - 1) * 3,
-        atk:   def.atk   + Math.floor((floorNum - 1) * 0.6),
-        def:   def.def,
-        xp:    def.xp,
-        isBoss: def.isBoss || false,
-      });
-    }
-
-    // Place items
-    itemsRef.current = [];
-    const numItems = 2 + Math.floor(Math.random() * 2);
-    for (let i = 0; i < numItems; i++) {
-      const itemDef = VC_ITEM_DEFS[Math.floor(Math.random() * VC_ITEM_DEFS.length)];
-      let ix = 0, iy = 0, tries = 40;
-      do {
-        const room = rooms[Math.floor(Math.random() * rooms.length)];
-        ix = room.x + Math.floor(Math.random() * room.w);
-        iy = room.y + Math.floor(Math.random() * room.h);
-        tries--;
-      } while (tries > 0 && (
-        m[iy]?.[ix] !== VC_FLOOR ||
-        (ix === p.x && iy === p.y) ||
-        (ix === stairsRef.current.x && iy === stairsRef.current.y) ||
-        itemsRef.current.some(it => it.x === ix && it.y === iy) ||
-        enemiesRef.current.some(e => e.x === ix && e.y === iy)
-      ));
-      if (tries <= 0) continue;
-      itemsRef.current.push({ id: iidRef.current++, ...itemDef, x: ix, y: iy });
-    }
+    const first = rooms[0], last = rooms[rooms.length - 1];
+    p.x = Math.floor(first.x + first.w / 2); p.y = Math.floor(first.y + first.h / 2); p.vx = p.x; p.vy = p.y;
+    const stairs = { x: Math.floor(last.x + last.w / 2), y: Math.floor(last.y + last.h / 2) };
+    const taken = new Set([`${p.x},${p.y}`, `${stairs.x},${stairs.y}`]);
+    const freeIn = (room) => { for (let t = 0; t < 40; t++) { const x = randInt(room.x, room.x + room.w - 1), y = randInt(room.y, room.y + room.h - 1); if (!taken.has(`${x},${y}`)) { taken.add(`${x},${y}`); return { x, y }; } } return null; };
+    const enemies = [];
+    const pool = VC2_FLOORS[floor - 1];
+    const count = floor === 5 ? 5 : 5 + floor * 2;
+    if (floor === 5) { const pos = freeIn(last); if (pos) enemies.push(mkEnemy('dragon', pos, floor)); }
+    for (let i = enemies.length; i < count; i++) { const room = rooms[randInt(1, rooms.length - 1)]; const pos = freeIn(room); if (pos) enemies.push(mkEnemy(pool[randInt(0, pool.length - 1)], pos, floor)); }
+    const items = [];
+    const addItem = (kind, n) => { for (let i = 0; i < n; i++) { const room = pick(rooms); const pos = freeIn(room); if (pos) items.push({ id: uid(), kind, ...pos }); } };
+    addItem('potion', 2); addItem('chest', 2 + (floor > 2 ? 1 : 0)); addItem('gold', 3); addItem('bomb', 1); if (Math.random() < 0.6) addItem('shrine', 1); addItem('trap', 3 + floor);
+    return { map, seen: Array.from({ length: VC2_H }, () => Array(VC2_W).fill(false)), rooms, stairs, enemies, items };
   };
-
-  // ── Enemy turn ──────────────────────────────────────────
-  const moveEnemies = () => {
-    if (phaseRef.current !== 'playing') return;
-    const p = playerRef.current;
-    const m = mapRef.current;
-    for (const e of enemiesRef.current) {
-      const dx = p.x - e.x, dy = p.y - e.y;
-      if (Math.abs(dx) + Math.abs(dy) === 1) {
-        const dmg = Math.max(1, e.atk - p.def);
-        p.hp -= dmg;
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        if (p.hp <= 0) {
-          p.hp = 0;
-          phaseRef.current = 'dead';
-          deathVibrate();
-          setPhase('dead');
-          addMsg(`💀 Slain by ${e.emoji} on floor ${p.floor}!`);
-          setTick(t => t + 1);
-          return;
+  const mkEnemy = (type, pos, floor) => { const d = VC2_ENEMIES[type]; const hp = d.hp + (floor - 1) * 3; return { id: uid(), type, e: d.e, ai: d.ai, x: pos.x, y: pos.y, hp, maxHp: hp, atk: d.atk + Math.floor((floor - 1) * 0.8), def: d.def, xp: d.xp, boss: d.boss, split: d.split, awake: false, turn: 0, warn: null, flash: 0 }; };
+  const newRun = () => {
+    const p = initPlayer(); const lvl = gen(1, p);
+    return { p, floor: 1, ...lvl, kills: 0, turn: 0, log: ['Los pasillos del vacío te esperan…'], t: 0, fl: { vis: new Set() }, alive: true };
+  };
+  if (!g.current) { g.current = newRun(); }
+  const start = () => { fx.clear(); g.current = newRun(); computeVis(g.current); setPhase('play'); };
+  const addLog = m => { g.current.log = [m, ...g.current.log].slice(0, 3); };
+  const wall = (s, x, y) => x < 0 || y < 0 || x >= VC2_W || y >= VC2_H || s.map[y][x] === 0;
+  const los = (s, x0, y0, x1, y1) => { // Bresenham
+    let dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx - dy, x = x0, y = y0;
+    while (x !== x1 || y !== y1) { if ((x !== x0 || y !== y0) && wall(s, x, y)) return false; const e2 = 2 * err; if (e2 > -dy) { err -= dy; x += sx; } if (e2 < dx) { err += dx; y += sy; } }
+    return true;
+  };
+  const computeVis = s => {
+    const vis = new Set(); const p = s.p; const R = 6;
+    for (let j = p.y - R; j <= p.y + R; j++) for (let i = p.x - R; i <= p.x + R; i++) {
+      if (i < 0 || j < 0 || i >= VC2_W || j >= VC2_H) continue;
+      if ((i - p.x) ** 2 + (j - p.y) ** 2 > R * R + 1) continue;
+      if (los(s, p.x, p.y, i, j)) { vis.add(`${i},${j}`); s.seen[j][i] = true; }
+    }
+    s.fl.vis = vis;
+  };
+  const px = (s, x, y) => ({ x: (x - clamp(s.p.vx - (VW - 1) / 2, 0, VC2_W - VW)) * CELL + CELL / 2 + (AREA_W - VW * CELL) / 2, y: (y - clamp(s.p.vy - (VH - 1) / 2, 0, VC2_H - VH)) * CELL + CELL / 2 });
+  const need = lv => lv * 22;
+  const levelCheck = s => { const p = s.p; while (p.xp >= need(p.lv)) { p.xp -= need(p.lv); p.lv += 1; p.maxHp += 6; p.hp = Math.min(p.maxHp, p.hp + 8); p.atk += 1; if (p.lv % 3 === 0) p.def += 1; addLog(`⬆️ ¡Nivel ${p.lv}!`); const q = px(s, p.x, p.y); fx.pop(q.x, q.y - 20, `NIVEL ${p.lv}`, C.amber, 20); fx.ring(q.x, q.y, C.amber, 60); hx.good(); } };
+  const die = (s, by) => { s.alive = false; hx.die(); fx.shake(10, 0.4); fx.flash(C.red, 0.4); const sc = s.floor * 100 + s.kills * 10 + s.p.gold; setRes({ isNew: submitBest(sc), won: false, by }); setPhase('over'); };
+  const hurt = (s, dmg, by, ignoreDef) => {
+    const p = s.p; const d = Math.max(1, dmg - (ignoreDef ? 0 : p.def));
+    p.hp -= d; const q = px(s, p.x, p.y); fx.pop(q.x, q.y - 22, `-${d}`, C.red, 20); fx.burst(q.x, q.y, C.red, 8, 180); fx.shake(4, 0.15); hx.bad();
+    if (p.hp <= 0) { p.hp = 0; die(s, by); }
+  };
+  const killEnemy = (s, e) => {
+    const q = px(s, e.x, e.y); s.kills += 1; s.p.xp += e.xp; fx.burst(q.x, q.y, C.amber, 14, 220); fx.pop(q.x, q.y - 14, `+${e.xp} XP`, C.amber, 14); hx.hit();
+    addLog(`⚔️ Derrotaste a ${e.e}${e.boss ? ' — ¡JEFE!' : ''} (+${e.xp} XP)`);
+    s.enemies = s.enemies.filter(o => o !== e);
+    if (e.split && !e.small) { for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = e.x + dx, ny = e.y + dy; if (!wall(s, nx, ny) && !s.enemies.some(o => o.x === nx && o.y === ny) && !(s.p.x === nx && s.p.y === ny)) { const m = mkEnemy('slime', { x: nx, y: ny }, s.floor); m.hp = m.maxHp = Math.max(2, Math.floor(e.maxHp / 3)); m.xp = 2; m.small = true; m.awake = true; s.enemies.push(m); break; } } }
+    if (e.boss) { s.p.gold += 100; hx.win(); fx.flash('#fff', 0.4); }
+    levelCheck(s);
+  };
+  const bfsStep = (s, e, tx, ty) => {
+    const start = `${e.x},${e.y}`;
+    const prev = new Map([[start, null]]); const q = [[e.x, e.y, 0]];
+    while (q.length) {
+      const [x, y, d] = q.shift();
+      if (d > 14) break;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy, k = `${nx},${ny}`;
+        if (prev.has(k)) continue;
+        if (nx === tx && ny === ty) {
+          let cur = `${x},${y}`; let step = [x, y];
+          while (prev.get(cur) !== null) { step = cur.split(',').map(Number); cur = prev.get(cur); }
+          return step;
         }
-        continue;
-      }
-      // Pathfind: try best direction toward player first
-      const steps = [
-        { x: e.x + Math.sign(dx), y: e.y },
-        { x: e.x,                 y: e.y + Math.sign(dy) },
-        { x: e.x - Math.sign(dx), y: e.y },
-        { x: e.x,                 y: e.y - Math.sign(dy) },
-      ];
-      for (const s of steps) {
-        if (
-          s.y >= 0 && s.y < VC_ROWS && s.x >= 0 && s.x < VC_COLS &&
-          m[s.y][s.x] === VC_FLOOR &&
-          !(s.x === p.x && s.y === p.y) &&
-          !enemiesRef.current.some(o => o !== e && o.x === s.x && o.y === s.y)
-        ) { e.x = s.x; e.y = s.y; break; }
+        if (wall(s, nx, ny) || s.enemies.some(o => o !== e && o.x === nx && o.y === ny)) continue;
+        prev.set(k, `${x},${y}`); q.push([nx, ny, d + 1]);
       }
     }
-    setTick(t => t + 1);
+    return null;
   };
+  const stepEnemy = (s, e) => {
+    const p = s.p; const dx = p.x - e.x, dy = p.y - e.y; const man = Math.abs(dx) + Math.abs(dy);
+    const lineClear = los(s, e.x, e.y, p.x, p.y);
+    if (!e.awake) { if (man <= 7 && lineClear) e.awake = true; else return; }
+    e.flash = 0;
+    const approach = () => { const st = bfsStep(s, e, p.x, p.y); if (st && !(st[0] === p.x && st[1] === p.y)) { e.x = st[0]; e.y = st[1]; } };
+    if (e.ai === 'archer') {
+      if ((dx === 0 || dy === 0) && man <= 6 && lineClear) { const q0 = px(s, e.x, e.y), q1 = px(s, p.x, p.y); fx.burst((q0.x + q1.x) / 2, (q0.y + q1.y) / 2, C.amber, 6, 80, 0.3, 3); hurt(s, e.atk, e.e); addLog(`${e.e} te dispara una flecha.`); return; }
+      if (man <= 2) { const st = [[-Math.sign(dx), 0], [0, -Math.sign(dy)]].find(([ax, ay]) => !wall(s, e.x + ax, e.y + ay) && !s.enemies.some(o => o.x === e.x + ax && o.y === e.y + ay)); if (st) { e.x += st[0]; e.y += st[1]; } return; }
+      approach(); return;
+    }
+    if (e.ai === 'mage') {
+      if (man <= 4 && lineClear && e.turn % 2 === 0) { e.turn += 1; const q1 = px(s, p.x, p.y); fx.ring(q1.x, q1.y, C.violet, 50); hurt(s, e.atk, e.e, true); addLog(`${e.e} lanza un hechizo.`); return; }
+      e.turn += 1; if (man > 2) approach(); return;
+    }
+    if (e.ai === 'boss') {
+      e.turn += 1;
+      if (e.warn) { const hit = e.warn.some(([x, y]) => x === p.x && y === p.y); const q = px(s, e.x, e.y); fx.ring(q.x, q.y, C.orange, 120); fx.shake(8, 0.3); fx.flash(C.orange, 0.3); e.warn = null; if (hit) { hurt(s, 14, e.e, true); addLog('🔥 ¡El aliento del dragón te quema!'); } else addLog('🔥 Esquivaste el aliento del dragón.'); return; }
+      if (e.turn % 4 === 0) { e.warn = []; for (let k = -4; k <= 4; k++) { e.warn.push([e.x + k, e.y], [e.x, e.y + k]); } addLog('⚠️ ¡El dragón inhala fuego! Sal de su fila y columna.'); hx.warn(); return; }
+    }
+    if (man === 1) { const dmg = e.atk; hurt(s, dmg, e.e); addLog(`${e.e} te golpea.`); return; }
+    approach();
+    if (e.ai === 'fast' && s.alive) { const d2 = Math.abs(p.x - e.x) + Math.abs(p.y - e.y); if (d2 === 1) { hurt(s, e.atk, e.e); } else approach(); }
+  };
+  const enemyPhase = s => { s.enemies.slice().forEach(e => { if (s.alive && s.enemies.includes(e)) stepEnemy(s, e); }); };
+  const afterPlayer = s => { s.turn += 1; computeVis(s); if (s.alive) enemyPhase(s); if (s.alive) computeVis(s); force(); };
 
-  // ── Player action ────────────────────────────────────────
-  const movePlayer = (dx, dy) => {
-    if (phaseRef.current !== 'playing') return;
-    const p = playerRef.current;
-    const m = mapRef.current;
-    const nx = p.x + dx, ny = p.y + dy;
-    if (ny < 0 || ny >= VC_ROWS || nx < 0 || nx >= VC_COLS) return;
-    if (m[ny][nx] === VC_WALL) { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); return; }
-
-    // Attack enemy
-    const ei = enemiesRef.current.findIndex(e => e.x === nx && e.y === ny);
-    if (ei !== -1) {
-      const e = enemiesRef.current[ei];
-      const dmg = Math.max(1, p.atk - e.def);
-      e.hp -= dmg;
-      popVibrate();
-      if (e.hp <= 0) {
-        p.xp += e.xp;
-        addMsg(`⚔️ Slew ${e.emoji}! +${e.xp} XP${e.isBoss ? '  🏆 BOSS!' : ''}`);
-        if (e.isBoss) celebrateVibrate();
-        enemiesRef.current.splice(ei, 1);
-        checkLevelUp();
-      } else {
-        addMsg(`🗡️ Hit ${e.emoji} for ${dmg} dmg (${e.hp}/${e.maxHp} HP left)`);
-      }
-      moveEnemies();
-      setTick(t => t + 1);
+  const act = (dx, dy) => {
+    const s = g.current; if (phase !== 'play' || !s.alive) return;
+    const p = s.p; const nx = p.x + dx, ny = p.y + dy;
+    if (wall(s, nx, ny)) { hx.tick(); return; }
+    const e = s.enemies.find(o => o.x === nx && o.y === ny);
+    if (e) {
+      const crit = Math.random() < 0.12; let d = Math.max(1, p.atk + VC2_WEAPONS[p.weapon][1] - e.def + randInt(0, 2)); if (crit) d *= 2;
+      e.hp -= d; e.awake = true; const q = px(s, e.x, e.y); fx.pop(q.x, q.y - 18, `${crit ? '💥' : ''}${d}`, crit ? C.amber : C.text, crit ? 22 : 17); fx.burst(q.x, q.y, '#fff', 6, 150, 0.3, 3); hx.hit();
+      if (e.hp <= 0) killEnemy(s, e); else addLog(`🗡️ Golpeas a ${e.e}: ${d} (${e.hp}/${e.maxHp})`);
+      afterPlayer(s);
+      if (e.hp <= 0 && e.boss && s.alive) { const sc = s.floor * 100 + s.kills * 10 + s.p.gold + 500; setRes({ isNew: submitBest(sc), won: true }); setPhase('win'); }
       return;
     }
-
-    // Move
-    p.x = nx; p.y = ny;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    // Pick up item
-    const ii = itemsRef.current.findIndex(it => it.x === nx && it.y === ny);
-    if (ii !== -1) {
-      const item = itemsRef.current[ii];
-      if (item.type === 'atk')   p.atk    += item.value;
-      if (item.type === 'def')   p.def    += item.value;
-      if (item.type === 'heal')  p.hp      = Math.min(p.hp + item.value, p.maxHp);
-      if (item.type === 'maxhp') { p.maxHp += item.value; p.hp = Math.min(p.hp + item.value, p.maxHp); }
-      if (item.type === 'xp')    { p.xp    += item.value; checkLevelUp(); }
-      addMsg(`${item.emoji} Picked up: ${item.label}`);
-      scoreVibrate();
-      itemsRef.current.splice(ii, 1);
-    }
-
-    // Stairs
-    const s = stairsRef.current;
-    if (nx === s.x && ny === s.y) {
-      if (p.floor >= 5) {
-        phaseRef.current = 'won';
-        celebrateVibrate();
-        addMsg('🏆 YOU ESCAPED THE VOID! All 5 floors cleared!');
-        setPhase('won');
-        setTick(t => t + 1);
-        return;
-      }
-      p.floor += 1;
-      addMsg(`🚪 Descending to Floor ${p.floor}... ${VC_FLOOR_THEMES[p.floor - 1].name}`);
-      celebrateVibrate();
-      generateFloor(p.floor);
-      setTick(t => t + 1);
-      return;
-    }
-
-    moveEnemies();
-    setTick(t => t + 1);
-  };
-
-  const startGame = () => {
-    playerRef.current = { x:1, y:1, hp:20, maxHp:20, atk:3, def:1, floor:1, xp:0, level:1 };
-    eidRef.current = 0; iidRef.current = 0;
-    phaseRef.current = 'playing';
-    generateFloor(1);
-    setMsgLog(['🏺 Floor 1: DUNGEON DEPTHS', '⚔️ Touch D-Pad to move. Step on enemies to attack!']);
-    setPhase('playing');
-    setTick(t => t + 1);
-  };
-
-  // ── Render ───────────────────────────────────────────────
-  const p   = playerRef.current;
-  const floorIdx = Math.min((p.floor ?? 1) - 1, 4);
-  const theme = VC_FLOOR_THEMES[floorIdx];
-  const hpPct = Math.max(0, p.hp / p.maxHp);
-  const hpColor = hpPct > 0.5 ? '#44ff88' : hpPct > 0.25 ? '#ffaa00' : '#ff3344';
-
-  const renderGrid = () => {
-    if (!mapRef.current.length) return null;
-    const m = mapRef.current;
-    const cells = [];
-    const stairs = stairsRef.current;
-    for (let row = 0; row < VC_ROWS; row++) {
-      for (let col = 0; col < VC_COLS; col++) {
-        const isWall   = m[row][col] === VC_WALL;
-        const isStairs = stairs.x === col && stairs.y === row;
-        const enemy    = enemiesRef.current.find(e => e.x === col && e.y === row);
-        const item     = itemsRef.current.find(it => it.x === col && it.y === row);
-        const isPlayer = p.x === col && p.y === row;
-
-        const bgCell = isWall
-          ? theme.wall
-          : (row + col) % 2 === 0 ? theme.floor : theme.floor + 'dd';
-
-        const fs = VC_CELL - 5;
-        let content = null;
-        if      (isPlayer) content = <Text style={{ fontSize: fs, lineHeight: VC_CELL }}>😤</Text>;
-        else if (enemy)    content = <Text style={{ fontSize: fs - 2, lineHeight: VC_CELL }}>{enemy.emoji}</Text>;
-        else if (isStairs) content = <Text style={{ fontSize: fs - 2, lineHeight: VC_CELL }}>🚪</Text>;
-        else if (item)     content = <Text style={{ fontSize: fs - 3, lineHeight: VC_CELL }}>{item.emoji}</Text>;
-
-        cells.push(
-          <View key={`${row}-${col}`} style={{
-            position: 'absolute', left: col * VC_CELL, top: row * VC_CELL,
-            width: VC_CELL, height: VC_CELL,
-            backgroundColor: bgCell,
-            borderWidth: isWall ? 0 : 0.5,
-            borderColor: 'rgba(255,255,255,0.05)',
-            justifyContent: 'center', alignItems: 'center', overflow: 'hidden',
-          }}>
-            {content}
-          </View>
-        );
+    p.x = nx; p.y = ny; hx.tick();
+    const it = s.items.find(o => o.x === nx && o.y === ny);
+    if (it) {
+      const q = px(s, nx, ny);
+      if (it.kind === 'trap') { const d = randInt(3, 5) + s.floor; s.items = s.items.filter(o => o !== it); fx.burst(q.x, q.y, C.red, 12, 200); hurt(s, d, '⚠️', true); addLog(`⚠️ ¡Trampa de púas! -${d}`); }
+      else if (it.kind === 'potion') { p.potions += 1; addLog('🧪 Recoges una poción.'); fx.pop(q.x, q.y - 14, '+🧪', C.lime, 16); hx.good(); s.items = s.items.filter(o => o !== it); }
+      else if (it.kind === 'bomb') { p.bombs += 1; addLog('💣 Recoges una bomba.'); hx.good(); s.items = s.items.filter(o => o !== it); }
+      else if (it.kind === 'gold') { const gold = randInt(8, 20) + s.floor * 4; p.gold += gold; fx.pop(q.x, q.y - 14, `+${gold}💰`, C.amber, 16); hx.good(); s.items = s.items.filter(o => o !== it); }
+      else if (it.kind === 'shrine') { p.hp = p.maxHp; fx.ring(q.x, q.y, C.cyan, 90); fx.flash(C.cyan, 0.25); addLog('⛲ El santuario restaura tu salud.'); hx.good(); s.items = s.items.filter(o => o !== it); }
+      else if (it.kind === 'chest') {
+        s.items = s.items.filter(o => o !== it); const r = Math.random(); fx.burst(q.x, q.y, C.amber, 14, 200); hx.win();
+        if (r < 0.34 && p.weapon < VC2_WEAPONS.length - 1) { p.weapon = Math.min(VC2_WEAPONS.length - 1, p.weapon + 1); addLog(`📦 ¡Arma nueva: ${VC2_WEAPONS[p.weapon][0]}!`); }
+        else if (r < 0.68 && p.armor < VC2_ARMORS.length - 1) { p.armor += 1; p.def += VC2_ARMORS[p.armor][1] - VC2_ARMORS[p.armor - 1][1]; addLog(`📦 ¡Armadura nueva: ${VC2_ARMORS[p.armor][0]}!`); }
+        else { p.maxHp += 6; p.hp = Math.min(p.maxHp, p.hp + 10); addLog('📦 ¡Elixir! +6 PS máx.'); }
       }
     }
-    return cells;
+    if (nx === s.stairs.x && ny === s.stairs.y) {
+      if (s.floor >= 5) { return; }
+      if (s.enemies.some(o => o.boss)) { addLog('🚪 La puerta está sellada…'); }
+      s.floor += 1; const lvl = gen(s.floor, p); Object.assign(s, lvl); s.fl = { vis: new Set() }; p.hp = Math.min(p.maxHp, p.hp + Math.ceil(p.maxHp * 0.25));
+      addLog(`🚪 Piso ${s.floor}: ${VC2_THEMES[s.floor - 1].name}`); hx.win(); fx.flash('#fff', 0.35); computeVis(s); force(); return;
+    }
+    afterPlayer(s);
   };
+  const usePotion = () => { const s = g.current; const p = s.p; if (phase !== 'play' || p.potions <= 0 || p.hp >= p.maxHp) { hx.tick(); return; } p.potions -= 1; const h = Math.ceil(p.maxHp * 0.5); p.hp = Math.min(p.maxHp, p.hp + h); const q = px(s, p.x, p.y); fx.pop(q.x, q.y - 20, `+${h}`, C.lime, 20); fx.ring(q.x, q.y, C.lime, 50); hx.good(); addLog('🧪 Bebes una poción.'); afterPlayer(s); };
+  const useBomb = () => {
+    const s = g.current; const p = s.p; if (phase !== 'play' || p.bombs <= 0) { hx.tick(); return; }
+    p.bombs -= 1; const q = px(s, p.x, p.y); fx.ring(q.x, q.y, C.orange, CELL * 3); fx.flash(C.orange, 0.3); fx.shake(8, 0.3); hx.heavy();
+    s.enemies.slice().forEach(e => { if (Math.abs(e.x - p.x) <= 2 && Math.abs(e.y - p.y) <= 2) { e.hp -= 12; e.awake = true; const qq = px(s, e.x, e.y); fx.pop(qq.x, qq.y - 14, '-12', C.orange, 18); if (e.hp <= 0) killEnemy(s, e); } });
+    addLog('💣 ¡BOOM!'); afterPlayer(s);
+  };
+  useLoop(phase === 'play', dt => { const s = g.current; s.t += dt; s.p.vx += (s.p.x - s.p.vx) * Math.min(1, dt * 16); s.p.vy += (s.p.y - s.p.vy) * Math.min(1, dt * 16); });
+  const pan = usePan(fx, { down: () => { g.current.used = false; }, move: (x, y, gs) => { const s = g.current; if (s.used) return; if (Math.abs(gs.dx) > 24 || Math.abs(gs.dy) > 24) { s.used = true; if (Math.abs(gs.dx) > Math.abs(gs.dy)) act(gs.dx > 0 ? 1 : -1, 0); else act(0, gs.dy > 0 ? 1 : -1); } } });
+  const startHold = (dx, dy) => { act(dx, dy); clearInterval(holdRef.current); holdRef.current = setInterval(() => act(dx, dy), 190); };
+  const stopHold = () => { clearInterval(holdRef.current); holdRef.current = null; };
+  useEffect(() => () => clearInterval(holdRef.current), []);
 
-  const dpadBtn = (label, onPress) => (
-    <View onTouchStart={onPress} style={{
-      width: 75, height: 75,
-      backgroundColor: 'rgba(255,255,255,0.10)',
-      borderRadius: 14,
-      justifyContent: 'center', alignItems: 'center',
-      borderWidth: 1, borderColor: theme.accent + '60',
-    }}>
-      <Text style={{ color: '#fff', fontSize: 24, fontWeight: 'bold' }}>{label}</Text>
-    </View>
+  const s = g.current; const p = s.p; const th = VC2_THEMES[s.floor - 1];
+  const camX = clamp(p.vx - (VW - 1) / 2, 0, VC2_W - VW), camY = clamp(p.vy - (VH - 1) / 2, 0, VC2_H - VH);
+  const ix = Math.floor(camX), iy = Math.floor(camY);
+  const OX = (AREA_W - VW * CELL) / 2;
+  const cells = [];
+  for (let j = 0; j <= VH; j++) for (let i = 0; i <= VW; i++) {
+    const x = ix + i, y = iy + j;
+    if (x < 0 || y < 0 || x >= VC2_W || y >= VC2_H) continue;
+    const seen = s.seen[y][x]; if (!seen) continue;
+    const vis = s.fl.vis.has(`${x},${y}`);
+    const isWall = s.map[y][x] === 0;
+    const left = OX + (x - camX) * CELL, top = (y - camY) * CELL;
+    const en = vis ? s.enemies.find(o => o.x === x && o.y === y) : null;
+    const it = vis ? s.items.find(o => o.x === x && o.y === y) : null;
+    const warn = s.enemies.some(o => o.warn && o.warn.some(([wx, wy]) => wx === x && wy === y)) && !isWall;
+    cells.push(
+      <View key={`${x},${y}`} style={{ position: 'absolute', left, top, width: CELL, height: CELL, backgroundColor: isWall ? th.wall : ((x + y) % 2 ? th.floor : th.floor + 'ee'), borderTopWidth: isWall ? 3 : 0, borderTopColor: isWall ? alpha(th.accent, 0.35) : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
+        {warn && <View style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundColor: alpha(C.red, 0.35 + Math.sin(s.t * 12) * 0.15) }} />}
+        {!isWall && s.stairs.x === x && s.stairs.y === y && <Text style={{ fontSize: CELL * 0.6 }}>🚪</Text>}
+        {it && <Text style={{ fontSize: CELL * 0.55 }}>{it.kind === 'potion' ? '🧪' : it.kind === 'chest' ? '📦' : it.kind === 'gold' ? '💰' : it.kind === 'bomb' ? '💣' : it.kind === 'shrine' ? '⛲' : (Math.abs(x - p.x) + Math.abs(y - p.y) <= 2 ? '⚠️' : '')}</Text>}
+        {en && <Text style={{ fontSize: CELL * (en.boss ? 0.85 : en.small ? 0.5 : 0.62), ...tglow(en.warn ? C.red : '#000', en.warn ? 14 : 3) }}>{en.e}</Text>}
+        {en && en.hp < en.maxHp && <View style={{ position: 'absolute', bottom: 2, left: 4, right: 4 }}><Bar value={en.hp} max={en.maxHp} color={C.red} h={4} /></View>}
+        {!vis && <View style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.62)' }} />}
+      </View>
+    );
+  }
+  const dpad = (label, dx, dy, st) => (
+    <Pressable testID={`vd-${label}`} onPressIn={() => startHold(dx, dy)} onPressOut={stopHold} style={[{ width: 54, height: 54, borderRadius: 16, backgroundColor: alpha(th.accent, 0.15), borderWidth: 2, borderColor: alpha(th.accent, 0.7), alignItems: 'center', justifyContent: 'center' }, st]}>
+      <Text style={{ color: th.accent, fontSize: 22, fontWeight: '900' }}>{label}</Text>
+    </Pressable>
   );
-
+  const sc = s.floor * 100 + s.kills * 10 + p.gold;
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.bg }]}>
-      {/* HUD */}
-      <View style={[styles.header, { backgroundColor: 'rgba(0,0,0,0.55)', paddingVertical: 10 }]}>
-        <Pressable onPress={onExit} style={styles.backBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}><Text style={styles.backText}>← BACK</Text></Pressable>
-        <View style={{ alignItems: 'center' }}>
-          <Text style={[styles.title, { color: theme.accent, fontSize: 20 }]}>☠️ VOID CRAWLER</Text>
-          <Text style={{ color: '#888', fontSize: 11 }}>{theme.name}  •  Floor {p.floor}/5</Text>
+    <GameScreen title="VOID CRAWLER" emoji="☠️" accent={th.accent} onExit={onExit} score={sc} best={best}
+      hud={<><View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><Text style={{ color: C.red, fontSize: 10, fontWeight: '900' }}>HP</Text><Bar value={p.hp} max={p.maxHp} color={p.hp / p.maxHp > 0.4 ? C.lime : C.red} h={8} w={96} /><Text style={{ color: C.dim, fontSize: 10 }}>{p.hp}/{p.maxHp}</Text></View><Text style={{ color: C.dim, fontSize: 11 }}>Piso <Text style={{ color: th.accent, fontWeight: '900' }}>{s.floor}/5</Text> · Nv.{p.lv}</Text></>}>
+      <PlayArea fx={fx} bg="#000" border={alpha(th.accent, 0.4)} {...pan}>
+        <View style={{ position: 'absolute', left: 0, top: 0, width: AREA_W, height: VH * CELL, overflow: 'hidden' }}>{cells}
+          <View style={{ position: 'absolute', left: OX + (p.vx - camX) * CELL, top: (p.vy - camY) * CELL, width: CELL, height: CELL, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: CELL * 0.66, ...tglow(th.accent, 10) }}>🥷</Text></View>
         </View>
-        <Text style={{ color: '#ccc', fontSize: 13, fontWeight: 'bold' }}>Lv.{p.level} ⚔️{p.atk} 🛡️{p.def}</Text>
-      </View>
-
-      {/* HP + XP bars */}
-      {phase === 'playing' && (
-        <View style={{ paddingHorizontal: 14, paddingVertical: 5, backgroundColor: 'rgba(0,0,0,0.45)' }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-            <Text style={{ color: hpColor, fontSize: 12, fontWeight: 'bold', width: 80 }}>❤️ {p.hp}/{p.maxHp}</Text>
-            <View style={{ flex: 1, height: 7, backgroundColor: '#111', borderRadius: 4, overflow: 'hidden' }}>
-              <View style={{ width: `${hpPct * 100}%`, height: '100%', backgroundColor: hpColor, borderRadius: 4 }} />
-            </View>
+        <View style={{ position: 'absolute', left: 10, right: 10, top: VH * CELL + 4 }}>
+          {s.log.map((m, i) => <Text key={i} numberOfLines={1} style={{ color: i === 0 ? C.text : alpha(C.dim, 0.7), fontSize: 11, lineHeight: 15 }}>{m}</Text>)}
+        </View>
+        <View style={{ position: 'absolute', left: 12, bottom: 12, gap: 8 }}>
+          <Text style={{ color: C.dim, fontSize: 11 }}>⚔️ {p.atk + VC2_WEAPONS[p.weapon][1]} ({VC2_WEAPONS[p.weapon][0]})  🛡️ {p.def}</Text>
+          <Text style={{ color: C.dim, fontSize: 11 }}>XP {p.xp}/{need(p.lv)}  💰 {p.gold}</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Btn label={`🧪 ${p.potions}`} small ghost color={C.lime} onPress={usePotion} />
+            <Btn label={`💣 ${p.bombs}`} small ghost color={C.orange} onPress={useBomb} />
           </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Text style={{ color: '#ffcc44', fontSize: 11, width: 80 }}>✨ {p.xp}/{xpNeeded(p.level)} XP</Text>
-            <View style={{ flex: 1, height: 5, backgroundColor: '#111', borderRadius: 4, overflow: 'hidden' }}>
-              <View style={{ width: `${Math.min((p.xp / xpNeeded(p.level)) * 100, 100)}%`, height: '100%', backgroundColor: '#ffcc44', borderRadius: 4 }} />
-            </View>
-          </View>
+          <Btn label="⏳ ESPERAR" small ghost color={C.dim} onPress={() => { if (phase === 'play') afterPlayer(g.current); }} />
         </View>
-      )}
-
-      {/* Grid */}
-      <View style={{
-        width: VC_COLS * VC_CELL, height: VC_ROWS * VC_CELL,
-        alignSelf: 'center', position: 'relative', marginTop: 4,
-        borderWidth: 2, borderColor: theme.accent + '44', borderRadius: 4,
-        overflow: 'hidden',
-      }}>
-        {renderGrid()}
-      </View>
-
-      {/* Message log */}
-      {phase === 'playing' && (
-        <View style={{ paddingHorizontal: 14, paddingVertical: 4, minHeight: 38, backgroundColor: 'rgba(0,0,0,0.4)' }}>
-          {msgLog.slice(0, 2).map((msg, i) => (
-            <Text key={i} style={{ color: i === 0 ? '#ddd' : '#555', fontSize: 12 }}>{msg}</Text>
-          ))}
+        <View style={{ position: 'absolute', right: 12, bottom: 10, width: 54 * 3 + 12, height: 54 * 3 + 6 }}>
+          {dpad('▲', 0, -1, { position: 'absolute', left: 60, top: 0 })}
+          {dpad('◀', -1, 0, { position: 'absolute', left: 0, top: 57 })}
+          {dpad('▶', 1, 0, { position: 'absolute', left: 120, top: 57 })}
+          {dpad('▼', 0, 1, { position: 'absolute', left: 60, top: 114 })}
         </View>
-      )}
-
-      {/* D-Pad */}
-      {phase === 'playing' && (
-        <View style={{ alignItems: 'center', paddingTop: 6, paddingBottom: 6 }}>
-          <View style={{ marginBottom: 4 }}>
-            {dpadBtn('▲', () => movePlayer(0, -1))}
-          </View>
-          <View style={{ flexDirection: 'row', gap: 6 }}>
-            {dpadBtn('◄', () => movePlayer(-1, 0))}
-            {dpadBtn('▼', () => movePlayer(0, 1))}
-            {dpadBtn('►', () => movePlayer(1, 0))}
-          </View>
-        </View>
-      )}
-
-      {/* Overlay */}
-      {phase !== 'playing' && (
-        <View style={[styles.overlay, { backgroundColor: 'rgba(0,0,0,0.9)' }]}>
-          <Text style={[styles.overlayTitle, { color: theme.accent, textAlign: 'center' }]}>
-            {phase === 'idle' ? '☠️ VOID CRAWLER' : phase === 'won' ? '🏆 VOID ESCAPED!' : '💀 YOU DIED'}
-          </Text>
-          <Text style={[styles.overlaySub, { textAlign: 'center', lineHeight: 22, marginBottom: 6 }]}>
-            {phase === 'idle'
-              ? '5 floors of procedural darkness.\nFight 💀👺👹😈🐉  Loot ⚔️🛡️❤️  Level up ⬆️  Escape 🚪'
-              : phase === 'won'
-              ? `Lv.${p.level} ⚔️${p.atk} 🛡️${p.def} — ${p.hp}/${p.maxHp} HP remaining\n${msgLog[0] ?? ''}`
-              : `${msgLog[0] ?? ''}\nFloor ${p.floor} — Lv.${p.level} ⚔️${p.atk} 🛡️${p.def}`}
-          </Text>
-          <Text style={{ color: '#444', fontSize: 12, textAlign: 'center', marginBottom: 20 }}>
-            {phase === 'idle' ? '😤 Hero  🚪 Stairs down  💀👺👹😈🐉 Enemies  ⚔️🛡️❤️💊💎 Items' : ''}
-          </Text>
-          <Pressable style={[styles.btn, { backgroundColor: theme.accent }]} onPress={startGame} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
-            <Text style={[styles.btnText, { color: '#000' }]}>
-              {phase === 'idle' ? 'ENTER THE VOID' : 'DESCEND AGAIN'}
-            </Text>
-          </Pressable>
-        </View>
-      )}
-    </SafeAreaView>
+        <Overlay show={phase !== 'play'} kind={phase} emoji={phase === 'win' ? '🏆' : phase === 'over' ? '💀' : '☠️'} title={phase === 'win' ? '¡VACÍO CONQUISTADO!' : phase === 'over' ? 'HAS MUERTO' : 'VOID CRAWLER'}
+          subtitle={phase === 'win' ? `Derrotaste al dragón · Nv.${p.lv}` : phase === 'over' ? `Caíste en el piso ${s.floor} ante ${res.by || '…'} · ${s.kills} enemigos` : '5 pisos de oscuridad procedural'}
+          score={sc + (phase === 'win' ? 500 : 0)} best={best} isNew={res.isNew} accent={th.accent} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Desliza o usa la cruz: mover y atacar al chocar', 'Solo ves lo que alcanza tu luz: explora con cuidado', '🏹 dispara en línea · 🔮 hechizos · ⚠️ trampas · 🐉 jefe final', '🧪 curas · 💣 daña alrededor · 📦 equipo'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 
@@ -3034,6 +2860,16 @@ const MD_TYPE_MOVES = {
 const MD_STATUS = [{ n: 'Rugido', eff: 'atkdown', pp: 10, d: 'baja el ataque rival' }, { n: 'Endurecer', eff: 'defup', pp: 10, d: 'sube tu defensa' }, { n: 'Recuperar', eff: 'heal', pp: 5, d: 'cura el 40% de PS' }];
 const MD_STATS = (b, lv) => ({ maxHp: Math.floor(b.hp * (1 + (lv - 5) * 0.12)) + (lv > 5 ? 0 : 0), atk: Math.floor(b.atk * (1 + (lv - 5) * 0.08)), def: Math.floor(b.def * (1 + (lv - 5) * 0.08)) });
 const MD_TRAINERS = ['Líder Brasa', 'Líder Marea', 'Líder Raíz', 'Líder Chispa', 'Líder Cumbre'];
+
+function MdBtn({ label, sub, color, onPress, disabled }) {
+  return (
+    <Pressable onPress={onPress} disabled={disabled} style={{ width: '48.5%', opacity: disabled ? 0.35 : 1 }}>
+      <View style={{ paddingVertical: 9, borderRadius: 14, backgroundColor: alpha(color, 0.16), borderWidth: 2, borderColor: alpha(color, 0.85), alignItems: 'center' }}>
+        <Text style={{ color: C.text, fontWeight: '900', fontSize: 13 }}>{label}</Text>{sub ? <Text style={{ color: C.dim, fontSize: 10 }}>{sub}</Text> : null}
+      </View>
+    </Pressable>
+  );
+}
 
 function MonsterDuel({ onExit }) {
   const fx = useFX();
@@ -3213,13 +3049,6 @@ function MonsterDuel({ onExit }) {
   const s = g.current; const b = s.battle; const p = s.team[s.active]; const f = b ? foe() : null;
   const tag = m => <Text style={{ color: MD_TC[m.type], fontSize: 10, fontWeight: '900' }}>{m.type.toUpperCase()}</Text>;
   const hpColor = (h, m) => (h > m * 0.5 ? C.lime : h > m * 0.2 ? C.amber : C.red);
-  const MBtn = ({ label, sub, color, onPress, disabled }) => (
-    <Pressable onPress={onPress} disabled={disabled} style={{ width: '48.5%', opacity: disabled ? 0.35 : 1 }}>
-      <View style={{ paddingVertical: 9, borderRadius: 14, backgroundColor: alpha(color, 0.16), borderWidth: 2, borderColor: alpha(color, 0.85), alignItems: 'center' }}>
-        <Text style={{ color: C.text, fontWeight: '900', fontSize: 13 }}>{label}</Text>{sub ? <Text style={{ color: C.dim, fontSize: 10 }}>{sub}</Text> : null}
-      </View>
-    </Pressable>
-  );
   return (
     <GameScreen title="MONSTER DUEL" emoji="⚡" accent={C.amber} onExit={onExit} score={scoreOf(s)} best={best}
       hud={scene === 'explore' || scene === 'battle' ? <><Text style={{ color: C.dim, fontSize: 12 }}>🏅 {s.badges}/5 · 👾 {s.caught.length}/{MD_MONSTERS.length}</Text><Text style={{ color: C.dim, fontSize: 12 }}>🔴 {s.balls}  🧪 {s.potions}</Text></> : null}>
@@ -3240,10 +3069,10 @@ function MonsterDuel({ onExit }) {
               </Pressable>
             ))}
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6, justifyContent: 'space-between' }}>
-              <MBtn label="🌿 EXPLORAR" sub={s.wins > 0 && s.wins % 4 === 0 ? '¡Hay un líder cerca!' : 'Busca monstruos'} color={C.lime} onPress={explore} />
-              <MBtn label="🛏️ DESCANSAR" sub="Cura todo (riesgo)" color={C.cyan} onPress={rest} />
-              <MBtn label={`🧪 POCIÓN (${s.potions})`} sub="Cura 45% al activo" color={C.red} onPress={usePotion} disabled={s.potions <= 0 || p.hp >= p.maxHp} />
-              <MBtn label="💾 GUARDAR" sub="Progreso" color={C.amber} onPress={() => { save(); addLog('💾 Partida guardada.'); hx.good(); force(); }} />
+              <MdBtn label="🌿 EXPLORAR" sub={s.wins > 0 && s.wins % 4 === 0 ? '¡Hay un líder cerca!' : 'Busca monstruos'} color={C.lime} onPress={explore} />
+              <MdBtn label="🛏️ DESCANSAR" sub="Cura todo (riesgo)" color={C.cyan} onPress={rest} />
+              <MdBtn label={`🧪 POCIÓN (${s.potions})`} sub="Cura 45% al activo" color={C.red} onPress={usePotion} disabled={s.potions <= 0 || p.hp >= p.maxHp} />
+              <MdBtn label="💾 GUARDAR" sub="Progreso" color={C.amber} onPress={() => { save(); addLog('💾 Partida guardada.'); hx.good(); force(); }} />
             </View>
           </View>
         )}
@@ -3268,17 +3097,17 @@ function MonsterDuel({ onExit }) {
               {s.busy && s.menu !== 'forced' && <Text style={{ color: C.dim, textAlign: 'center', padding: 22 }}>…</Text>}
               {!s.busy && s.menu === 'main' && (
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between' }}>
-                  <MBtn label="⚔️ LUCHAR" color={C.red} onPress={() => { s.menu = 'moves'; force(); }} />
-                  <MBtn label="🔁 EQUIPO" color={C.violet} onPress={() => { s.menu = 'team'; force(); }} />
-                  <MBtn label={`🔴 ATRAPAR (${s.balls})`} color={C.amber} onPress={tryCatch} />
-                  <MBtn label={`🧪 POCIÓN (${s.potions})`} color={C.lime} onPress={usePotion} />
-                  <MBtn label="🏃 HUIR" color={C.dim} onPress={run} />
+                  <MdBtn label="⚔️ LUCHAR" color={C.red} onPress={() => { s.menu = 'moves'; force(); }} />
+                  <MdBtn label="🔁 EQUIPO" color={C.violet} onPress={() => { s.menu = 'team'; force(); }} />
+                  <MdBtn label={`🔴 ATRAPAR (${s.balls})`} color={C.amber} onPress={tryCatch} />
+                  <MdBtn label={`🧪 POCIÓN (${s.potions})`} color={C.lime} onPress={usePotion} />
+                  <MdBtn label="🏃 HUIR" color={C.dim} onPress={run} />
                 </View>
               )}
               {!s.busy && s.menu === 'moves' && (
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between' }}>
-                  {p.moves.map((mv, i) => <MBtn key={i} label={mv.n} sub={mv.eff ? mv.d : `${mv.t} · pot ${mv.p}${effOf(mv.t, f.type) > 1 ? ' ✓✓' : effOf(mv.t, f.type) < 1 ? ' ✗' : ''} · PP ${mv.pp}/${mv.max}`} color={MD_TC[mv.t]} onPress={() => useMove(i)} disabled={mv.pp <= 0 || (mv.minLv && p.lv < mv.minLv)} />)}
-                  <MBtn label="← Volver" color={C.dim} onPress={() => { s.menu = 'main'; force(); }} />
+                  {p.moves.map((mv, i) => <MdBtn key={i} label={mv.n} sub={mv.eff ? mv.d : `${mv.t} · pot ${mv.p}${effOf(mv.t, f.type) > 1 ? ' ✓✓' : effOf(mv.t, f.type) < 1 ? ' ✗' : ''} · PP ${mv.pp}/${mv.max}`} color={MD_TC[mv.t]} onPress={() => useMove(i)} disabled={mv.pp <= 0 || (mv.minLv && p.lv < mv.minLv)} />)}
+                  <MdBtn label="← Volver" color={C.dim} onPress={() => { s.menu = 'main'; force(); }} />
                 </View>
               )}
               {(s.menu === 'team' || s.menu === 'forced') && (
@@ -3291,7 +3120,7 @@ function MonsterDuel({ onExit }) {
                       </View>
                     </Pressable>
                   ))}
-                  {s.menu === 'team' && <MBtn label="← Volver" color={C.dim} onPress={() => { s.menu = 'main'; force(); }} />}
+                  {s.menu === 'team' && <MdBtn label="← Volver" color={C.dim} onPress={() => { s.menu = 'main'; force(); }} />}
                 </View>
               )}
             </View>
@@ -3616,396 +3445,187 @@ function NeonTetris({ onExit }) {
   );
 }
 
-// ─── NEON WARRIOR - Action Side-Scrolling Platformer ─────────────
-const NW_GH   = Math.min(height - 260, 500);
-const NW_GW   = width;
-const NW_WW   = Math.floor(width * 3.5);
-const NW_GRAV = 0.55;
-const NW_JUMP = -13;
-const NW_SPD  = 3.5;
-const NW_PW   = 36;
-const NW_PH   = 40;
-const NW_EW   = 36;
-const NW_EH   = 36;
-const NW_GND  = NW_GH - 48;
-
-function nwGetLevel(n) {
-  const g = NW_GND, w = NW_WW;
-  const LVLS = [
-    {
-      plats:[
-        {x:0,y:g,w,h:50},
-        {x:140,y:g-130,w:100,h:16},{x:320,y:g-190,w:90,h:16},
-        {x:520,y:g-140,w:110,h:16},{x:740,y:g-200,w:100,h:16},
-        {x:960,y:g-150,w:120,h:16},{x:1180,y:g-210,w:90,h:16},
-      ],
-      enemies:[
-        {id:0,x:370,y:g-NW_EH,vx:1.2,vy:0,hp:1,maxHp:1,type:'w',alive:true,bx:200,ex:600},
-        {id:1,x:800,y:g-NW_EH,vx:-1.2,vy:0,hp:1,maxHp:1,type:'w',alive:true,bx:620,ex:1000},
-        {id:2,x:600,y:g-150,vx:0,vy:1.5,hp:1,maxHp:1,type:'f',alive:true,by:g-250,ey:g-70},
-      ],
-      coins:[
-        {id:0,x:170,y:g-165,col:false},{id:1,x:350,y:g-225,col:false},
-        {id:2,x:560,y:g-175,col:false},{id:3,x:770,y:g-235,col:false},
-        {id:4,x:1000,y:g-185,col:false},{id:5,x:1210,y:g-245,col:false},
-      ],
-      pups:[{id:0,x:540,y:g-178,t:'⭐',col:false},{id:1,x:980,y:g-90,t:'❤️',col:false}],
-    },
-    {
-      plats:[
-        {x:0,y:g,w:180,h:50},{x:260,y:g,w:180,h:50},{x:520,y:g,w:200,h:50},
-        {x:800,y:g,w:180,h:50},{x:1060,y:g,w:w-1060,h:50},
-        {x:120,y:g-150,w:90,h:16},{x:320,y:g-220,w:80,h:16},
-        {x:500,y:g-160,w:90,h:16},{x:690,y:g-230,w:80,h:16},
-        {x:880,y:g-170,w:90,h:16},{x:1080,y:g-240,w:85,h:16},
-      ],
-      enemies:[
-        {id:0,x:290,y:g-NW_EH,vx:1.5,vy:0,hp:1,maxHp:1,type:'w',alive:true,bx:260,ex:440},
-        {id:1,x:570,y:g-NW_EH,vx:-1.5,vy:0,hp:1,maxHp:1,type:'w',alive:true,bx:520,ex:720},
-        {id:2,x:830,y:g-NW_EH,vx:1.5,vy:0,hp:1,maxHp:1,type:'w',alive:true,bx:800,ex:980},
-        {id:3,x:400,y:g-120,vx:0,vy:2,hp:1,maxHp:1,type:'f',alive:true,by:g-270,ey:g-60},
-        {id:4,x:790,y:g-110,vx:0,vy:2,hp:1,maxHp:1,type:'f',alive:true,by:g-260,ey:g-60},
-        {id:5,x:1160,y:g-NW_EH,vx:2,vy:0,hp:3,maxHp:3,type:'h',alive:true,bx:1060,ex:1450},
-      ],
-      coins:[
-        {id:0,x:140,y:g-190,col:false},{id:1,x:335,y:g-260,col:false},
-        {id:2,x:520,y:g-200,col:false},{id:3,x:710,y:g-270,col:false},
-        {id:4,x:900,y:g-210,col:false},{id:5,x:1100,y:g-280,col:false},
-        {id:6,x:1200,y:g-100,col:false},
-      ],
-      pups:[
-        {id:0,x:330,y:g-260,t:'⭐',col:false},
-        {id:1,x:890,y:g-210,t:'🛡️',col:false},
-        {id:2,x:1090,y:g-90,t:'❤️',col:false},
-      ],
-    },
-    {
-      plats:[
-        {x:0,y:g,w:130,h:50},{x:210,y:g,w:110,h:50},{x:410,y:g,w:110,h:50},
-        {x:610,y:g,w:110,h:50},{x:810,y:g,w:110,h:50},{x:1010,y:g,w:110,h:50},
-        {x:1200,y:g,w:w-1200,h:50},
-        {x:100,y:g-140,w:75,h:16},{x:285,y:g-210,w:75,h:16},
-        {x:460,y:g-270,w:75,h:16},{x:645,y:g-180,w:75,h:16},
-        {x:820,y:g-250,w:75,h:16},{x:1010,y:g-300,w:75,h:16},
-        {x:1210,y:g-180,w:75,h:16},
-      ],
-      enemies:[
-        {id:0,x:240,y:g-NW_EH,vx:1.8,vy:0,hp:1,maxHp:1,type:'w',alive:true,bx:210,ex:320},
-        {id:1,x:440,y:g-NW_EH,vx:-1.8,vy:0,hp:1,maxHp:1,type:'w',alive:true,bx:410,ex:520},
-        {id:2,x:640,y:g-NW_EH,vx:1.8,vy:0,hp:1,maxHp:1,type:'w',alive:true,bx:610,ex:720},
-        {id:3,x:840,y:g-NW_EH,vx:-1.8,vy:0,hp:1,maxHp:1,type:'w',alive:true,bx:810,ex:920},
-        {id:4,x:340,y:g-100,vx:0,vy:2.2,hp:1,maxHp:1,type:'f',alive:true,by:g-290,ey:g-60},
-        {id:5,x:660,y:g-110,vx:0,vy:2.2,hp:1,maxHp:1,type:'f',alive:true,by:g-290,ey:g-60},
-        {id:6,x:980,y:g-100,vx:0,vy:2.2,hp:1,maxHp:1,type:'f',alive:true,by:g-290,ey:g-60},
-        {id:7,x:1260,y:g-NW_EH,vx:2.5,vy:0,hp:5,maxHp:5,type:'h',alive:true,bx:1200,ex:1550},
-      ],
-      coins:[
-        {id:0,x:115,y:g-180,col:false},{id:1,x:300,y:g-250,col:false},
-        {id:2,x:478,y:g-310,col:false},{id:3,x:660,y:g-220,col:false},
-        {id:4,x:838,y:g-290,col:false},{id:5,x:1028,y:g-340,col:false},
-        {id:6,x:1228,y:g-220,col:false},{id:7,x:1310,y:g-90,col:false},
-      ],
-      pups:[
-        {id:0,x:300,y:g-250,t:'⭐',col:false},
-        {id:1,x:660,y:g-220,t:'🛡️',col:false},
-        {id:2,x:1028,y:g-90,t:'❤️',col:false},
-        {id:3,x:1028,y:g-340,t:'⭐',col:false},
-      ],
-    },
-  ];
-  return JSON.parse(JSON.stringify(LVLS[Math.min(n - 1, LVLS.length - 1)]));
+// ─── NEON WARRIOR ─────────────────────────────────────────────────
+const NW_THEMES = [
+  { bg: '#05051a', a: C.pink, b: C.cyan, name: 'CIUDAD NEÓN' }, { bg: '#04140f', a: C.lime, b: C.cyan, name: 'BOSQUE DIGITAL' },
+  { bg: '#180606', a: C.orange, b: C.amber, name: 'FÁBRICA ARDIENTE' }, { bg: '#100618', a: C.violet, b: C.pink, name: 'NÚCLEO CUÁNTICO' },
+];
+function NwBtn({ label, color, id, on, off, big }) {
+  return (
+    <Pressable testID={id} onPressIn={on} onPressOut={off} style={{ width: big ? 74 : 66, height: big ? 74 : 66, borderRadius: 40, backgroundColor: alpha(color, 0.14), borderWidth: 2, borderColor: alpha(color, 0.7), alignItems: 'center', justifyContent: 'center', ...glow(color, 8, 0.4) }}>
+      <Text style={{ color, fontSize: 26, fontWeight: '900' }}>{label}</Text>
+    </Pressable>
+  );
 }
 
 function NeonWarrior({ onExit }) {
-  const [, setTick] = useState(0);
-  const [phase, setPhase] = useState('menu');
-  const pRef     = useRef(null);
-  const camRef   = useRef(0);
-  const enRef    = useRef([]);
-  const blRef    = useRef([]);
-  const coRef    = useRef([]);
-  const puRef    = useRef([]);
-  const ptRef    = useRef([]);
-  const scoreRef = useRef(0);
-  const levelRef = useRef(1);
-  const loopRef  = useRef(null);
-  const keysRef  = useRef({ left: false, right: false });
-  const blCoolRef = useRef(0);
-  const invRef   = useRef(0);
-  const shieldRef = useRef(false);
+  const GY = AREA_H - 64, PW = 28, PH = 38;
+  const fx = useFX();
+  const [best, submitBest] = useBest('warrior');
+  const [phase, setPhase] = useState('ready');          // ready | play | clear | over | win
+  const [res, setRes] = useState({ isNew: false });
+  const stars = useRef(makeStars(40, AREA_W * 2, AREA_H)).current;
+  const input = useRef({ left: false, right: false, jump: false }).current;
+  const [, force] = useReducer(x => x + 1, 0);
+  const g = useRef(null);
 
-  const initLevel = (lvl) => {
-    const d = nwGetLevel(lvl);
-    ptRef.current = d.plats;
-    enRef.current = d.enemies;
-    blRef.current = [];
-    coRef.current = d.coins;
-    puRef.current = d.pups;
-    pRef.current = { x: 50, y: NW_GND - NW_PH, vx: 0, vy: 0, jumps: 0, hp: 3, facing: 1 };
-    camRef.current = 0;
-    invRef.current = 0;
-    shieldRef.current = false;
-    blCoolRef.current = 0;
+  const genLevel = n => {
+    const LEN = 2600 + n * 700;
+    const gr = [{ x: 0, y: GY, w: 380 }]; const fl = []; const mv = []; const hz = []; const en = []; const co = []; const pu = []; const fg = [];
+    let x = 380; let sinceFlag = 0; const gapMax = Math.min(170, 110 + n * 10);
+    const flat = (w, ground = true) => { if (ground) gr.push({ x, y: GY, w }); const nE = Math.floor(rand(0, 1 + n * 0.5)); for (let k = 0; k < nE; k++) { const t = Math.random(); const ex = x + rand(60, w - 60); if (t < 0.5) en.push({ id: uid(), t: 'walker', x: ex, y: GY - 30, vx: rand(50, 80) * (Math.random() < 0.5 ? 1 : -1), hp: 1, bx: x + 10, ex: x + w - 10, alive: true }); else if (t < 0.75) en.push({ id: uid(), t: 'hopper', x: ex, y: GY - 30, vx: 0, vy: 0, hp: 1, alive: true, tm: rand(0.5, 1.5) }); else en.push({ id: uid(), t: 'turret', x: ex, y: GY - 34, hp: 2, maxHp: 2, alive: true, tm: rand(0.5, 1.5) }); } for (let k = 0; k < 4; k++) co.push({ id: uid(), x: x + 40 + k * 40, y: GY - 40 - (k === 1 || k === 2 ? 22 : 0), got: false }); x += w; };
+    while (x < LEN) {
+      const r = Math.random(); const w = rand(240, 400);
+      if (r < 0.28) flat(w);
+      else if (r < 0.52) { const gap = rand(90, gapMax); if (Math.random() < 0.6) { fl.push({ x: x + gap / 2 - 40, y: GY - rand(90, 140), w: 80 }); co.push({ id: uid(), x: x + gap / 2 - 8, y: GY - 170, got: false }); } x += gap; flat(w); }
+      else if (r < 0.66) { gr.push({ x, y: GY, w }); hz.push({ x: x + w / 2 - 40, w: rand(56, 90), y: GY }); for (let k = 0; k < 3; k++) co.push({ id: uid(), x: x + w / 2 - 36 + k * 30, y: GY - 120 + (k === 1 ? -16 : 0), got: false }); x += w; }
+      else if (r < 0.8) { gr.push({ x, y: GY, w: w + 60 }); for (let k = 0; k < 4; k++) { fl.push({ x: x + 40 + k * 90, y: GY - 70 - k * 38, w: 70 }); co.push({ id: uid(), x: x + 66 + k * 90, y: GY - 108 - k * 38, got: false }); } x += w + 60; }
+      else if (r < 0.9) { const gap = rand(190, 250); mv.push({ id: uid(), x0: x + 30, y: GY - 20, w: 90, amp: gap - 150, spd: rand(0.8, 1.2), ph: 0, cx: x + 30 }); x += gap; flat(w); }
+      else { flat(w + 80); if (n > 1) { const t = Math.random() < 0.5 ? 'flyer' : 'flyer'; en.push({ id: uid(), t, x: x - w / 2, y: GY - 130, y0: GY - 130, hp: 1, alive: true, ph: Math.random() * 6, vx: -60 }); } }
+      sinceFlag += w; if (sinceFlag > 1200) { fg.push({ x: x - 60, y: GY, on: false }); sinceFlag = 0; }
+      if (Math.random() < 0.28) pu.push({ id: uid(), t: pick(['star', 'shield', 'heart', 'bolt']), x: x - w / 2, y: GY - 80 - rand(0, 40), got: false });
+    }
+    const boss = n % 3 === 0;
+    gr.push({ x, y: GY, w: 640 }); const end = x + 540;
+    if (boss) en.push({ id: uid(), t: 'boss', x: x + 380, y: GY - 74, w: 70, h: 74, hp: 20 + n * 3, maxHp: 20 + n * 3, alive: true, vx: -90, bx: x + 40, ex: x + 620, tm: 2, jt: 2.2, vy: 0 });
+    return { LEN: x + 640, gr, fl, mv, hz, en, co, pu, fg, end, boss };
   };
-
-  const startGame = () => {
-    levelRef.current = 1;
-    scoreRef.current = 0;
-    initLevel(1);
-    setPhase('play');
+  const initState = (n, score, lives) => {
+    const lv = genLevel(n);
+    return { n, lv, score, lives, p: { x: 60, y: GY - PH, vx: 0, vy: 0, jumps: 0, coyote: 0, buf: 0, face: 1, inv: 0, shield: false, star: 0, bolt: 0, cool: 0, ride: null }, cam: 0, bul: [], eb: [], t: 0, time: 0, spawn: { x: 60, y: GY - PH }, coins: 0, kills: 0, over: false, held: false };
   };
-
-  const nextLevel = () => {
-    const next = levelRef.current + 1;
-    if (next > 3) { setPhase('win'); celebrateVibrate(); }
-    else { levelRef.current = next; initLevel(next); setPhase('play'); }
-  };
-
-  useEffect(() => {
-    if (phase !== 'play') { clearInterval(loopRef.current); return; }
-    loopRef.current = setInterval(() => {
-      const p = pRef.current;
-      const plats = ptRef.current;
-      if (!p) return;
-      // Movement
-      if (keysRef.current.left)       { p.vx = -NW_SPD; p.facing = -1; }
-      else if (keysRef.current.right) { p.vx =  NW_SPD; p.facing =  1; }
-      else p.vx = 0;
-      // Gravity
-      p.vy = Math.min(p.vy + NW_GRAV, 14);
-      p.x  = Math.max(0, Math.min(NW_WW - NW_PW, p.x + p.vx));
-      const prevBottom = p.y + NW_PH;
-      p.y += p.vy;
-      const currBottom = p.y + NW_PH;
-      // Platform collision (top only)
-      let onGround = false;
-      for (const pt of plats) {
-        if (p.x + NW_PW > pt.x + 2 && p.x + 2 < pt.x + pt.w) {
-          if (prevBottom <= pt.y + 2 && currBottom >= pt.y && p.vy >= 0) {
-            p.y = pt.y - NW_PH; p.vy = 0; onGround = true; break;
-          }
-        }
-      }
-      if (onGround) p.jumps = 0;
-      if (p.y > NW_GH + 60) p.hp = 0;
-      // Camera
-      camRef.current = Math.max(0, Math.min(NW_WW - NW_GW, p.x - NW_GW * 0.35));
-      if (invRef.current > 0)   invRef.current--;
-      if (blCoolRef.current > 0) blCoolRef.current--;
-      // Enemies
-      enRef.current.forEach(e => {
-        if (!e.alive) return;
-        if (e.type === 'w' || e.type === 'h') {
-          e.x += e.vx;
-          if (e.x <= e.bx || e.x + NW_EW >= e.ex) e.vx *= -1;
-        } else {
-          e.y += e.vy;
-          if (e.y <= e.by || e.y + NW_EH >= e.ey) e.vy *= -1;
-        }
-        if (invRef.current > 0) return;
-        if (p.x + NW_PW > e.x + 4 && p.x + 4 < e.x + NW_EW &&
-            p.y + NW_PH > e.y + 4 && p.y + 4 < e.y + NW_EH) {
-          if (p.vy > 2 && p.y + NW_PH < e.y + NW_EH * 0.55) {
-            e.hp--; if (e.hp <= 0) { e.alive = false; scoreRef.current += 50; }
-            else Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-            p.vy = NW_JUMP * 0.65; scoreVibrate();
-          } else {
-            if (shieldRef.current) { shieldRef.current = false; Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning); }
-            else { p.hp = Math.max(0, p.hp - 1); deathVibrate(); }
-            invRef.current = 90;
-          }
-        }
-      });
-      // Bullets
-      blRef.current = blRef.current.filter(b => {
-        b.x += b.vx;
-        if (b.x < 0 || b.x > NW_WW) return false;
-        for (const e of enRef.current) {
-          if (!e.alive) continue;
-          if (b.x + 10 > e.x && b.x < e.x + NW_EW && b.y + 5 > e.y && b.y < e.y + NW_EH) {
-            e.hp--; if (e.hp <= 0) { e.alive = false; scoreRef.current += 50; scoreVibrate(); }
-            else Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            return false;
-          }
-        }
-        return true;
-      });
-      // Coins
-      coRef.current.forEach(c => {
-        if (c.col) return;
-        if (p.x + NW_PW > c.x && p.x < c.x + 22 && p.y + NW_PH > c.y && p.y < c.y + 22) {
-          c.col = true; scoreRef.current += 10; popVibrate();
-        }
-      });
-      // Power-ups
-      puRef.current.forEach(pu => {
-        if (pu.col) return;
-        if (p.x + NW_PW > pu.x && p.x < pu.x + 26 && p.y + NW_PH > pu.y && p.y < pu.y + 26) {
-          pu.col = true;
-          if (pu.t === '❤️') p.hp = Math.min(p.hp + 1, 5);
-          else if (pu.t === '🛡️') shieldRef.current = true;
-          else if (pu.t === '⭐') p.jumps = 0;
-          scoreRef.current += 20; celebrateVibrate();
-        }
-      });
-      if (p.hp <= 0) { clearInterval(loopRef.current); setPhase('dead'); return; }
-      if (p.x >= NW_WW - NW_PW - 20) {
-        clearInterval(loopRef.current); scoreRef.current += 200; setPhase('levelclear'); celebrateVibrate(); return;
-      }
-      setTick(t => t + 1);
-    }, 16);
-    return () => clearInterval(loopRef.current);
-  }, [phase]);
-
-  const jump = () => {
-    const p = pRef.current;
-    if (p && p.jumps < 2) { p.vy = NW_JUMP; p.jumps++; Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); }
-  };
+  if (!g.current) g.current = initState(1, 0, 3);
+  const start = () => { fx.clear(); g.current = initState(1, 0, 3); setPhase('play'); };
+  const nextLevel = () => { const s = g.current; if (s.n >= 6) { setPhase('win'); return; } const lives = Math.min(5, s.lives + 1); g.current = initState(s.n + 1, s.score, lives); setPhase('play'); };
+  const jumpPress = () => { const s = g.current; input.jump = true; s.p.buf = 0.13; };
+  const jumpRelease = () => { input.jump = false; };
   const shoot = () => {
-    const p = pRef.current;
-    if (!p || blCoolRef.current > 0) return;
-    blRef.current.push({ x: p.facing > 0 ? p.x + NW_PW : p.x - 10, y: p.y + NW_PH * 0.45, vx: 7 * p.facing });
-    blCoolRef.current = 12; Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    const s = g.current; const p = s.p; if (phase !== 'play' || p.cool > 0) return;
+    s.bul.push({ x: p.face > 0 ? p.x + PW : p.x - 12, y: p.y + PH * 0.4, vx: 520 * p.face }); p.cool = p.bolt > 0 ? 0.14 : 0.3; hx.tap();
   };
+  const hurt = (s, push) => {
+    const p = s.p; if (p.inv > 0 || p.star > 0) return;
+    if (p.shield) { p.shield = false; p.inv = 1; fx.ring(p.x + PW / 2, p.y + PH / 2, C.cyan, 60); hx.warn(); return; }
+    s.lives -= 1; p.inv = 1.6; p.vy = -420; p.vx = push * 280; fx.burst(p.x + PW / 2, p.y + PH / 2, C.red, 14, 220); fx.shake(7, 0.25); fx.flash(C.red, 0.25); hx.bad();
+    if (s.lives <= 0) { s.over = true; hx.die(); setRes({ isNew: submitBest(s.score) }); setPhase('over'); }
+  };
+  const fall = s => {
+    const p = s.p; s.lives -= 1; hx.bad(); fx.shake(8, 0.3); fx.flash(C.red, 0.3);
+    if (s.lives <= 0) { s.over = true; hx.die(); setRes({ isNew: submitBest(s.score) }); setPhase('over'); return; }
+    p.x = s.spawn.x; p.y = s.spawn.y - 40; p.vx = 0; p.vy = 0; p.inv = 1.6;
+  };
+  const kill = (s, e, pts) => { e.alive = false; s.score += pts; s.kills += 1; fx.burst(e.x + 16, e.y + 16, C.amber, 12, 220); fx.pop(e.x + 16, e.y - 6, `+${pts}`, C.text, 15); hx.hit(); };
 
-  if (phase === 'menu') return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Pressable style={styles.backBtn} onPress={onExit}><Text style={styles.backText}>← Exit</Text></Pressable>
-        <Text style={[styles.title, { color: '#f0f' }]}>NEON WARRIOR</Text>
-      </View>
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 }}>
-        <Text style={{ fontSize: 64, marginBottom: 16 }}>🥷</Text>
-        <Text style={{ color: '#f0f', fontSize: 28, fontWeight: '900', marginBottom: 10, textShadowColor: '#f0f', textShadowRadius: 10 }}>NEON WARRIOR</Text>
-        <Text style={{ color: '#aaa', fontSize: 14, textAlign: 'center', marginBottom: 8 }}>Plataformas · Salto Doble · Enemigos · Poderes</Text>
-        <Text style={{ color: '#555', fontSize: 12, textAlign: 'center', marginBottom: 32 }}>{'◀▶ Mover  ⬆ Saltar x2  💥 Disparar\n👾 Pisa enemigos desde arriba o dispárales\n⭐ recarga saltos · 🛡️ escudo · ❤️ vida extra'}</Text>
-        <Pressable style={[styles.btn, { backgroundColor: '#f0f', shadowColor: '#f0f' }]} onPress={startGame}>
-          <Text style={styles.btnText}>JUGAR</Text>
-        </Pressable>
-      </View>
-    </SafeAreaView>
-  );
-
-  if (phase === 'levelclear') return (
-    <SafeAreaView style={styles.container}>
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 }}>
-        <Text style={{ color: '#0ff', fontSize: 32, fontWeight: '900', textAlign: 'center', marginBottom: 10 }}>✨ NIVEL {levelRef.current} COMPLETO</Text>
-        <Text style={{ color: '#ffd700', fontSize: 20, marginBottom: 30 }}>Score: {scoreRef.current}</Text>
-        <Pressable style={[styles.btn, { backgroundColor: '#0ff', shadowColor: '#0ff' }]} onPress={nextLevel}>
-          <Text style={styles.btnText}>{levelRef.current >= 3 ? 'VER FINAL' : `NIVEL ${levelRef.current + 1} →`}</Text>
-        </Pressable>
-      </View>
-    </SafeAreaView>
-  );
-
-  if (phase === 'dead') return (
-    <SafeAreaView style={styles.container}>
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 }}>
-        <Text style={{ color: '#f00', fontSize: 32, fontWeight: '900', textAlign: 'center', marginBottom: 10 }}>💀 GAME OVER</Text>
-        <Text style={{ color: '#aaa', fontSize: 18, marginBottom: 30 }}>Score: {scoreRef.current}</Text>
-        <Pressable style={[styles.btn, { backgroundColor: '#f0f', shadowColor: '#f0f', marginBottom: 16 }]} onPress={startGame}>
-          <Text style={styles.btnText}>REINTENTAR</Text>
-        </Pressable>
-        <Pressable onPress={onExit}><Text style={{ color: '#555', fontSize: 14 }}>Salir al Menú</Text></Pressable>
-      </View>
-    </SafeAreaView>
-  );
-
-  if (phase === 'win') return (
-    <SafeAreaView style={styles.container}>
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 }}>
-        <Text style={{ color: '#ffd700', fontSize: 36, fontWeight: '900', textAlign: 'center', marginBottom: 10 }}>🏆 ¡GANASTE!</Text>
-        <Text style={{ color: '#fff', fontSize: 20, marginBottom: 6 }}>Score final: {scoreRef.current}</Text>
-        <Text style={{ color: '#aaa', fontSize: 13, textAlign: 'center', marginBottom: 30 }}>¡3 niveles completados!</Text>
-        <Pressable style={[styles.btn, { backgroundColor: '#ffd700', shadowColor: '#ffd700', marginBottom: 16 }]} onPress={startGame}>
-          <Text style={[styles.btnText, { color: '#000' }]}>JUGAR OTRA VEZ</Text>
-        </Pressable>
-        <Pressable onPress={onExit}><Text style={{ color: '#555', fontSize: 14 }}>Salir al Menú</Text></Pressable>
-      </View>
-    </SafeAreaView>
-  );
-
-  // ── play ──────────────────────────────────────────────────────
-  const p   = pRef.current;
-  const cam = camRef.current;
-  const hearts = p ? '❤️'.repeat(Math.max(0, p.hp)) : '';
+  useLoop(phase === 'play', dt => {
+    const s = g.current; const p = s.p; const lv = s.lv;
+    s.t += dt; s.time += dt; p.inv = Math.max(0, p.inv - dt); p.star = Math.max(0, p.star - dt); p.bolt = Math.max(0, p.bolt - dt); p.cool = Math.max(0, p.cool - dt); p.buf = Math.max(0, p.buf - dt);
+    const ax = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+    const targetV = ax * 235; p.vx += (targetV - p.vx) * Math.min(1, dt * (ax ? 12 : 9)); if (ax) p.face = ax;
+    // plataformas móviles
+    lv.mv.forEach(m => { const nx = m.x0 + (Math.sin(s.t * m.spd + m.ph) * 0.5 + 0.5) * m.amp; m.dx = nx - m.cx; m.cx = nx; });
+    if (p.ride) { p.x += p.ride.dx; }
+    const grounded0 = p.coyote > 0;
+    p.coyote -= dt;
+    if (p.buf > 0 && p.coyote > 0) { p.vy = -770; p.buf = 0; p.coyote = 0; p.jumps = 1; fx.burst(p.x + PW / 2, p.y + PH, '#fff', 5, 100, 0.3, 3); hx.tap(); }
+    else if (p.buf > 0 && p.jumps < 2 && !grounded0) { p.vy = -700; p.buf = 0; p.jumps = 2; fx.ring(p.x + PW / 2, p.y + PH, C.cyan, 30); hx.tick(); }
+    p.vy += 2200 * dt; if (!input.jump && p.vy < -240) p.vy += 3400 * dt; p.vy = Math.min(p.vy, 1000);
+    p.x = clamp(p.x + p.vx * dt, 0, lv.LEN - PW);
+    const prevB = p.y + PH; p.y += p.vy * dt; const curB = p.y + PH;
+    let landed = false; p.ride = null;
+    if (p.vy >= 0) {
+      const surfaces = [...lv.gr, ...lv.fl.map(f => ({ ...f })), ...lv.mv.map(m => ({ x: m.cx, y: m.y, w: m.w, m }))];
+      for (const sf of surfaces) { if (p.x + PW > sf.x + 3 && p.x < sf.x + sf.w - 3 && prevB <= sf.y + 6 && curB >= sf.y) { p.y = sf.y - PH; p.vy = 0; landed = true; if (sf.m) p.ride = sf.m; break; } }
+    }
+    if (landed) { p.coyote = 0.1; p.jumps = 0; }
+    if (p.y > AREA_H + 60) { fall(s); if (s.over) return; }
+    // cámara
+    s.cam += (clamp(p.x - AREA_W * 0.35, 0, lv.LEN - AREA_W) - s.cam) * Math.min(1, dt * 8);
+    // banderas
+    lv.fg.forEach(f => { if (!f.on && p.x > f.x) { f.on = true; s.spawn = { x: f.x, y: GY - PH }; fx.pop(f.x - s.cam, GY - 80, 'CHECKPOINT', C.lime, 14); hx.good(); } });
+    // pinchos
+    lv.hz.forEach(h => { if (p.x + PW - 6 > h.x && p.x + 6 < h.x + h.w && p.y + PH > GY - 16) hurt(s, p.x < h.x + h.w / 2 ? -1 : 1); });
+    // enemigos
+    const boss = lv.en.find(e => e.t === 'boss' && e.alive);
+    lv.en.forEach(e => {
+      if (!e.alive) return;
+      const w = e.w || 32, h = e.h || 32;
+      if (e.t === 'walker') { e.x += e.vx * dt; if (e.x <= e.bx || e.x + w >= e.ex) { e.vx *= -1; e.x = clamp(e.x, e.bx, e.ex - w); } }
+      else if (e.t === 'flyer') { e.ph += dt * 3; e.x += e.vx * dt; e.y = e.y0 + Math.sin(e.ph) * 40; if (e.x < s.cam - 200) e.x = s.cam + AREA_W + 100; }
+      else if (e.t === 'hopper') { e.tm -= dt; e.vy = (e.vy || 0) + 1500 * dt; e.y += e.vy * dt; if (e.y >= GY - 30) { e.y = GY - 30; e.vy = 0; e.vx = 0; } if (e.tm <= 0 && e.y >= GY - 30) { e.tm = rand(1, 2); e.vy = -520; e.vx = Math.sign(p.x - e.x) * 90; } e.x += e.vx * dt; }
+      else if (e.t === 'turret') { e.tm -= dt; if (e.tm <= 0 && Math.abs(p.x - e.x) < 380 && e.x > s.cam - 40 && e.x < s.cam + AREA_W) { e.tm = 2; s.eb.push({ x: e.x + 16, y: e.y + 12, vx: Math.sign(p.x - e.x) * 190, vy: 0 }); } }
+      else if (e.t === 'boss') {
+        e.x += e.vx * dt; if (e.x <= e.bx || e.x + w >= e.ex) e.vx *= -1; e.vy += 1800 * dt; e.y += e.vy * dt; if (e.y >= GY - h) { e.y = GY - h; e.vy = 0; }
+        e.jt -= dt; if (e.jt <= 0 && e.y >= GY - h) { e.jt = rand(1.6, 2.6); e.vy = -640; }
+        e.tm -= dt; if (e.tm <= 0 && Math.abs(p.x - e.x) < 520) { e.tm = Math.max(1.2, 2.2 - s.n * 0.1); for (let k = -1; k <= 1; k++) s.eb.push({ x: e.x + w / 2, y: e.y + 20, vx: Math.sign(p.x - e.x || 1) * 200, vy: k * 80 }); }
+      }
+      const hit = p.x + PW > e.x + 4 && p.x + 4 < e.x + w && p.y + PH > e.y + 4 && p.y + 4 < e.y + h;
+      if (!hit) return;
+      if (p.star > 0) { if (e.t === 'boss') { e.hp -= 1; } else kill(s, e, 50); return; }
+      if (p.vy > 100 && p.y + PH < e.y + h * 0.6) {
+        e.hp -= 1; p.vy = -540; p.jumps = 1; fx.burst(e.x + w / 2, e.y, '#fff', 6, 120, 0.3, 3);
+        if (e.hp <= 0) { if (e.t === 'boss') { s.score += 500; fx.burst(e.x + w / 2, e.y + h / 2, C.amber, 40, 360, 1, 7); fx.flash('#fff', 0.5); fx.shake(12, 0.5); hx.win(); e.alive = false; } else kill(s, e, e.t === 'turret' ? 80 : 50); } else hx.hit();
+      } else hurt(s, p.x < e.x ? -1 : 1);
+    });
+    // balas
+    s.bul.forEach(b => { b.x += b.vx * dt; });
+    s.bul = s.bul.filter(b => { if (b.x < s.cam - 20 || b.x > s.cam + AREA_W + 20) return false; for (const e of lv.en) { if (!e.alive) continue; const w = e.w || 32, h = e.h || 32; if (b.x + 12 > e.x && b.x < e.x + w && b.y + 5 > e.y && b.y < e.y + h) { e.hp -= 1; fx.burst(b.x, b.y, C.amber, 4, 120, 0.25, 3); if (e.hp <= 0) { if (e.t === 'boss') { s.score += 500; fx.burst(e.x + w / 2, e.y + h / 2, C.amber, 40, 360, 1, 7); fx.flash('#fff', 0.5); fx.shake(12, 0.5); hx.win(); e.alive = false; } else kill(s, e, e.t === 'turret' ? 80 : 50); } return false; } } return true; });
+    s.eb.forEach(b => { b.x += b.vx * dt; b.y += b.vy * dt; });
+    s.eb = s.eb.filter(b => { if (b.x < s.cam - 30 || b.x > s.cam + AREA_W + 30 || b.y > AREA_H || b.y < 0) return false; if (b.x > p.x && b.x < p.x + PW && b.y > p.y && b.y < p.y + PH) { hurt(s, Math.sign(b.vx)); return false; } return true; });
+    // monedas y poderes
+    lv.co.forEach(c => { if (!c.got && Math.abs(c.x + 8 - (p.x + PW / 2)) < 22 && Math.abs(c.y + 8 - (p.y + PH / 2)) < 30) { c.got = true; s.score += 10; s.coins += 1; fx.burst(c.x - s.cam, c.y, C.amber, 5, 120, 0.3, 3); hx.tick(); } });
+    lv.pu.forEach(u => { if (!u.got && Math.abs(u.x + 12 - (p.x + PW / 2)) < 26 && Math.abs(u.y + 12 - (p.y + PH / 2)) < 32) { u.got = true; hx.good(); s.score += 20; fx.ring(u.x - s.cam, u.y, C.lime, 50); if (u.t === 'star') { p.star = 6; fx.pop(u.x - s.cam, u.y - 10, 'INVENCIBLE', C.amber, 15); } if (u.t === 'shield') { p.shield = true; fx.pop(u.x - s.cam, u.y - 10, 'ESCUDO', C.cyan, 15); } if (u.t === 'heart') { s.lives = Math.min(5, s.lives + 1); fx.pop(u.x - s.cam, u.y - 10, '+1 VIDA', C.red, 15); } if (u.t === 'bolt') { p.bolt = 8; fx.pop(u.x - s.cam, u.y - 10, 'DISPARO RÁPIDO', C.violet, 14); } } });
+    // meta
+    if (p.x > lv.end && !(lv.boss && lv.en.some(e => e.t === 'boss' && e.alive))) {
+      const bonus = 200 + Math.max(0, Math.round(120 - s.time)) * 5; s.score += bonus; s.bonus = bonus; hx.win(); fx.flash('#fff', 0.35);
+      submitBest(s.score); setPhase(s.n >= 6 ? 'win' : 'clear');
+    }
+  });
+  const TH = NW_THEMES[(g.current.n - 1) % NW_THEMES.length];
+  const s = g.current; const p = s.p; const lv = s.lv; const cam = s.cam;
+  const vis = x => x > cam - 120 && x < cam + AREA_W + 120;
+  const nBoss = lv.en.find(e => e.t === 'boss' && e.alive);
   return (
-    <SafeAreaView style={styles.container}>
-      {/* HUD */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 4, paddingBottom: 6 }}>
-        <Pressable onPress={() => { clearInterval(loopRef.current); onExit(); }}>
-          <Text style={{ color: '#666', fontSize: 13 }}>← Salir</Text>
-        </Pressable>
-        <Text style={{ color: '#f0f', fontSize: 13, fontWeight: 'bold' }}>LVL {levelRef.current}/3</Text>
-        <Text style={{ fontSize: 13 }}>{hearts}{shieldRef.current ? '🛡️' : ''}</Text>
-        <Text style={{ color: '#ffd700', fontSize: 13, fontWeight: 'bold' }}>⭐{scoreRef.current}</Text>
-      </View>
-      {/* Game canvas */}
-      {p && (
-        <View style={{ width: NW_GW, height: NW_GH, backgroundColor: '#03031a', overflow: 'hidden' }}>
-          {Array.from({ length: 7 }).map((_, i) => (
-            <View key={i} style={{ position: 'absolute', left: 0, right: 0, top: ((i + 1) / 8) * NW_GH, height: 1, backgroundColor: '#0ff07' }} />
-          ))}
-          <Text style={{ position: 'absolute', left: NW_WW - 90 - cam, top: NW_GND - 52, fontSize: 38 }}>🌀</Text>
-          {ptRef.current.map((pt, i) => (
-            <View key={i} style={{
-              position: 'absolute', left: pt.x - cam, top: pt.y, width: pt.w, height: pt.h,
-              backgroundColor: i === 0 ? '#050f05' : '#071428',
-              borderTopWidth: 3, borderTopColor: i === 0 ? '#0f0' : '#05f',
-              borderLeftWidth: i > 0 ? 1 : 0, borderRightWidth: i > 0 ? 1 : 0,
-              borderLeftColor: '#05f4', borderRightColor: '#05f4',
-            }} />
-          ))}
-          {coRef.current.filter(c => !c.col).map(c => (
-            <Text key={c.id} style={{ position: 'absolute', left: c.x - cam, top: c.y, fontSize: 18 }}>🪙</Text>
-          ))}
-          {puRef.current.filter(pu => !pu.col).map(pu => (
-            <Text key={pu.id} style={{ position: 'absolute', left: pu.x - cam, top: pu.y, fontSize: 22 }}>{pu.t}</Text>
-          ))}
-          {enRef.current.filter(e => e.alive).map(e => (
-            <View key={e.id} style={{ position: 'absolute', left: e.x - cam, top: e.y }}>
-              <Text style={{ fontSize: 28 }}>{e.type === 'f' ? '🛸' : e.type === 'h' ? '👹' : '👾'}</Text>
-              {e.maxHp > 1 && (
-                <View style={{ width: NW_EW, height: 4, backgroundColor: '#300', borderRadius: 2 }}>
-                  <View style={{ width: NW_EW * (e.hp / e.maxHp), height: 4, backgroundColor: '#f00', borderRadius: 2 }} />
-                </View>
-              )}
-            </View>
-          ))}
-          {blRef.current.map((b, i) => (
-            <View key={i} style={{ position: 'absolute', left: b.x - cam, top: b.y, width: 12, height: 6, backgroundColor: '#ff0', borderRadius: 3, shadowColor: '#ff0', shadowOpacity: 1, shadowRadius: 4 }} />
-          ))}
-          <Text style={{
-            position: 'absolute', left: p.x - cam, top: p.y, fontSize: 30,
-            opacity: invRef.current > 0 && Math.floor(invRef.current / 6) % 2 === 0 ? 0.2 : 1,
-            transform: [{ scaleX: p.facing }],
-          }}>🥷</Text>
-        </View>
-      )}
-      {/* Controls */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 10, backgroundColor: 'rgba(0,0,0,0.5)' }}>
+    <GameScreen title="NEON WARRIOR" emoji="🥷" accent={TH.a} onExit={onExit} score={s.score} best={best}
+      hud={<><Lives n={s.lives} max={Math.max(3, s.lives)} /><Text style={{ color: C.dim, fontSize: 12 }}>Nivel <Text style={{ color: TH.a, fontWeight: '900' }}>{s.n}/6</Text> · {TH.name}</Text><Text style={{ color: C.cyan, fontSize: 12, fontWeight: '800' }}>{p.shield ? '🛡️ ' : ''}{p.star > 0 ? `⭐${Math.ceil(p.star)} ` : ''}{p.bolt > 0 ? `⚡${Math.ceil(p.bolt)}` : ''}</Text></>}
+      footer={<View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 18, paddingVertical: 8 }}>
         <View style={{ flexDirection: 'row', gap: 12 }}>
-          <View onTouchStart={() => keysRef.current.left = true} onTouchEnd={() => keysRef.current.left = false} onTouchCancel={() => keysRef.current.left = false}
-            style={{ width: 68, height: 68, backgroundColor: '#f0f1', borderRadius: 34, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#f0f4' }}>
-            <Text style={{ color: '#f0f', fontSize: 28, fontWeight: 'bold' }}>◀</Text>
-          </View>
-          <View onTouchStart={() => keysRef.current.right = true} onTouchEnd={() => keysRef.current.right = false} onTouchCancel={() => keysRef.current.right = false}
-            style={{ width: 68, height: 68, backgroundColor: '#f0f1', borderRadius: 34, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#f0f4' }}>
-            <Text style={{ color: '#f0f', fontSize: 28, fontWeight: 'bold' }}>▶</Text>
-          </View>
+          <NwBtn id="nw-left" label="◀" color={TH.a} on={() => { input.left = true; }} off={() => { input.left = false; }} />
+          <NwBtn id="nw-right" label="▶" color={TH.a} on={() => { input.right = true; }} off={() => { input.right = false; }} />
         </View>
         <View style={{ flexDirection: 'row', gap: 12 }}>
-          <Pressable onPress={shoot}
-            style={{ width: 68, height: 68, backgroundColor: '#ff01', borderRadius: 34, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#ff04' }}>
-            <Text style={{ color: '#ff0', fontSize: 26 }}>💥</Text>
-          </Pressable>
-          <Pressable onPress={jump} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-            style={{ width: 68, height: 68, backgroundColor: '#0ff1', borderRadius: 34, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#0ff4' }}>
-            <Text style={{ color: '#0ff', fontSize: 26, fontWeight: 'bold' }}>⬆</Text>
-          </Pressable>
+          <NwBtn id="nw-shoot" label="💥" color={C.amber} on={shoot} off={() => {}} />
+          <NwBtn id="nw-jump" label="⬆" color={C.cyan} on={jumpPress} off={jumpRelease} big />
         </View>
-      </View>
-    </SafeAreaView>
+      </View>}>
+      <PlayArea fx={fx} bg={TH.bg} border={alpha(TH.a, 0.4)}>
+        <Starfield stars={stars.map(st => ({ ...st, x: ((st.x - cam * st.z * 0.3) % AREA_W + AREA_W) % AREA_W }))} offset={0} />
+        {[0.2, 0.45].map((k, i) => Array.from({ length: 6 }, (_, j) => { const bx = ((j * 190 - cam * k) % (AREA_W + 190) + AREA_W + 190) % (AREA_W + 190) - 90; const bh = 60 + ((j * 37 + i * 23) % 70) * (i ? 1.2 : 0.8); return <View key={`${i}${j}`} style={{ position: 'absolute', left: bx, top: GY - bh, width: 70, height: bh + 70, backgroundColor: alpha(i ? TH.b : TH.a, i ? 0.06 : 0.04), borderTopWidth: 2, borderColor: alpha(i ? TH.b : TH.a, 0.12) }} />; }))}
+        {lv.gr.filter(sf => sf.x < cam + AREA_W + 40 && sf.x + sf.w > cam - 40).map((sf, i) => <View key={`g${i}`} style={{ position: 'absolute', left: sf.x - cam, top: sf.y, width: sf.w, height: AREA_H - sf.y, backgroundColor: alpha(TH.b, 0.08), borderTopWidth: 3, borderTopColor: TH.b, ...glow(TH.b, 8, 0.5) }} />)}
+        {lv.fl.filter(f => vis(f.x)).map((f, i) => <View key={`f${i}`} style={{ position: 'absolute', left: f.x - cam, top: f.y, width: f.w, height: 14, borderRadius: 4, backgroundColor: alpha(TH.a, 0.25), borderWidth: 2, borderColor: TH.a, ...glow(TH.a, 8, 0.5) }} />)}
+        {lv.mv.filter(m => vis(m.cx)).map(m => <View key={m.id} style={{ position: 'absolute', left: m.cx - cam, top: m.y, width: m.w, height: 14, borderRadius: 4, backgroundColor: alpha(C.amber, 0.28), borderWidth: 2, borderColor: C.amber, ...glow(C.amber, 8, 0.5) }} />)}
+        {lv.hz.filter(h => vis(h.x)).map((h, i) => Array.from({ length: Math.floor(h.w / 16) }, (_, k) => <View key={`${i}-${k}`} style={{ position: 'absolute', left: h.x + k * 16 - cam, top: GY - 16, width: 0, height: 0, borderLeftWidth: 8, borderRightWidth: 8, borderBottomWidth: 16, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: C.red }} />))}
+        {lv.fg.filter(f => vis(f.x)).map((f, i) => <Text key={`fl${i}`} style={{ position: 'absolute', left: f.x - cam, top: GY - 36, fontSize: 28, opacity: f.on ? 1 : 0.45 }}>🚩</Text>)}
+        <Text style={{ position: 'absolute', left: lv.end - cam, top: GY - 62, fontSize: 52, opacity: nBoss ? 0.3 : 1, ...tglow(TH.a, 14) }}>🌀</Text>
+        {lv.co.filter(c => !c.got && vis(c.x)).map(c => <Text key={c.id} style={{ position: 'absolute', left: c.x - cam, top: c.y, fontSize: 18 }}>🪙</Text>)}
+        {lv.pu.filter(u => !u.got && vis(u.x)).map(u => <Text key={u.id} style={{ position: 'absolute', left: u.x - cam, top: u.y, fontSize: 24, ...tglow(C.lime, 8) }}>{u.t === 'star' ? '⭐' : u.t === 'shield' ? '🛡️' : u.t === 'heart' ? '❤️' : '⚡'}</Text>)}
+        {lv.en.filter(e => e.alive && vis(e.x)).map(e => (
+          <View key={e.id} style={{ position: 'absolute', left: e.x - cam, top: e.y }}>
+            <Text style={{ fontSize: e.t === 'boss' ? 64 : 28, lineHeight: e.t === 'boss' ? 74 : 32, ...tglow(e.t === 'boss' ? C.red : '#000', e.t === 'boss' ? 14 : 2) }}>{e.t === 'walker' ? '👾' : e.t === 'flyer' ? '🛸' : e.t === 'hopper' ? '🐸' : e.t === 'turret' ? '🤖' : '👹'}</Text>
+            {e.maxHp > 1 && <Bar value={e.hp} max={e.maxHp} color={C.red} h={4} w={e.t === 'boss' ? 70 : 32} />}
+          </View>
+        ))}
+        {s.bul.map((b, i) => <View key={`b${i}`} style={{ position: 'absolute', left: b.x - cam, top: b.y, width: 12, height: 5, borderRadius: 3, backgroundColor: C.amber, ...glow(C.amber, 6, 1) }} />)}
+        {s.eb.map((b, i) => <View key={`e${i}`} style={{ position: 'absolute', left: b.x - cam - 4, top: b.y - 4, width: 9, height: 9, borderRadius: 5, backgroundColor: C.pink, ...glow(C.pink, 8, 1) }} />)}
+        {!s.over && <Text style={{ position: 'absolute', left: p.x - cam - 2, top: p.y - 2, fontSize: 32, lineHeight: PH + 4, opacity: p.inv > 0 && Math.floor(p.inv * 12) % 2 ? 0.25 : 1, transform: [{ scaleX: p.face }], ...tglow(p.star > 0 ? C.amber : TH.a, p.star > 0 ? 16 : 6) }}>🥷</Text>}
+        {p.shield && <View style={{ position: 'absolute', left: p.x - cam - 8, top: p.y - 6, width: PW + 16, height: PH + 12, borderRadius: 24, borderWidth: 2, borderColor: alpha(C.cyan, 0.8), backgroundColor: alpha(C.cyan, 0.1) }} />}
+        {nBoss && <View style={{ position: 'absolute', top: 8, left: 40, right: 40 }}><Text style={{ color: C.red, fontSize: 11, fontWeight: '900', textAlign: 'center', letterSpacing: 2 }}>JEFE</Text><Bar value={nBoss.hp} max={nBoss.maxHp} color={C.red} h={8} /></View>}
+        <Overlay show={phase !== 'play'} kind={phase === 'clear' ? 'win' : phase} emoji={phase === 'win' ? '🏆' : phase === 'clear' ? '✨' : phase === 'over' ? '💀' : '🥷'}
+          title={phase === 'win' ? '¡VICTORIA TOTAL!' : phase === 'clear' ? `NIVEL ${s.n} COMPLETO` : phase === 'over' ? 'GAME OVER' : 'NEON WARRIOR'}
+          subtitle={phase === 'clear' ? `Bonus +${s.bonus || 0} · ${s.kills} enemigos · ${s.coins} monedas` : phase === 'win' ? `6 niveles superados · ${s.coins} monedas` : phase === 'over' ? `Llegaste al nivel ${s.n}` : '6 niveles · 2 jefes · saltos dobles'}
+          score={s.score} best={best} isNew={res.isNew} accent={TH.a} startLabel={phase === 'clear' ? `NIVEL ${s.n + 1} →` : undefined} onStart={phase === 'clear' ? nextLevel : start} onExit={onExit}
+          lines={phase === 'ready' ? ['◀ ▶ mover · ⬆ saltar (toca de nuevo en el aire)', 'Mantén ⬆ para saltar más alto · 💥 dispara', 'Pisa enemigos o dispárales · 🚩 checkpoints', '⭐ invencible · 🛡️ escudo · ⚡ disparo rápido'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 // ─── PIXEL CRAFT - 2D Minecraft/Terraria ─────────────────────────
@@ -5619,6 +5239,14 @@ const RpgTiles = React.memo(function RpgTiles({ world, x0, y0, cols, rows, T }) 
   return <>{out}</>;
 });
 
+function RpgBtn({ label, onPress, color = C.amber, disabled, wide }) {
+  return (
+    <Pressable onPress={onPress} disabled={disabled} style={{ width: wide ? '100%' : '48%', opacity: disabled ? 0.35 : 1 }}>
+      <View style={{ paddingVertical: 12, borderRadius: 14, backgroundColor: alpha(color, 0.16), borderWidth: 2, borderColor: alpha(color, 0.8), alignItems: 'center' }}><Text style={{ color: C.text, fontWeight: '900', fontSize: 14 }}>{label}</Text></View>
+    </Pressable>
+  );
+}
+
 function PixelRPG({ onExit }) {
   const T = Math.floor(AREA_W / 8);
   const VC = 9, VR = Math.floor((AREA_H - 214) / T);
@@ -5786,11 +5414,6 @@ function PixelRPG({ onExit }) {
       <Text style={{ color: C.amber, fontSize: 24, fontWeight: '900' }}>{label}</Text>
     </Pressable>
   );
-  const Btn2 = ({ label, onPress, color = C.amber, disabled, wide }) => (
-    <Pressable onPress={onPress} disabled={disabled} style={{ width: wide ? '100%' : '48%', opacity: disabled ? 0.35 : 1 }}>
-      <View style={{ paddingVertical: 12, borderRadius: 14, backgroundColor: alpha(color, 0.16), borderWidth: 2, borderColor: alpha(color, 0.8), alignItems: 'center' }}><Text style={{ color: C.text, fontWeight: '900', fontSize: 14 }}>{label}</Text></View>
-    </Pressable>
-  );
   const BarRow = (label, v, m, col) => <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}><Text style={{ color: col, fontSize: 10, fontWeight: '900', width: 18 }}>{label}</Text><Bar value={v} max={m} color={col} h={8} w={90} /><Text style={{ color: C.dim, fontSize: 10 }}>{v}/{m}</Text></View>;
   return (
     <GameScreen title="PIXEL RPG" emoji="🧙" accent={C.amber} onExit={onExit} score={scoreOf(s)} best={best} scoreLabel="PUNTOS"
@@ -5839,18 +5462,18 @@ function PixelRPG({ onExit }) {
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 }}>{BarRow('HP', p.hp, p.maxHp, C.red)}{BarRow('MP', p.mp, p.maxMp, C.cyan)}</View>
               {b.turn === 'player' && !b.spellMenu && (
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between' }}>
-                  <Btn2 label="⚔️ Atacar" onPress={() => act('attack')} color={C.red} />
-                  <Btn2 label="✨ Magia" onPress={() => act('spell')} color={C.violet} />
-                  <Btn2 label="🛡️ Defender" onPress={() => act('defend')} color={C.cyan} />
-                  <Btn2 label={`🧪 Poción (${p.potions})`} onPress={() => act('potion')} color={C.lime} />
-                  <Btn2 label={`💧 Éter (${p.ethers})`} onPress={() => act('ether')} color={C.blue} />
-                  <Btn2 label="🏃 Huir" onPress={() => act('run')} color={C.dim} />
+                  <RpgBtn label="⚔️ Atacar" onPress={() => act('attack')} color={C.red} />
+                  <RpgBtn label="✨ Magia" onPress={() => act('spell')} color={C.violet} />
+                  <RpgBtn label="🛡️ Defender" onPress={() => act('defend')} color={C.cyan} />
+                  <RpgBtn label={`🧪 Poción (${p.potions})`} onPress={() => act('potion')} color={C.lime} />
+                  <RpgBtn label={`💧 Éter (${p.ethers})`} onPress={() => act('ether')} color={C.blue} />
+                  <RpgBtn label="🏃 Huir" onPress={() => act('run')} color={C.dim} />
                 </View>
               )}
               {b.turn === 'player' && b.spellMenu && (
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between' }}>
-                  {RPG_SPELLS.filter(q => p.lv >= q.lv).map(q => <Btn2 key={q.id} label={`${q.name} · ${q.mp} MP`} onPress={() => cast(q.id)} color={C.violet} disabled={p.mp < q.mp} />)}
-                  <Btn2 label="← Volver" onPress={() => { b.spellMenu = false; force(); }} color={C.dim} wide />
+                  {RPG_SPELLS.filter(q => p.lv >= q.lv).map(q => <RpgBtn key={q.id} label={`${q.name} · ${q.mp} MP`} onPress={() => cast(q.id)} color={C.violet} disabled={p.mp < q.mp} />)}
+                  <RpgBtn label="← Volver" onPress={() => { b.spellMenu = false; force(); }} color={C.dim} wide />
                 </View>
               )}
               {b.turn === 'enemy' && <Text style={{ color: C.dim, textAlign: 'center', paddingVertical: 14 }}>Turno del enemigo…</Text>}
@@ -5864,11 +5487,11 @@ function PixelRPG({ onExit }) {
             <Text style={{ color: C.dim, fontSize: 12, marginVertical: 6, textAlign: 'center' }}>💰 {p.gold}  ·  🧪 {p.potions}  ·  💧 {p.ethers}  ·  ⚔️ {p.atk}  ·  🛡️ {p.def}</Text>
             <Text style={{ color: C.lime, fontSize: 12, minHeight: 18, marginBottom: 8 }}>{s.shop || ' '}</Text>
             <View style={{ width: '100%', gap: 8 }}>
-              <Btn2 wide label="🛏️ Descansar (gratis): HP y MP al máximo" onPress={rest} color={C.lime} />
-              <Btn2 wide label="🧪 Poción · 15 💰" onPress={() => buy('potion')} color={C.red} />
-              <Btn2 wide label="💧 Éter · 25 💰" onPress={() => buy('ether')} color={C.blue} />
-              <Btn2 wide label={RPG_WEAPONS[p.weapon + 1] ? `⚔️ ${RPG_WEAPONS[p.weapon + 1][0]} (+${RPG_WEAPONS[p.weapon + 1][1]} ATK) · ${RPG_WEAPONS[p.weapon + 1][2]} 💰` : '⚔️ Arma al máximo'} onPress={() => buy('weapon')} color={C.orange} disabled={!RPG_WEAPONS[p.weapon + 1]} />
-              <Btn2 wide label={RPG_ARMORS[p.armor + 1] ? `🛡️ ${RPG_ARMORS[p.armor + 1][0]} (+${RPG_ARMORS[p.armor + 1][1]} DEF) · ${RPG_ARMORS[p.armor + 1][2]} 💰` : '🛡️ Armadura al máximo'} onPress={() => buy('armor')} color={C.cyan} disabled={!RPG_ARMORS[p.armor + 1]} />
+              <RpgBtn wide label="🛏️ Descansar (gratis): HP y MP al máximo" onPress={rest} color={C.lime} />
+              <RpgBtn wide label="🧪 Poción · 15 💰" onPress={() => buy('potion')} color={C.red} />
+              <RpgBtn wide label="💧 Éter · 25 💰" onPress={() => buy('ether')} color={C.blue} />
+              <RpgBtn wide label={RPG_WEAPONS[p.weapon + 1] ? `⚔️ ${RPG_WEAPONS[p.weapon + 1][0]} (+${RPG_WEAPONS[p.weapon + 1][1]} ATK) · ${RPG_WEAPONS[p.weapon + 1][2]} 💰` : '⚔️ Arma al máximo'} onPress={() => buy('weapon')} color={C.orange} disabled={!RPG_WEAPONS[p.weapon + 1]} />
+              <RpgBtn wide label={RPG_ARMORS[p.armor + 1] ? `🛡️ ${RPG_ARMORS[p.armor + 1][0]} (+${RPG_ARMORS[p.armor + 1][1]} DEF) · ${RPG_ARMORS[p.armor + 1][2]} 💰` : '🛡️ Armadura al máximo'} onPress={() => buy('armor')} color={C.cyan} disabled={!RPG_ARMORS[p.armor + 1]} />
             </View>
             <View style={{ marginTop: 16 }}><Btn label="SALIR AL MAPA" color={C.amber} onPress={() => { s.shop = null; setScene('map'); }} /></View>
           </View>
