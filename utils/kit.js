@@ -358,7 +358,7 @@ export function GameScreen({ title, emoji, accent = C.cyan, onExit, score, best,
 }
 
 /** Pantalla de inicio / fin de partida sobre el PlayArea */
-export function Overlay({ show, kind = 'start', emoji, title, subtitle, lines, score, best, isNew, accent = C.cyan, startLabel, onStart, onExit, scoreLabel = 'PUNTOS', extra }) {
+export function Overlay({ show, kind = 'start', emoji, title, subtitle, lines, score, best, isNew, accent = C.cyan, startLabel, onStart, onExit, scoreLabel = 'PUNTOS', extra, noStart }) {
   const a = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (show) {
@@ -392,7 +392,7 @@ export function Overlay({ show, kind = 'start', emoji, title, subtitle, lines, s
           </View>
         )}
         <View style={{ marginTop: 22, alignItems: 'center', gap: 12 }}>
-          <Btn testID="start" label={startLabel || (over ? 'OTRA VEZ' : 'JUGAR')} color={accent} onPress={onStart} />
+          {noStart ? null : <Btn testID="start" label={startLabel || (over ? 'OTRA VEZ' : 'JUGAR')} color={accent} onPress={onStart} />}
           {over && onExit ? <Btn label="MENÚ" ghost small color={C.dim} onPress={onExit} /> : null}
         </View>
       </Animated.View>

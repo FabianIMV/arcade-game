@@ -3001,288 +3001,319 @@ function NeonTunnel({ onExit }) {
   );
 }
 
-// ==========================================
-// 10. MONSTER DUEL  (Pokémon-style battles!)
-// ==========================================
-// ==========================================
+// ─── MONSTER DUEL ─────────────────────────────────────────────────
 const MD_MONSTERS = [
-  { id:0,  name:'FLAMECAT',   emoji:'🐱', type:'fire',     hp:45, atk:15, def:8,  moves:['Arañazo','Brasa','Rugido','Placaje'],        evo:1,  evoLvl:16 },
-  { id:1,  name:'BLAZELION',  emoji:'🦁', type:'fire',     hp:70, atk:25, def:14, moves:['Tajo','Lanzallamas','Rugido','Erupción'],     evo:-1, evoLvl:0 },
-  { id:2,  name:'AQUAPUP',    emoji:'🐶', type:'water',    hp:44, atk:13, def:10, moves:['Placaje','Pistola Agua','Gruñido','Mordisco'], evo:3,  evoLvl:16 },
-  { id:3,  name:'TIDEWOLF',   emoji:'🐺', type:'water',    hp:68, atk:22, def:17, moves:['Mordisco','Surf','Aullido','Triturar'],        evo:-1, evoLvl:0 },
-  { id:4,  name:'SPROUTLING', emoji:'🌱', type:'grass',    hp:45, atk:11, def:12, moves:['Placaje','Látigo Cepa','Gruñido','Polvo Somnífero'], evo:5, evoLvl:16 },
-  { id:5,  name:'THORNWOOD',  emoji:'🌲', type:'grass',    hp:65, atk:18, def:20, moves:['Hoja Aguda','Rayo Solar','Espora','Síntesis'], evo:-1, evoLvl:0 },
-  { id:6,  name:'ZAPPYMOLE',  emoji:'🐹', type:'electric', hp:38, atk:20, def:6, moves:['Placaje','Impactueno','Agilidad','Trueno'],    evo:7,  evoLvl:18 },
-  { id:7,  name:'VOLTFANG',   emoji:'🦔', type:'electric', hp:58, atk:32, def:10, moves:['Onda Trueno','Giga Impacto','Rapidez','Voltio Cruel'], evo:-1, evoLvl:0 },
-  { id:8,  name:'FROSTBEAR',  emoji:'🐻', type:'ice',      hp:60, atk:20, def:18, moves:['Placaje','Rayo Hielo','Gruñido','Ventisca'],  evo:-1, evoLvl:0 },
-  { id:9,  name:'SHADOWFOX',  emoji:'🦊', type:'dark',     hp:42, atk:22, def:8,  moves:['Arañazo','Ja de Trampa','Arena','Pulso Umbrio'], evo:-1, evoLvl:0 },
-  { id:10, name:'AEROBIRD',   emoji:'🐦', type:'flying',   hp:38, atk:17, def:8,  moves:['Picoteo','Ventisca','Remolino','Ala de Acero'], evo:11, evoLvl:20 },
-  { id:11, name:'STORMROC',   emoji:'🦅', type:'flying',   hp:60, atk:28, def:13, moves:['As Aéreo','Huracán','Ave Audaz','Ataque Cielo'], evo:-1, evoLvl:0 },
-  { id:12, name:'INKOCTUS',   emoji:'🐙', type:'water',    hp:40, atk:16, def:11, moves:['Placaje','Tinta','Constricción','Hidrobomba'], evo:-1, evoLvl:0 },
-  { id:13, name:'BLAZESTEED', emoji:'🐴', type:'fire',     hp:60, atk:24, def:12, moves:['Pisotón','Llamarada','Agilidad','Carga Llamas'], evo:-1, evoLvl:0 },
-  { id:14, name:'STONEGUARD', emoji:'🦏', type:'rock',     hp:70, atk:16, def:25, moves:['Placaje','Lanzarrocas','Endurecer','Avalancha'], evo:-1, evoLvl:0 },
+  { id: 0, name: 'FLAMECAT', e: '🐱', type: 'fire', hp: 45, atk: 15, def: 9, evo: 1, evoLvl: 16 },
+  { id: 1, name: 'BLAZELION', e: '🦁', type: 'fire', hp: 70, atk: 25, def: 14, evo: -1 },
+  { id: 2, name: 'AQUAPUP', e: '🐶', type: 'water', hp: 44, atk: 13, def: 11, evo: 3, evoLvl: 16 },
+  { id: 3, name: 'TIDEWOLF', e: '🐺', type: 'water', hp: 68, atk: 22, def: 17, evo: -1 },
+  { id: 4, name: 'SPROUTLING', e: '🌱', type: 'grass', hp: 45, atk: 12, def: 12, evo: 5, evoLvl: 16 },
+  { id: 5, name: 'THORNWOOD', e: '🌲', type: 'grass', hp: 66, atk: 19, def: 20, evo: -1 },
+  { id: 6, name: 'ZAPPYMOLE', e: '🐹', type: 'electric', hp: 38, atk: 20, def: 7, evo: 7, evoLvl: 18 },
+  { id: 7, name: 'VOLTFANG', e: '🦔', type: 'electric', hp: 58, atk: 31, def: 11, evo: -1 },
+  { id: 8, name: 'FROSTBEAR', e: '🐻', type: 'ice', hp: 60, atk: 20, def: 18, evo: -1 },
+  { id: 9, name: 'SHADOWFOX', e: '🦊', type: 'dark', hp: 42, atk: 22, def: 9, evo: -1 },
+  { id: 10, name: 'AEROBIRD', e: '🐦', type: 'flying', hp: 38, atk: 17, def: 9, evo: 11, evoLvl: 20 },
+  { id: 11, name: 'STORMROC', e: '🦅', type: 'flying', hp: 60, atk: 28, def: 13, evo: -1 },
+  { id: 12, name: 'INKOCTUS', e: '🐙', type: 'water', hp: 40, atk: 16, def: 11, evo: -1 },
+  { id: 13, name: 'BLAZESTEED', e: '🐴', type: 'fire', hp: 60, atk: 24, def: 12, evo: -1 },
+  { id: 14, name: 'STONEGUARD', e: '🦏', type: 'rock', hp: 70, atk: 16, def: 25, evo: -1 },
 ];
 const MD_MULT = {
-  fire:{ grass:2, ice:2, water:0.5, rock:0.5, fire:0.5 },
-  water:{ fire:2, rock:2, grass:0.5, water:0.5 },
-  grass:{ water:2, rock:2, fire:0.5, grass:0.5, flying:0.5 },
-  electric:{ water:2, flying:2, grass:0.5, electric:0.5 },
-  rock:{ fire:2, flying:2, water:0.5, grass:0.5 },
-  ice:{ grass:2, flying:2, water:0.5, ice:0.5 },
-  dark:{}, flying:{ grass:2, electric:0.5, rock:0.5 },
+  fire: { grass: 2, ice: 2, water: 0.5, rock: 0.5, fire: 0.5 }, water: { fire: 2, rock: 2, grass: 0.5, water: 0.5 },
+  grass: { water: 2, rock: 2, fire: 0.5, grass: 0.5, flying: 0.5 }, electric: { water: 2, flying: 2, grass: 0.5, electric: 0.5 },
+  rock: { fire: 2, flying: 2, ice: 2, water: 0.5, grass: 0.5 }, ice: { grass: 2, flying: 2, water: 0.5, ice: 0.5, fire: 0.5 },
+  dark: { electric: 1, flying: 1, normal: 1 }, flying: { grass: 2, electric: 0.5, rock: 0.5 }, normal: {},
 };
-const MD_TC = { fire:'#ff4500',water:'#1e90ff',grass:'#3cb371',electric:'#ffd700',rock:'#a0522d',ice:'#00ced1',dark:'#7b2d9b',flying:'#87ceeb' };
+const MD_TC = { fire: '#ff5a2a', water: '#2d8cff', grass: '#3ccf7a', electric: '#ffd400', rock: '#b07040', ice: '#37e0e0', dark: '#a05bd0', flying: '#8fcfff', normal: '#b8b8c8' };
+const MD_TYPE_MOVES = {
+  fire: [['Brasa', 48], ['Llamarada', 95]], water: [['Pistola Agua', 48], ['Hidrobomba', 95]], grass: [['Látigo Cepa', 48], ['Rayo Solar', 95]],
+  electric: [['Impactrueno', 48], ['Trueno', 95]], rock: [['Lanzarrocas', 48], ['Avalancha', 95]], ice: [['Aliento Gélido', 48], ['Ventisca', 95]],
+  dark: [['Mordisco', 48], ['Pulso Umbrío', 95]], flying: [['Picoteo', 48], ['Ataque Cielo', 95]],
+};
+const MD_STATUS = [{ n: 'Rugido', eff: 'atkdown', pp: 10, d: 'baja el ataque rival' }, { n: 'Endurecer', eff: 'defup', pp: 10, d: 'sube tu defensa' }, { n: 'Recuperar', eff: 'heal', pp: 5, d: 'cura el 40% de PS' }];
+const MD_STATS = (b, lv) => ({ maxHp: Math.floor(b.hp * (1 + (lv - 5) * 0.12)) + (lv > 5 ? 0 : 0), atk: Math.floor(b.atk * (1 + (lv - 5) * 0.08)), def: Math.floor(b.def * (1 + (lv - 5) * 0.08)) });
+const MD_TRAINERS = ['Líder Brasa', 'Líder Marea', 'Líder Raíz', 'Líder Chispa', 'Líder Cumbre'];
 
 function MonsterDuel({ onExit }) {
-  const [phase, setPhase]       = useState('starter');
-  const [team, setTeam]         = useState([]);
-  const [activeIdx, setActiveIdx] = useState(0);
-  const [wild, setWild]         = useState(null);
-  const [wildHp, setWildHp]     = useState(0);
-  const [turn, setTurn]         = useState('player');
-  const [log, setLog]           = useState(['¡Bienvenido al mundo de los Monstruos!']);
-  const [badges, setBadges]     = useState(0);
-  const [caughtIds, setCaughtIds] = useState([]);
-  const shakeAnim = useRef(new Animated.Value(0)).current;
-  const teamRef   = useRef([]);
-  const wildRef   = useRef(null);
-  const wildHpRef = useRef(0);
-
-  const addLog = (m) => setLog(l => [m, ...l.slice(0,4)]);
-  const mkMon  = (id, lvl) => {
-    const b = MD_MONSTERS[id], sc = 1 + (lvl - 5) * 0.1;
-    return { ...b, level:lvl, maxHp:Math.floor(b.hp*sc), currentHp:Math.floor(b.hp*sc), xp:0, xpNeeded:lvl*20 };
+  const fx = useFX();
+  const later = useTimeouts();
+  const [best, submitBest] = useBest('monster');
+  const [scene, setScene] = useState('starter');           // starter | explore | battle | over | win
+  const [, force] = useReducer(x => x + 1, 0);
+  const g = useRef(null);
+  const mkMon = (id, lv) => {
+    const b = MD_MONSTERS[id]; const st = MD_STATS(b, lv);
+    const moves = [{ n: 'Placaje', t: 'normal', p: 40, acc: 100, pp: 25, max: 25 }, { n: MD_TYPE_MOVES[b.type][0][0], t: b.type, p: MD_TYPE_MOVES[b.type][0][1], acc: 100, pp: 18, max: 18 }];
+    moves.push({ n: MD_TYPE_MOVES[b.type][1][0], t: b.type, p: MD_TYPE_MOVES[b.type][1][1], acc: 85, pp: 7, max: 7, minLv: 8 });
+    const sm = MD_STATUS[id % 3]; moves.push({ n: sm.n, t: 'normal', eff: sm.eff, pp: sm.pp, max: sm.pp, d: sm.d });
+    return { id, name: b.name, e: b.e, type: b.type, lv, ...st, hp: st.maxHp, xp: 0, xpNext: lv * 22, moves, evo: b.evo, evoLvl: b.evoLvl, st: { atk: 0, def: 0 } };
   };
-  const calcDmg = (a, d) => {
-    const mult = MD_MULT[a.type]?.[d.type] ?? 1;
-    return Math.max(1, Math.floor((a.atk * 1.4 - d.def * 0.5) * mult + Math.random() * 4));
+  const initState = () => ({ team: [], active: 0, balls: 6, potions: 3, wins: 0, badges: 0, caught: [], box: 0, battle: null, log: ['¡Bienvenido al mundo de los Monstruos!'], menu: 'main', bt: 0, busy: false, trainerIdx: 0, steps: 0 });
+  if (!g.current) g.current = initState();
+  const addLog = m => { g.current.log = [m, ...g.current.log].slice(0, 4); };
+  const scoreOf = s => s.wins * 10 + s.badges * 100 + s.caught.length * 20;
+  const stage = n => Math.max(0.4, 1 + 0.25 * n);
+  const effOf = (mt, dt) => (MD_MULT[mt] && MD_MULT[mt][dt] != null ? MD_MULT[mt][dt] : 1);
+  const calc = (a, d, mv) => {
+    const eff = effOf(mv.t, d.type); const stab = mv.t === a.type ? 1.3 : 1; const crit = Math.random() < 0.08;
+    const raw = (a.atk * stage(a.st.atk)) / (d.def * stage(d.st.def)) * mv.p * 0.24 * eff * stab * (crit ? 1.6 : 1) * rand(0.88, 1);
+    return { dmg: Math.max(1, Math.floor(raw) + 1), eff, crit };
   };
-  const shake = () => Animated.sequence([
-    Animated.timing(shakeAnim,{toValue:10,duration:60,useNativeDriver:true}),
-    Animated.timing(shakeAnim,{toValue:-10,duration:60,useNativeDriver:true}),
-    Animated.timing(shakeAnim,{toValue:5,duration:60,useNativeDriver:true}),
-    Animated.timing(shakeAnim,{toValue:0,duration:60,useNativeDriver:true}),
-  ]).start();
+  const active = () => g.current.team[g.current.active];
+  const start = id => {
+    const s = initState(); s.team = [mkMon(id, 5)]; s.caught = [id];
+    g.current = s; fx.clear(); setScene('explore'); hx.good();
+    addLog(`¡${s.team[0].name} será tu compañero!`);
+    AsyncStorage.removeItem('@md_save2').catch(() => {});
+  };
+  const save = () => { const s = g.current; AsyncStorage.setItem('@md_save2', JSON.stringify({ team: s.team, balls: s.balls, potions: s.potions, wins: s.wins, badges: s.badges, caught: s.caught, box: s.box, trainerIdx: s.trainerIdx })).catch(() => {}); };
+  useEffect(() => { AsyncStorage.getItem('@md_save2').then(v => { if (v) { try { g.current.save = JSON.parse(v); force(); } catch (e) {} } }).catch(() => {}); }, []);
+  const load = () => { const d = g.current.save; if (!d) return; const s = initState(); Object.assign(s, d); s.log = ['Partida cargada.']; g.current = s; setScene('explore'); };
 
-  const chooseStarter = (id) => {
-    const m = mkMon(id, 5);
-    setTeam([m]); teamRef.current = [m];
-    setActiveIdx(0); setPhase('explore');
-    addLog(`¡${m.name} quiere ser tu compañero!`);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  const beginBattle = trainer => {
+    const s = g.current; const lead = Math.max(...s.team.map(m => m.lv));
+    let foes;
+    if (trainer) { const n = 2 + Math.min(1, s.badges); foes = Array.from({ length: n }, () => mkMon(randInt(0, MD_MONSTERS.length - 1), lead + randInt(0, 2) + s.badges)); }
+    else foes = [mkMon(randInt(0, MD_MONSTERS.length - 1), Math.max(3, lead + randInt(-2, 2)))];
+    s.battle = { foes, fi: 0, trainer, name: trainer ? MD_TRAINERS[s.trainerIdx % MD_TRAINERS.length] : null, t: 0, hit: 0, ahit: 0 };
+    s.team.forEach(m => { m.st = { atk: 0, def: 0 }; });
+    s.menu = 'main'; s.busy = false;
+    addLog(trainer ? `¡${s.battle.name} te desafía!` : `¡Un ${foes[0].name} salvaje apareció!`);
+    fx.flash('#fff', 0.5); hx.warn(); setScene('battle');
   };
   const explore = () => {
-    if (Math.random() < 0.45) {
-      const wId  = Math.floor(Math.random() * MD_MONSTERS.length);
-      const wLvl = Math.max(3, (teamRef.current[0]?.level ?? 5) + Math.floor(Math.random()*5) - 2);
-      const wm   = mkMon(wId, wLvl);
-      setWild(wm); wildRef.current = wm;
-      setWildHp(wm.maxHp); wildHpRef.current = wm.maxHp;
-      setTurn('player'); setPhase('battle');
-      addLog(`¡Un ${wm.name} salvaje apareció!`);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } else { addLog('No hay encuentros… sigue explorando.'); }
+    const s = g.current; s.steps += 1;
+    if (s.wins > 0 && s.wins % 4 === 0 && !s.trainerDone) { s.trainerDone = true; beginBattle(true); return; }
+    if (Math.random() < 0.7) beginBattle(false); else { addLog(pick(['Solo hierba y viento…', 'Encuentras una baya y la comes. ¡Yum!', 'Nada por aquí. Sigue explorando.'])); hx.tick(); force(); }
   };
-  const gainXp = (amount) => setTeam(prev => {
-    return prev.map((m, i) => {
-      if (i !== activeIdx) return m;
-      let nm = { ...m, xp: m.xp + amount };
-      while (nm.xp >= nm.xpNeeded) {
-        nm.xp -= nm.xpNeeded; nm.level++;
-        nm.xpNeeded = nm.level * 20;
-        nm.maxHp = Math.floor(nm.hp * (1 + (nm.level-5)*0.1));
-        nm.currentHp = Math.min(nm.currentHp + 8, nm.maxHp);
-        nm.atk = (nm.atk||0) + 1; nm.def = (nm.def||0) + 1;
-        addLog(`¡${nm.name} subió al nivel ${nm.level}! ⬆️`);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        if (nm.evo !== -1 && nm.level >= nm.evoLvl) {
-          const ed = MD_MONSTERS[nm.evo];
-          nm = { ...nm, ...ed, level:nm.level, xp:nm.xp, xpNeeded:nm.xpNeeded,
-            maxHp:Math.floor(ed.hp*(1+(nm.level-5)*0.1)), currentHp:Math.floor(ed.hp*(1+(nm.level-5)*0.1)) };
-          addLog(`✨ ¡${m.name} evolucionó a ${nm.name}!`);
-        }
-      }
-      teamRef.current[i] = nm; return nm;
-    });
-  });
-  const playerAttack = (mi) => {
-    if (turn !== 'player') return;
-    const p = teamRef.current[activeIdx]; const w = wildRef.current; if (!p||!w) return;
-    const dmg = calcDmg(p, w);
-    const mult = MD_MULT[p.type]?.[w.type] ?? 1;
-    const eff  = mult > 1 ? ' ¡Muy eficaz!' : mult < 1 ? ' No muy eficaz.' : '';
-    const nhp  = Math.max(0, wildHpRef.current - dmg);
-    wildHpRef.current = nhp; setWildHp(nhp);
-    addLog(`${p.name} usa ${p.moves[mi]}! -${dmg}💥${eff}`);
-    shake(); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (nhp <= 0) { const xp = w.level*15; addLog(`¡${w.name} vencido! +${xp}XP`); setBadges(b=>b+1); gainXp(xp); setTimeout(()=>setPhase('explore'),1200); return; }
-    setTurn('enemy'); setTimeout(enemyTurn, 900);
-  };
-  const enemyTurn = () => {
-    const w = wildRef.current; const p = teamRef.current[activeIdx]; if (!w||!p) return;
-    const dmg  = calcDmg(w, p);
-    const nhp  = Math.max(0, p.currentHp - dmg);
-    addLog(`${w.name} ataca! -${dmg} a ${p.name}`);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    setTeam(prev => { const n = prev.map((m,i)=>{if(i!==activeIdx)return m; const nm={...m,currentHp:nhp}; teamRef.current[i]=nm; return nm;}); return n; });
-    if (nhp <= 0) {
-      addLog(`¡${p.name} se desmayó!`);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const alive = teamRef.current.filter((m,i)=>i!==activeIdx&&m.currentHp>0);
-      setTimeout(()=>{ if(!alive.length)setPhase('gameover'); else setPhase('explore'); }, 800);
-      return;
+  const foe = () => g.current.battle.foes[g.current.battle.fi];
+  const checkEvo = (m) => {
+    if (m.evo !== -1 && m.evo != null && m.lv >= m.evoLvl) {
+      const old = m.name; const nb = MD_MONSTERS[m.evo]; const st = MD_STATS(nb, m.lv);
+      Object.assign(m, { id: nb.id, name: nb.name, e: nb.e, type: nb.type, ...st, hp: st.maxHp, evo: nb.evo, evoLvl: nb.evoLvl });
+      m.moves[1] = { ...m.moves[1], n: MD_TYPE_MOVES[nb.type][0][0], t: nb.type }; m.moves[2] = { ...m.moves[2], n: MD_TYPE_MOVES[nb.type][1][0], t: nb.type };
+      addLog(`✨ ¡${old} evolucionó a ${nb.name}!`); fx.flash('#fff', 0.6); hx.win();
     }
-    setTurn('player');
+  };
+  const gainXp = (m, amount) => {
+    m.xp += amount; let up = false;
+    while (m.xp >= m.xpNext) { m.xp -= m.xpNext; m.lv += 1; m.xpNext = m.lv * 22; const base = MD_MONSTERS[m.id]; const st = MD_STATS(base, m.lv); const gain = st.maxHp - m.maxHp; Object.assign(m, st); m.hp = Math.min(m.maxHp, m.hp + Math.max(6, gain)); up = true; addLog(`¡${m.name} subió al nivel ${m.lv}! ⬆️`); checkEvo(m); }
+    if (up) { hx.good(); fx.pop(AREA_W / 2, AREA_H - 210, `¡NIVEL ${m.lv}!`, C.amber, 24); }
+  };
+  const endWin = () => {
+    const s = g.current; const b = s.battle; const tr = b.trainer;
+    s.wins += 1; s.trainerDone = tr ? s.trainerDone : s.trainerDone && s.wins % 4 !== 0 ? s.trainerDone : s.trainerDone;
+    if (!tr && s.wins % 4 !== 0) s.trainerDone = false;
+    s.team.forEach(m => { if (m.hp > 0) m.hp = Math.min(m.maxHp, m.hp + Math.ceil(m.maxHp * 0.12)); });
+    if (Math.random() < 0.5) { s.balls += 1; addLog('Encontraste una Monstruobola 🔴.'); }
+    if (tr) {
+      s.badges += 1; s.trainerIdx += 1; s.trainerDone = false; s.balls += 3; s.potions += 2; s.team.forEach(m => { m.hp = m.maxHp; });
+      addLog(`🏅 ¡Medalla ${s.badges}! Equipo curado y +3 🔴 +2 🧪`); fx.flash(C.amber, 0.4); hx.win();
+    }
+    submitBest(scoreOf(s)); save(); s.battle = null;
+    if (s.badges >= 5) { setScene('win'); return; }
+    setScene('explore');
+  };
+  const faintCheck = () => { // ¿cayó el aliado activo?
+    const s = g.current; const m = active();
+    if (m.hp > 0) return false;
+    addLog(`¡${m.name} se debilitó!`); hx.bad();
+    const alive = s.team.findIndex(x => x.hp > 0);
+    if (alive < 0) { later(() => { submitBest(scoreOf(s)); hx.die(); s.battle = null; setScene('over'); }, 900); return true; }
+    s.menu = 'forced'; s.busy = false; force(); return true;
+  };
+  const foeAct = () => {
+    const s = g.current; const b = s.battle; if (!b) return; const f = foe(); const p = active();
+    const usable = f.moves.filter(m => m.pp > 0 && !(m.minLv && f.lv < m.minLv));
+    let mv = pick(usable);
+    const strong = usable.filter(m => m.p && effOf(m.t, p.type) > 1); if (strong.length && Math.random() < 0.6) mv = pick(strong);
+    mv.pp -= 1;
+    if (mv.eff) {
+      if (mv.eff === 'atkdown') { p.st.atk = Math.max(-3, p.st.atk - 1); addLog(`${f.name} usa ${mv.n}. ¡Tu ataque baja!`); }
+      if (mv.eff === 'defup') { f.st.def = Math.min(3, f.st.def + 1); addLog(`${f.name} usa ${mv.n}. ¡Su defensa sube!`); }
+      if (mv.eff === 'heal') { const h = Math.ceil(f.maxHp * 0.4); f.hp = Math.min(f.maxHp, f.hp + h); addLog(`${f.name} usa ${mv.n} y se cura.`); }
+    } else if (Math.random() * 100 > mv.acc) addLog(`${f.name} usa ${mv.n}… ¡pero falla!`);
+    else {
+      const r = calc(f, p, mv); p.hp = Math.max(0, p.hp - r.dmg); b.ahit = 0.3;
+      fx.pop(AREA_W * 0.3, AREA_H - 250, `-${r.dmg}`, C.red, 24); fx.burst(AREA_W * 0.3, AREA_H - 250, MD_TC[mv.t], 12, 220); fx.shake(r.eff > 1 ? 8 : 5, 0.25); hx.heavy();
+      addLog(`${f.name} usa ${mv.n}: -${r.dmg}${r.eff > 1 ? ' ¡Muy eficaz!' : r.eff < 1 ? ' No muy eficaz.' : ''}${r.crit ? ' ¡Crítico!' : ''}`);
+    }
+    if (!faintCheck()) { s.busy = false; s.menu = 'main'; }
+    force();
+  };
+  const afterPlayer = () => {
+    const s = g.current; const b = s.battle; const f = foe();
+    if (f.hp <= 0) {
+      const xp = Math.floor(f.lv * 18 * (b.trainer ? 1.5 : 1)); addLog(`¡${f.name} fue derrotado! +${xp} XP`);
+      fx.burst(AREA_W * 0.68, 150, MD_TC[f.type], 26, 300, 0.8, 6); hx.win();
+      gainXp(active(), xp); s.team.forEach((m, i) => { if (i !== s.active && m.hp > 0) gainXp(m, Math.floor(xp * 0.3)); });
+      if (b.fi + 1 < b.foes.length) { b.fi += 1; addLog(`${b.name} saca a ${foe().name}.`); s.busy = false; s.menu = 'main'; force(); return; }
+      later(endWin, 900); force(); return;
+    }
+    later(foeAct, 800); force();
+  };
+  const useMove = i => {
+    const s = g.current; const b = s.battle; if (!b || s.busy) return;
+    const p = active(); const f = foe(); const mv = p.moves[i];
+    if (mv.pp <= 0 || (mv.minLv && p.lv < mv.minLv)) { hx.tick(); return; }
+    s.busy = true; mv.pp -= 1;
+    if (mv.eff) {
+      if (mv.eff === 'atkdown') { f.st.atk = Math.max(-3, f.st.atk - 1); addLog(`${p.name} usa ${mv.n}. ¡El ataque rival baja!`); }
+      if (mv.eff === 'defup') { p.st.def = Math.min(3, p.st.def + 1); addLog(`${p.name} usa ${mv.n}. ¡Tu defensa sube!`); }
+      if (mv.eff === 'heal') { const h = Math.ceil(p.maxHp * 0.4); p.hp = Math.min(p.maxHp, p.hp + h); fx.pop(AREA_W * 0.3, AREA_H - 250, `+${h}`, C.lime, 22); addLog(`${p.name} usa ${mv.n} y recupera ${h} PS.`); }
+      hx.good();
+    } else if (Math.random() * 100 > mv.acc) { addLog(`${p.name} usa ${mv.n}… ¡pero falla!`); hx.tick(); }
+    else {
+      const r = calc(p, f, mv); f.hp = Math.max(0, f.hp - r.dmg); b.hit = 0.3;
+      fx.pop(AREA_W * 0.68, 130, `-${r.dmg}`, r.eff > 1 ? C.amber : C.text, r.eff > 1 ? 28 : 22); fx.burst(AREA_W * 0.68, 150, MD_TC[mv.t], 14, 240); fx.ring(AREA_W * 0.68, 150, MD_TC[mv.t], 60); hx.hit();
+      addLog(`${p.name} usa ${mv.n}: -${r.dmg}${r.eff > 1 ? ' ¡Muy eficaz!' : r.eff < 1 ? ' No muy eficaz.' : ''}${r.crit ? ' ¡Crítico!' : ''}`);
+    }
+    s.menu = 'main'; force(); later(afterPlayer, 700);
+  };
+  const swapTo = (i, forced) => {
+    const s = g.current; if (s.team[i].hp <= 0 || (i === s.active && !forced)) return;
+    s.active = i; s.team[i].st = { atk: 0, def: 0 }; addLog(`¡Adelante, ${s.team[i].name}!`); hx.tap();
+    if (s.battle) { s.menu = 'main'; if (forced) { s.busy = false; force(); } else { s.busy = true; force(); later(foeAct, 700); } } else force();
+  };
+  const usePotion = () => {
+    const s = g.current; const p = active();
+    if (s.potions <= 0 || p.hp >= p.maxHp || (s.battle && s.busy)) { hx.tick(); return; }
+    s.potions -= 1; const h = Math.ceil(p.maxHp * 0.45); p.hp = Math.min(p.maxHp, p.hp + h); fx.pop(AREA_W * 0.3, AREA_H - 250, `+${h}`, C.lime, 22); hx.good(); addLog(`🧪 ${p.name} recupera ${h} PS.`);
+    if (s.battle) { s.busy = true; s.menu = 'main'; force(); later(foeAct, 700); } else force();
   };
   const tryCatch = () => {
-    if (turn !== 'player') return;
-    const w = wildRef.current;
-    const rate = Math.max(0.05, (1 - wildHpRef.current/w.maxHp)*0.75 + 0.1);
-    addLog('🔴 ¡Lanzando Monstruball!'); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    setTimeout(()=>{
+    const s = g.current; const b = s.battle; if (!b || s.busy) return;
+    if (b.trainer) { addLog('¡No puedes capturar monstruos de entrenadores!'); hx.bad(); force(); return; }
+    if (s.balls <= 0) { addLog('No te quedan Monstruobolas.'); hx.bad(); force(); return; }
+    s.balls -= 1; s.busy = true; const f = foe(); addLog('🔴 ¡Lanzas una Monstruobola!'); hx.heavy(); force();
+    const rate = clamp((1 - f.hp / f.maxHp) * 0.7 + 0.15 - (f.lv - active().lv) * 0.02, 0.08, 0.95);
+    later(() => { addLog('…'); force(); }, 500); later(() => { addLog('…!'); hx.tick(); force(); }, 1000);
+    later(() => {
       if (Math.random() < rate) {
-        addLog(`¡${w.name} capturado! 🎉`);
-        setCaughtIds(c=>[...c,w.id]);
-        if (teamRef.current.length < 3) { const nm={...w,currentHp:Math.floor(w.maxHp*0.5)}; setTeam(prev=>{const n=[...prev,nm];teamRef.current=n;return n;}); }
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setTimeout(()=>setPhase('explore'), 900);
-      } else { addLog(`¡${w.name} escapó!`); setTurn('enemy'); setTimeout(enemyTurn,600); }
-    },700);
+        addLog(`¡${f.name} capturado! 🎉`); fx.burst(AREA_W * 0.68, 150, C.amber, 30, 280, 0.9, 6); hx.win();
+        if (!s.caught.includes(f.id)) s.caught.push(f.id);
+        if (s.team.length < 4) { f.hp = Math.max(1, Math.floor(f.maxHp * 0.5)); f.st = { atk: 0, def: 0 }; s.team.push(f); } else { s.box += 1; addLog('Tu equipo está lleno: va a la caja.'); }
+        s.wins += 1; submitBest(scoreOf(s)); save(); s.battle = null; later(() => setScene('explore'), 900); force();
+      } else { addLog(`¡${f.name} se liberó!`); hx.bad(); force(); later(foeAct, 600); }
+    }, 1500);
   };
-  const hpc = (hp,max) => hp>max*0.5?'#22c55e':hp>max*0.2?'#f59e0b':'#ef4444';
-  const Bar = ({hp,max}) => (
-    <View style={{height:7,backgroundColor:'#222',borderRadius:4,overflow:'hidden',marginTop:4}}>
-      <View style={{width:`${Math.max(0,hp/max*100)}%`,height:'100%',backgroundColor:hpc(hp,max),borderRadius:4}}/>
-    </View>
-  );
+  const run = () => {
+    const s = g.current; const b = s.battle; if (!b || s.busy) return;
+    if (b.trainer) { addLog('¡No puedes huir de un combate de entrenador!'); hx.bad(); force(); return; }
+    addLog('¡Escapaste sin problemas!'); s.battle = null; hx.tick(); setScene('explore');
+  };
+  const rest = () => {
+    const s = g.current; s.team.forEach(m => { m.hp = m.maxHp; m.moves.forEach(mv => { mv.pp = mv.max; }); }); addLog('🛏️ Tu equipo descansa y se recupera por completo.'); hx.good(); fx.flash(C.lime, 0.2);
+    if (Math.random() < 0.4) { addLog('¡Pero un monstruo salvaje te sorprendió!'); later(() => beginBattle(false), 700); }
+    save(); force();
+  };
+  useLoop(scene === 'battle', dt => { const b = g.current.battle; if (b) { b.t += dt; if (b.hit > 0) b.hit -= dt; if (b.ahit > 0) b.ahit -= dt; } });
 
-  if (phase==='starter') return (
-    <SafeAreaView style={[styles.container,{backgroundColor:'#0f1729'}]}>
-      <View style={styles.header}>
-        <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
-        <Text style={[styles.title,{color:'#ffd700',fontSize:18}]}>⚡ MONSTER DUEL</Text>
+  const s = g.current; const b = s.battle; const p = s.team[s.active]; const f = b ? foe() : null;
+  const tag = m => <Text style={{ color: MD_TC[m.type], fontSize: 10, fontWeight: '900' }}>{m.type.toUpperCase()}</Text>;
+  const hpColor = (h, m) => (h > m * 0.5 ? C.lime : h > m * 0.2 ? C.amber : C.red);
+  const MBtn = ({ label, sub, color, onPress, disabled }) => (
+    <Pressable onPress={onPress} disabled={disabled} style={{ width: '48.5%', opacity: disabled ? 0.35 : 1 }}>
+      <View style={{ paddingVertical: 9, borderRadius: 14, backgroundColor: alpha(color, 0.16), borderWidth: 2, borderColor: alpha(color, 0.85), alignItems: 'center' }}>
+        <Text style={{ color: C.text, fontWeight: '900', fontSize: 13 }}>{label}</Text>{sub ? <Text style={{ color: C.dim, fontSize: 10 }}>{sub}</Text> : null}
       </View>
-      <ScrollView contentContainerStyle={{padding:20,alignItems:'center'}}>
-        <Text style={{color:'#fff',fontSize:22,fontWeight:'bold',marginBottom:6,textAlign:'center'}}>🌍 ¡Elige tu Starter!</Text>
-        <Text style={{color:'#aaa',fontSize:14,marginBottom:24,textAlign:'center'}}>Tu primer monstruo compañero de aventura</Text>
-        {[MD_MONSTERS[0],MD_MONSTERS[2],MD_MONSTERS[4]].map(m=>(
-          <Pressable key={m.id} onPress={()=>chooseStarter(m.id)} style={{
-            width:'92%',padding:18,borderRadius:16,marginBottom:16,
-            backgroundColor:MD_TC[m.type]+'22',borderWidth:2,borderColor:MD_TC[m.type],
-            flexDirection:'row',alignItems:'center',gap:14,
-          }}>
-            <Text style={{fontSize:54}}>{m.emoji}</Text>
-            <View style={{flex:1}}>
-              <Text style={{color:'#fff',fontSize:18,fontWeight:'bold'}}>{m.name}</Text>
-              <Text style={{color:MD_TC[m.type],fontSize:12,fontWeight:'bold',marginBottom:4}}>{m.type.toUpperCase()}</Text>
-              <Text style={{color:'#888',fontSize:11}}>HP:{m.hp}  ATK:{m.atk}  DEF:{m.def}</Text>
-              <Text style={{color:'#555',fontSize:10,marginTop:2}}>{m.moves.join(' · ')}</Text>
-            </View>
-          </Pressable>
-        ))}
-      </ScrollView>
-    </SafeAreaView>
+    </Pressable>
   );
-
-  const p = team[activeIdx];
   return (
-    <SafeAreaView style={[styles.container,{backgroundColor:phase==='battle'?'#0d1b2a':'#0d1f0d'}]}>
-      <View style={[styles.header,{backgroundColor:'rgba(0,0,0,0.6)'}]}>
-        <Pressable onPress={onExit} style={styles.backBtn}><Text style={styles.backText}>← BACK</Text></Pressable>
-        <Text style={[styles.title,{color:'#ffd700',fontSize:18}]}>⚡ MONSTER DUEL</Text>
-        <Text style={{color:'#ffd700',fontSize:12}}>🏅{badges}  👾{caughtIds.length}</Text>
-      </View>
-      {phase==='battle' && wild && (
-        <View style={{padding:14,flex:1}}>
-          <View style={{backgroundColor:'rgba(255,255,255,0.06)',borderRadius:14,padding:12,marginBottom:10}}>
-            <View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'center'}}>
-              <View style={{flex:1}}>
-                <Text style={{color:'#fff',fontSize:14,fontWeight:'bold'}}>{wild.name} <Text style={{color:MD_TC[wild.type],fontSize:12}}>[{wild.type}]</Text></Text>
-                <Text style={{color:'#aaa',fontSize:11}}>Lv.{wild.level}  {wildHp}/{wild.maxHp} HP</Text>
-                <Bar hp={wildHp} max={wild.maxHp}/>
-              </View>
-              <Animated.Text style={{fontSize:60,transform:[{translateX:shakeAnim}]}}>{wild.emoji}</Animated.Text>
+    <GameScreen title="MONSTER DUEL" emoji="⚡" accent={C.amber} onExit={onExit} score={scoreOf(s)} best={best}
+      hud={scene === 'explore' || scene === 'battle' ? <><Text style={{ color: C.dim, fontSize: 12 }}>🏅 {s.badges}/5 · 👾 {s.caught.length}/{MD_MONSTERS.length}</Text><Text style={{ color: C.dim, fontSize: 12 }}>🔴 {s.balls}  🧪 {s.potions}</Text></> : null}>
+      <PlayArea fx={fx} bg={scene === 'battle' ? '#0a1220' : '#07140a'} border={alpha(C.amber, 0.4)}>
+        {scene === 'explore' && p && (
+          <View style={{ flex: 1, padding: 14 }}>
+            <Text style={{ color: C.amber, fontWeight: '900', fontSize: 12, letterSpacing: 2, marginBottom: 8 }}>TU EQUIPO ({s.team.length}/4)</Text>
+            {s.team.map((m, i) => (
+              <Pressable key={i} onPress={() => { s.active = i; hx.tick(); force(); }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 14, marginBottom: 8, backgroundColor: i === s.active ? alpha(MD_TC[m.type], 0.15) : 'rgba(255,255,255,0.04)', borderWidth: 2, borderColor: i === s.active ? MD_TC[m.type] : '#222638' }}>
+                  <Text style={{ fontSize: 34, marginRight: 10, opacity: m.hp <= 0 ? 0.35 : 1 }}>{m.e}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: C.text, fontWeight: '900', fontSize: 14 }}>{m.name} <Text style={{ color: C.dim, fontSize: 11 }}>Nv.{m.lv}</Text>  {tag(m)}</Text>
+                    <Bar value={m.hp} max={m.maxHp} color={hpColor(m.hp, m.maxHp)} h={7} style={{ marginTop: 4 }} />
+                    <Text style={{ color: C.dim, fontSize: 10, marginTop: 2 }}>{m.hp}/{m.maxHp} PS · XP {m.xp}/{m.xpNext}</Text>
+                  </View>
+                </View>
+              </Pressable>
+            ))}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6, justifyContent: 'space-between' }}>
+              <MBtn label="🌿 EXPLORAR" sub={s.wins > 0 && s.wins % 4 === 0 ? '¡Hay un líder cerca!' : 'Busca monstruos'} color={C.lime} onPress={explore} />
+              <MBtn label="🛏️ DESCANSAR" sub="Cura todo (riesgo)" color={C.cyan} onPress={rest} />
+              <MBtn label={`🧪 POCIÓN (${s.potions})`} sub="Cura 45% al activo" color={C.red} onPress={usePotion} disabled={s.potions <= 0 || p.hp >= p.maxHp} />
+              <MBtn label="💾 GUARDAR" sub="Progreso" color={C.amber} onPress={() => { save(); addLog('💾 Partida guardada.'); hx.good(); force(); }} />
             </View>
           </View>
-          {p && (
-            <View style={{backgroundColor:'rgba(255,255,255,0.06)',borderRadius:14,padding:12,marginBottom:14}}>
-              <View style={{flexDirection:'row',justifyContent:'space-between',alignItems:'center'}}>
-                <Text style={{fontSize:52}}>{p.emoji}</Text>
-                <View style={{alignItems:'flex-end',flex:1,marginLeft:12}}>
-                  <Text style={{color:'#fff',fontSize:14,fontWeight:'bold'}}>{p.name} <Text style={{color:'#aaa',fontSize:11}}>Lv.{p.level}</Text></Text>
-                  <Text style={{color:'#aaa',fontSize:11}}>{p.currentHp}/{p.maxHp} HP</Text>
-                  <Bar hp={p.currentHp} max={p.maxHp}/>
-                  <Text style={{color:'#444',fontSize:10,marginTop:2}}>XP {p.xp}/{p.xpNeeded}</Text>
+        )}
+        {scene === 'battle' && b && p && f && (
+          <View style={{ flex: 1 }}>
+            <View style={{ position: 'absolute', left: 14, top: 12, width: AREA_W * 0.5 }}>
+              <Text style={{ color: C.text, fontWeight: '900', fontSize: 14 }}>{f.name} <Text style={{ color: C.dim, fontSize: 11 }}>Nv.{f.lv}</Text> {tag(f)}</Text>
+              <Bar value={f.hp} max={f.maxHp} color={hpColor(f.hp, f.maxHp)} h={9} style={{ marginTop: 4 }} />
+              <Text style={{ color: C.dim, fontSize: 10, marginTop: 2 }}>{f.hp}/{f.maxHp}{b.trainer ? `  ·  ${b.name} (${b.fi + 1}/${b.foes.length})` : ''}{f.st.atk < 0 ? ' · ATK↓' : ''}{f.st.def > 0 ? ' · DEF↑' : ''}</Text>
+            </View>
+            <Text style={{ position: 'absolute', right: AREA_W * 0.1, top: 38, fontSize: 82, transform: [{ translateY: Math.sin(b.t * 3) * 5 }, { translateX: b.hit > 0 ? (Math.random() - 0.5) * 18 : 0 }], opacity: f.hp <= 0 ? 0.2 : b.hit > 0 ? 0.55 : 1 }}>{f.e}</Text>
+            <Text style={{ position: 'absolute', left: AREA_W * 0.08, top: 150, fontSize: 82, transform: [{ scaleX: -1 }, { translateY: Math.cos(b.t * 3) * 4 }, { translateX: b.ahit > 0 ? (Math.random() - 0.5) * 18 : 0 }], opacity: b.ahit > 0 ? 0.55 : 1 }}>{p.e}</Text>
+            <View style={{ position: 'absolute', right: 14, top: 214, width: AREA_W * 0.5 }}>
+              <Text style={{ color: C.text, fontWeight: '900', fontSize: 14, textAlign: 'right' }}>{p.name} <Text style={{ color: C.dim, fontSize: 11 }}>Nv.{p.lv}</Text> {tag(p)}</Text>
+              <Bar value={p.hp} max={p.maxHp} color={hpColor(p.hp, p.maxHp)} h={9} style={{ marginTop: 4 }} />
+              <Text style={{ color: C.dim, fontSize: 10, marginTop: 2, textAlign: 'right' }}>{p.hp}/{p.maxHp}{p.st.atk < 0 ? ' · ATK↓' : ''}{p.st.def > 0 ? ' · DEF↑' : ''}</Text>
+            </View>
+            <View style={{ position: 'absolute', left: 12, right: 12, top: 266, padding: 10, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.05)', borderWidth: 1, borderColor: alpha(C.amber, 0.25), minHeight: 74 }}>
+              {s.log.slice(0, 3).map((m, i) => <Text key={i} style={{ color: i === 0 ? C.text : alpha(C.dim, 0.7), fontSize: 12, lineHeight: 17 }}>{m}</Text>)}
+            </View>
+            <View style={{ position: 'absolute', left: 12, right: 12, bottom: 12 }}>
+              {s.busy && s.menu !== 'forced' && <Text style={{ color: C.dim, textAlign: 'center', padding: 22 }}>…</Text>}
+              {!s.busy && s.menu === 'main' && (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between' }}>
+                  <MBtn label="⚔️ LUCHAR" color={C.red} onPress={() => { s.menu = 'moves'; force(); }} />
+                  <MBtn label="🔁 EQUIPO" color={C.violet} onPress={() => { s.menu = 'team'; force(); }} />
+                  <MBtn label={`🔴 ATRAPAR (${s.balls})`} color={C.amber} onPress={tryCatch} />
+                  <MBtn label={`🧪 POCIÓN (${s.potions})`} color={C.lime} onPress={usePotion} />
+                  <MBtn label="🏃 HUIR" color={C.dim} onPress={run} />
                 </View>
-              </View>
+              )}
+              {!s.busy && s.menu === 'moves' && (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between' }}>
+                  {p.moves.map((mv, i) => <MBtn key={i} label={mv.n} sub={mv.eff ? mv.d : `${mv.t} · pot ${mv.p}${effOf(mv.t, f.type) > 1 ? ' ✓✓' : effOf(mv.t, f.type) < 1 ? ' ✗' : ''} · PP ${mv.pp}/${mv.max}`} color={MD_TC[mv.t]} onPress={() => useMove(i)} disabled={mv.pp <= 0 || (mv.minLv && p.lv < mv.minLv)} />)}
+                  <MBtn label="← Volver" color={C.dim} onPress={() => { s.menu = 'main'; force(); }} />
+                </View>
+              )}
+              {(s.menu === 'team' || s.menu === 'forced') && (
+                <View style={{ gap: 6 }}>
+                  {s.menu === 'forced' && <Text style={{ color: C.amber, fontWeight: '900', textAlign: 'center' }}>Elige al siguiente monstruo</Text>}
+                  {s.team.map((m, i) => (
+                    <Pressable key={i} onPress={() => swapTo(i, s.menu === 'forced')} disabled={m.hp <= 0 || (i === s.active && s.menu === 'team')} style={{ opacity: m.hp <= 0 || (i === s.active && s.menu === 'team') ? 0.4 : 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', padding: 8, borderRadius: 12, backgroundColor: alpha(MD_TC[m.type], 0.12), borderWidth: 1.5, borderColor: alpha(MD_TC[m.type], 0.7) }}>
+                        <Text style={{ fontSize: 26, marginRight: 8 }}>{m.e}</Text><Text style={{ color: C.text, fontWeight: '800', flex: 1 }}>{m.name} Nv.{m.lv}</Text><Text style={{ color: C.dim, fontSize: 11 }}>{m.hp}/{m.maxHp}</Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                  {s.menu === 'team' && <MBtn label="← Volver" color={C.dim} onPress={() => { s.menu = 'main'; force(); }} />}
+                </View>
+              )}
             </View>
-          )}
-          {turn==='player' && p && (
-            <View>
-              <View style={{flexDirection:'row',flexWrap:'wrap',gap:8,marginBottom:10}}>
-                {p.moves.map((mv,i)=>(
-                  <Pressable key={i} onPress={()=>playerAttack(i)} style={{
-                    width:'47%',padding:11,borderRadius:10,alignItems:'center',
-                    backgroundColor:MD_TC[p.type]+'33',borderWidth:1,borderColor:MD_TC[p.type],
-                  }}>
-                    <Text style={{color:'#fff',fontSize:13,fontWeight:'bold'}}>{mv}</Text>
-                  </Pressable>
-                ))}
-              </View>
-              <View style={{flexDirection:'row',gap:8}}>
-                <Pressable onPress={tryCatch} style={{flex:1,padding:11,borderRadius:10,backgroundColor:'#991b1b',alignItems:'center'}}>
-                  <Text style={{color:'#fff',fontWeight:'bold'}}>🔴 ATRAPAR</Text>
-                </Pressable>
-                <Pressable onPress={()=>{addLog('¡Escapaste!');setPhase('explore');}} style={{flex:1,padding:11,borderRadius:10,backgroundColor:'#374151',alignItems:'center'}}>
-                  <Text style={{color:'#fff',fontWeight:'bold'}}>🏃 HUIR</Text>
-                </Pressable>
-              </View>
-            </View>
-          )}
-          {turn==='enemy' && <Text style={{color:'#f59e0b',textAlign:'center',fontSize:15,marginTop:10}}>⚡ Turno enemigo...</Text>}
-        </View>
-      )}
-      {phase==='explore' && (
-        <View style={{flex:1,padding:16}}>
-          <Text style={{color:'#ffd700',fontWeight:'bold',fontSize:14,marginBottom:12}}>👥 TU EQUIPO ({team.length}/3)</Text>
-          {team.map((m,i)=>(
-            <Pressable key={i} onPress={()=>setActiveIdx(i)} style={{
-              flexDirection:'row',alignItems:'center',padding:12,borderRadius:12,marginBottom:8,
-              backgroundColor:i===activeIdx?MD_TC[m.type]+'22':'rgba(255,255,255,0.04)',
-              borderWidth:i===activeIdx?2:1,borderColor:i===activeIdx?MD_TC[m.type]:'#2a2a2a',
-            }}>
-              <Text style={{fontSize:36,marginRight:12}}>{m.emoji}</Text>
-              <View style={{flex:1}}>
-                <Text style={{color:'#fff',fontWeight:'bold'}}>{m.name} <Text style={{color:'#666',fontSize:11}}>Lv.{m.level}</Text></Text>
-                <Bar hp={m.currentHp} max={m.maxHp}/>
-              </View>
-              <Text style={{color:'#666',fontSize:11}}>{m.currentHp}/{m.maxHp}</Text>
-            </Pressable>
-          ))}
-          <Pressable onPress={explore} style={{marginTop:18,backgroundColor:'#15803d',padding:18,borderRadius:14,alignItems:'center'}}>
-            <Text style={{color:'#fff',fontSize:18,fontWeight:'bold'}}>🌿 EXPLORAR HIERBA</Text>
-          </Pressable>
-          <Text style={{color:'#444',fontSize:11,textAlign:'center',marginTop:8}}>Capturados: {caughtIds.length}/{MD_MONSTERS.length}  •  Victorias: {badges}</Text>
-        </View>
-      )}
-      <View style={{backgroundColor:'rgba(0,0,0,0.55)',padding:10,minHeight:55,paddingHorizontal:14}}>
-        {log.slice(0,3).map((msg,i)=>(
-          <Text key={i} style={{color:i===0?'#e2e8f0':'#444',fontSize:12}}>{msg}</Text>
-        ))}
-      </View>
-      {phase==='gameover' && (
-        <View style={styles.overlay}>
-          <Text style={[styles.overlayTitle,{color:'#ef4444'}]}>💀 TODOS CAÍDOS</Text>
-          <Text style={styles.overlaySub}>Tus monstruos se desmayaron</Text>
-          <Text style={{color:'#ffd700',fontSize:15,marginBottom:20}}>🏅{badges} victorias  •  👾{caughtIds.length} capturados</Text>
-          <Pressable style={[styles.btn,{backgroundColor:'#ffd700'}]} onPress={()=>{
-            setPhase('starter');setTeam([]);teamRef.current=[];setBadges(0);setCaughtIds([]);setLog(['¡Nueva aventura!']);
-          }}>
-            <Text style={styles.btnText}>NUEVA AVENTURA</Text>
-          </Pressable>
-        </View>
-      )}
-    </SafeAreaView>
+          </View>
+        )}
+        {scene === 'explore' && <View style={{ position: 'absolute', left: 12, right: 12, bottom: 12, padding: 10, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.4)' }}>{s.log.slice(0, 3).map((m, i) => <Text key={i} style={{ color: i === 0 ? C.text : alpha(C.dim, 0.7), fontSize: 12 }}>{m}</Text>)}</View>}
+        <Overlay show={scene === 'starter'} kind="start" emoji="⚡" title="MONSTER DUEL" subtitle="Elige a tu compañero inicial" accent={C.amber} noStart onStart={() => {}} extra={
+          <View style={{ width: '100%', marginTop: 14, gap: 8 }}>
+            {[0, 2, 4].map(i => { const m = MD_MONSTERS[i]; return (
+              <Pressable key={i} testID={`starter-${i}`} onPress={() => start(i)}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', padding: 10, borderRadius: 16, backgroundColor: alpha(MD_TC[m.type], 0.14), borderWidth: 2, borderColor: MD_TC[m.type] }}>
+                  <Text style={{ fontSize: 40, marginRight: 12 }}>{m.e}</Text>
+                  <View style={{ flex: 1 }}><Text style={{ color: C.text, fontWeight: '900', fontSize: 15 }}>{m.name}</Text><Text style={{ color: MD_TC[m.type], fontSize: 11, fontWeight: '900' }}>{m.type.toUpperCase()}</Text><Text style={{ color: C.dim, fontSize: 11 }}>PS {m.hp} · ATQ {m.atk} · DEF {m.def}</Text></View>
+                </View>
+              </Pressable>); })}
+            {s.save && <Btn label="CONTINUAR PARTIDA" ghost small color={C.amber} onPress={load} />}
+          </View>
+        } lines={['Captura monstruos, evoluciónalos y vence a 5 líderes']} />
+        <Overlay show={scene === 'over'} kind="over" emoji="💀" title="TODOS CAÍDOS" subtitle={`🏅 ${s.badges} medallas · 👾 ${s.caught.length} capturados`} score={scoreOf(s)} best={best} accent={C.red} onStart={() => { g.current = initState(); setScene('starter'); }} startLabel="NUEVA AVENTURA" onExit={onExit} />
+        <Overlay show={scene === 'win'} kind="win" emoji="🏆" title="¡CAMPEÓN!" subtitle={`Derrotaste a los 5 líderes · ${s.caught.length} monstruos capturados`} score={scoreOf(s)} best={best} isNew accent={C.amber} onStart={() => { g.current = initState(); setScene('starter'); }} startLabel="NUEVA AVENTURA" onExit={onExit} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 
