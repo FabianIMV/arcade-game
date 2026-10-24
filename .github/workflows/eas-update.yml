@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:   # también se puede lanzar a mano desde la web/app de GitHub (Actions → Run workflow)
 
 jobs:
   update:
@@ -29,7 +30,8 @@ jobs:
         run: |
           CI=1 npx eas-cli update \
             --branch main \
-            --message "${{ github.event.head_commit.message }}" \
+            --message "$COMMIT_MSG" \
             --non-interactive
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
