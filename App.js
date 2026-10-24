@@ -1981,192 +1981,103 @@ function PixelQuest({ onExit }) {
 // 4. PING PONG
 // ==========================================
 function PingPong({ onExit }) {
-  const [gameState, setGameState] = useState('idle'); // idle | playing | gameover
-  const [scoreP, setScoreP] = useState(0);
-  const [scoreAI, setScoreAI] = useState(0);
-  const [, setTick] = useState(0);
-
-  const ball = useRef({ x: width / 2, y: GAME_HEIGHT / 2, vx: 4, vy: 6 });
-  const playerX = useRef(width / 2 - PP_PADDLE_W / 2);
-  const aiX = useRef(width / 2 - PP_PADDLE_W / 2);
-  const pScore = useRef(0);
-  const aScore = useRef(0);
-
-  const normalizeSpeed = (b, maxSpd) => {
-    const spd = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
-    if (spd > maxSpd) { b.vx = (b.vx / spd) * maxSpd; b.vy = (b.vy / spd) * maxSpd; }
-    if (Math.abs(b.vy) < 4) b.vy = b.vy > 0 ? 4 : -4;
+  const PW0 = 82, PH = 12, BR = 8, PY = AREA_H - 38, AY = 38, WIN = 7;
+  const fx = useFX();
+  const [best, submitBest] = useBest('pingpong');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const initState = () => ({
+    px: AREA_W / 2, ax: AREA_W / 2, pvel: 0, lastPx: AREA_W / 2, ball: { x: AREA_W / 2, y: AREA_H / 2, vx: 0, vy: 0 }, speed: 300,
+    me: 0, ai: 0, level: 1, total: 0, wait: 1.0, serve: 1, rally: 0, trail: [], t: 0, aiErr: 0, banner: { text: 'PARTIDO 1', t: 1.3 },
+  });
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
+  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
+  const serveBall = s => {
+    s.speed = 290 + s.level * 14; s.rally = 0;
+    const a = rand(-0.5, 0.5);
+    s.ball = { x: AREA_W / 2, y: AREA_H / 2, vx: Math.sin(a) * s.speed, vy: Math.cos(a) * s.speed * s.serve };
+    s.wait = 0; s.trail = [];
   };
-
-  const resetBall = (toPlayer = true) => {
-    ball.current = {
-      x: width / 2 - PP_BALL_SIZE / 2,
-      y: GAME_HEIGHT / 2 - PP_BALL_SIZE / 2,
-      vx: (Math.random() > 0.5 ? 1 : -1) * (4 + Math.random() * 2),
-      vy: toPlayer ? Math.abs(5 + Math.random() * 2) : -(5 + Math.random() * 2),
-    };
+  const score = (s, who) => {
+    s.wait = 0.9; s.ball.vx = 0; s.ball.vy = 0;
+    if (who === 'me') {
+      s.me += 1; s.total += 1; s.serve = -1;
+      fx.burst(s.ball.x, AY, C.cyan, 16, 220); fx.pop(AREA_W / 2, AREA_H / 2 - 40, '¡PUNTO!', C.lime, 22); hx.good();
+    } else {
+      s.ai += 1; s.serve = 1;
+      fx.burst(s.ball.x, PY, C.red, 16, 220); fx.shake(7, 0.3); fx.flash(C.red, 0.2); hx.bad();
+    }
+    s.ball.x = AREA_W / 2; s.ball.y = AREA_H / 2;
+    if (s.me >= WIN) {
+      s.level += 1; s.me = 0; s.ai = 0; s.wait = 1.4; s.total += 3;
+      s.banner = { text: `PARTIDO GANADO · NIVEL ${s.level}`, t: 1.6 }; fx.flash('#fff', 0.25); hx.win();
+      fx.pop(AREA_W / 2, AREA_H / 2, '+3', C.amber, 24);
+    } else if (s.ai >= WIN) {
+      hx.die(); setRes({ isNew: submitBest(s.total) }); setPhase('over');
+    }
   };
-
-  const startGame = () => {
-    pScore.current = 0;
-    aScore.current = 0;
-    setScoreP(0);
-    setScoreAI(0);
-    playerX.current = width / 2 - PP_PADDLE_W / 2;
-    aiX.current = width / 2 - PP_PADDLE_W / 2;
-    resetBall(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setGameState('playing');
-  };
-
-  useEffect(() => {
-    if (gameState !== 'playing') return;
-    const loop = setInterval(() => {
-      const b = ball.current;
-      b.x += b.vx;
-      b.y += b.vy;
-
-      // Left/right wall bounce
-      if (b.x <= 0) { b.x = 0; b.vx = Math.abs(b.vx); }
-      if (b.x >= width - PP_BALL_SIZE) { b.x = width - PP_BALL_SIZE; b.vx = -Math.abs(b.vx); }
-
-      // AI paddle collision (top)
-      const aiPadY = 40;
-      if (b.vy < 0 && b.y <= aiPadY + PP_PADDLE_H && b.y + PP_BALL_SIZE >= aiPadY) {
-        if (b.x + PP_BALL_SIZE > aiX.current && b.x < aiX.current + PP_PADDLE_W) {
-          b.vy = Math.abs(b.vy);
-          const rel = (b.x + PP_BALL_SIZE / 2 - aiX.current) / PP_PADDLE_W;
-          b.vx = (rel - 0.5) * 12;
-          normalizeSpeed(b, 13);
-        }
-      }
-
-      // Player paddle collision (bottom)
-      const pPadY = GAME_HEIGHT - PP_PADDLE_H - 40;
-      if (b.vy > 0 && b.y + PP_BALL_SIZE >= pPadY && b.y <= pPadY + PP_PADDLE_H) {
-        if (b.x + PP_BALL_SIZE > playerX.current && b.x < playerX.current + PP_PADDLE_W) {
-          b.vy = -Math.abs(b.vy) * 1.04;
-          const rel = (b.x + PP_BALL_SIZE / 2 - playerX.current) / PP_PADDLE_W;
-          b.vx = (rel - 0.5) * 12;
-          normalizeSpeed(b, 14);
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light), 45);
-        }
-      }
-
-      // AI movement with progressive difficulty
-      const aiTarget = b.x + PP_BALL_SIZE / 2 - PP_PADDLE_W / 2;
-      const aiDiff = aiTarget - aiX.current;
-      const aiSpd = Math.min(Math.abs(aiDiff), 3 + aScore.current * 0.2);
-      aiX.current = Math.max(0, Math.min(width - PP_PADDLE_W, aiX.current + Math.sign(aiDiff) * aiSpd));
-
-      // Scoring
-      if (b.y > GAME_HEIGHT + 20) {
-        aScore.current += 1;
-        setScoreAI(aScore.current);
-        if (aScore.current >= PP_MAX_SCORE) { deathVibrate(); setGameState('gameover'); return; }
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        resetBall(true);
-      } else if (b.y < -20) {
-        pScore.current += 1;
-        setScoreP(pScore.current);
-        if (pScore.current >= PP_MAX_SCORE) { celebrateVibrate(); setGameState('gameover'); return; }
-        scoreVibrate();
-        resetBall(false);
-      }
-
-      setTick(t => t + 1);
-    }, 16);
-    return () => clearInterval(loop);
-  }, [gameState]);
-
-  const ppPanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderMove: (_, gs) => {
-        playerX.current = Math.max(0, Math.min(width - PP_PADDLE_W, gs.moveX - PP_PADDLE_W / 2));
-      },
-    })
-  ).current;
-
-  const won = pScore.current >= PP_MAX_SCORE;
-
+  useLoop(phase === 'play', dt => {
+    const s = g.current;
+    s.t += dt;
+    s.pvel = (s.px - s.lastPx) / dt; s.lastPx = s.px;
+    if (s.banner) { s.banner.t -= dt; if (s.banner.t <= 0) s.banner = null; }
+    const b = s.ball;
+    // IA
+    const aiSpeed = 130 + s.level * 38;
+    let target = AREA_W / 2;
+    if (b.vy < 0) { target = b.x + s.aiErr; }
+    const d = target - s.ax;
+    s.ax += clamp(d, -aiSpeed * dt, aiSpeed * dt);
+    s.ax = clamp(s.ax, 40, AREA_W - 40);
+    if (s.wait > 0) { s.wait -= dt; if (s.wait <= 0) serveBall(s); return; }
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    s.trail.push({ x: b.x, y: b.y, a: 0.5 }); s.trail.forEach(p => { p.a -= dt * 2.5; }); s.trail = s.trail.filter(p => p.a > 0);
+    if (b.x < BR) { b.x = BR; b.vx = Math.abs(b.vx); hx.tick(); }
+    if (b.x > AREA_W - BR) { b.x = AREA_W - BR; b.vx = -Math.abs(b.vx); hx.tick(); }
+    // pala jugador
+    if (b.vy > 0 && b.y + BR >= PY && b.y + BR <= PY + PH + 8 && Math.abs(b.x - s.px) < PW0 / 2 + BR) {
+      const rel = clamp((b.x - s.px) / (PW0 / 2 + BR), -1, 1);
+      s.rally += 1;
+      let sp = Math.min(640, s.speed + 16);
+      const smash = Math.abs(s.pvel) > 650;
+      if (smash) { sp = Math.min(700, sp * 1.22); fx.pop(b.x, PY - 24, 'SMASH', C.amber, 18); fx.ring(b.x, PY, C.amber, 50); fx.shake(4); hx.heavy(); } else hx.hit();
+      s.speed = sp;
+      const a = rel * 1.0 + clamp(s.pvel / 3000, -0.3, 0.3);
+      b.vx = Math.sin(a) * sp; b.vy = -Math.cos(a) * sp; b.y = PY - BR;
+      s.aiErr = rand(-1, 1) * Math.max(8, 70 - s.level * 8);
+      fx.burst(b.x, PY, C.cyan, 6, 120, 0.3, 3);
+    }
+    // pala IA
+    if (b.vy < 0 && b.y - BR <= AY + PH && b.y - BR >= AY - 8 && Math.abs(b.x - s.ax) < PW0 / 2 + BR) {
+      const rel = clamp((b.x - s.ax) / (PW0 / 2 + BR), -1, 1);
+      const sp = Math.min(640, s.speed + 10); s.speed = sp;
+      const a = rel * 0.95;
+      b.vx = Math.sin(a) * sp; b.vy = Math.cos(a) * sp; b.y = AY + PH + BR;
+      fx.burst(b.x, AY, C.pink, 6, 120, 0.3, 3); hx.tick();
+    }
+    if (b.y > AREA_H + 12) score(s, 'ai');
+    else if (b.y < -12) score(s, 'me');
+  });
+  const pan = usePan(fx, { down: x => { g.current.px = clamp(x, PW0 / 2, AREA_W - PW0 / 2); }, move: x => { g.current.px = clamp(x, PW0 / 2, AREA_W - PW0 / 2); } });
+  const s = g.current;
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={onExit} style={styles.backBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}><Text style={styles.backText}>← BACK</Text></Pressable>
-        <Text style={[styles.title, { color: '#fff' }]}>PING PONG 🏓</Text>
-        <View style={[styles.stats, { justifyContent: 'center', gap: 8 }]}>
-          <Text style={[styles.statText, { color: '#f55', fontSize: 20 }]}>{scoreAI}</Text>
-          <Text style={[styles.statText, { color: '#aaa' }]}>vs</Text>
-          <Text style={[styles.statText, { color: '#ff0', fontSize: 20 }]}>{scoreP}</Text>
-        </View>
-      </View>
-
-      <View style={[styles.gameArea, { backgroundColor: '#05081a' }]} {...ppPanResponder.panHandlers}>
-        {/* Center dashed line */}
-        {Array.from({ length: 16 }).map((_, i) => (
-          <View key={i} style={{
-            position: 'absolute', left: width / 2 - 2,
-            top: 50 + i * ((GAME_HEIGHT - 100) / 16),
-            width: 4, height: (GAME_HEIGHT - 100) / 16 * 0.45,
-            backgroundColor: 'rgba(255,255,255,0.18)',
-          }} />
-        ))}
-
-        {/* AI label */}
-        <Text style={{ position: 'absolute', top: 14, left: 16, color: '#f55', fontSize: 13, fontWeight: 'bold' }}>🤖 AI</Text>
-        {/* Player label */}
-        <Text style={{ position: 'absolute', bottom: 14, right: 16, color: '#ff0', fontSize: 13, fontWeight: 'bold' }}>YOU 🟡</Text>
-
-        {/* AI paddle */}
-        <View style={{
-          position: 'absolute', left: aiX.current, top: 40,
-          width: PP_PADDLE_W, height: PP_PADDLE_H,
-          backgroundColor: '#f55', borderRadius: 7,
-          shadowColor: '#f55', shadowOpacity: 0.8, shadowRadius: 8,
-        }} />
-
-        {/* Player paddle */}
-        <View style={{
-          position: 'absolute', left: playerX.current,
-          top: GAME_HEIGHT - PP_PADDLE_H - 40,
-          width: PP_PADDLE_W, height: PP_PADDLE_H,
-          backgroundColor: '#ff0', borderRadius: 7,
-          shadowColor: '#ff0', shadowOpacity: 0.8, shadowRadius: 8,
-        }} />
-
-        {/* Ball */}
-        <View style={{
-          position: 'absolute', left: ball.current.x, top: ball.current.y,
-          width: PP_BALL_SIZE, height: PP_BALL_SIZE,
-          backgroundColor: '#fff', borderRadius: PP_BALL_SIZE / 2,
-          shadowColor: '#fff', shadowOpacity: 1, shadowRadius: 8,
-        }} />
-
-        {gameState !== 'playing' && (
-          <View style={styles.overlay}>
-            <Text style={styles.overlayTitle}>
-              {gameState === 'gameover' ? (won ? '🏆 YOU WIN!' : '🤖 AI WINS') : '🏓 PING PONG'}
-            </Text>
-            {gameState === 'gameover' && (
-              <Text style={[styles.overlaySub, { color: '#ffd700', fontSize: 22, marginBottom: 8 }]}>
-                {scoreP} — {scoreAI}
-              </Text>
-            )}
-            <Text style={styles.overlaySub}>
-              {gameState === 'idle'
-                ? `¡Primero en llegar a ${PP_MAX_SCORE} gana! Arrastra tu paleta 🟡.`
-                : won ? '¡Increíble! Venciste a la IA.' : '¡Sigue intentándolo!'}
-            </Text>
-            <Pressable style={styles.btn} onPress={startGame} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
-              <Text style={styles.btnText}>{gameState === 'gameover' ? 'REVANCHA' : 'JUGAR'}</Text>
-            </Pressable>
-          </View>
-        )}
-      </View>
-    </SafeAreaView>
+    <GameScreen title="PING PONG" emoji="🏓" accent={C.blue} onExit={onExit} score={s.total} best={best} scoreLabel="PUNTOS"
+      hud={<><Text style={{ color: C.dim, fontSize: 12 }}>Nivel IA <Text style={{ color: C.blue, fontWeight: '800' }}>{s.level}</Text></Text><Text style={{ color: C.text, fontSize: 16, fontWeight: '900' }}><Text style={{ color: C.cyan }}>{s.me}</Text> - <Text style={{ color: C.pink }}>{s.ai}</Text></Text><Text style={{ color: C.dim, fontSize: 12 }}>Racha <Text style={{ color: C.amber, fontWeight: '800' }}>{s.rally}</Text></Text></>}>
+      <PlayArea fx={fx} bg="#050a1c" border={alpha(C.blue, 0.4)} {...pan}>
+        <View style={{ position: 'absolute', left: 0, right: 0, top: AREA_H / 2 - 1, height: 2, backgroundColor: alpha(C.blue, 0.35) }} />
+        <View style={{ position: 'absolute', left: AREA_W / 2 - 40, top: AREA_H / 2 - 40, width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: alpha(C.blue, 0.25) }} />
+        {s.trail.map((p, i) => <View key={i} style={{ position: 'absolute', left: p.x - BR * 0.7, top: p.y - BR * 0.7, width: BR * 1.4, height: BR * 1.4, borderRadius: BR, backgroundColor: C.blue, opacity: Math.max(0, p.a * 0.6) }} />)}
+        <View style={{ position: 'absolute', left: s.ax - PW0 / 2, top: AY, width: PW0, height: PH, borderRadius: 6, backgroundColor: C.pink, ...glow(C.pink, 12, 0.9) }} />
+        <View style={{ position: 'absolute', left: s.px - PW0 / 2, top: PY, width: PW0, height: PH, borderRadius: 6, backgroundColor: C.cyan, ...glow(C.cyan, 12, 0.9) }} />
+        <View style={{ position: 'absolute', left: s.ball.x - BR, top: s.ball.y - BR, width: BR * 2, height: BR * 2, borderRadius: BR, backgroundColor: '#fff', ...glow('#fff', 12, 1) }} />
+        {s.banner && <Text style={{ position: 'absolute', top: AREA_H * 0.3, width: AREA_W, textAlign: 'center', color: C.text, fontSize: 20, fontWeight: '900', letterSpacing: 2, opacity: Math.min(1, s.banner.t), ...tglow(C.blue, 12) }}>{s.banner.text}</Text>}
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🏓" title={phase === 'over' ? 'PARTIDO PERDIDO' : 'PING PONG'}
+          subtitle={phase === 'over' ? `Llegaste al nivel ${s.level} de IA` : 'Gana partidos a 7 contra una IA cada vez mejor'}
+          score={s.total} best={best} isNew={res.isNew} accent={C.blue} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Arrastra para mover tu pala', 'Pega con el borde para desviar la bola', 'Mueve la pala rápido al golpear: ¡SMASH!', 'Ganar un partido da +3 y sube la dificultad'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 
@@ -2174,264 +2085,135 @@ function PingPong({ onExit }) {
 // 5. BREAKOUT
 // ==========================================
 function Breakout({ onExit }) {
-  const brickW = (width - BK_MARGIN * (BK_COLS + 1)) / BK_COLS;
-  const [gameState, setGameState] = useState('idle');
-  const [score, setScore] = useState(0);
-  const [lives, setLives] = useState(3);
-  const [level, setLevel] = useState(1);
-  const [, setTick] = useState(0);
-
-  const paddleX = useRef(width / 2 - BK_PADDLE_W / 2);
-  const ball = useRef({ x: width / 2 - BK_BALL_R, y: GAME_HEIGHT - 110, vx: 0, vy: 0 });
-  const bricksRef = useRef([]);
-  const scoreRef = useRef(0);
-  const livesRef = useRef(3);
-  const levelRef = useRef(1);
-  const highScore = useRef(0);
-  const launched = useRef(false);
-  const bkGameStateRef = useRef('idle');
-
-  const BRICK_COLORS = ['#ff4444', '#ff6600', '#ffcc00', '#44cc44', '#0099ff', '#9933ff', '#ff66bb', '#00ffcc'];
-
-  const buildLevel = (lvl) => {
-    const baseRows = Math.min(4 + Math.floor((lvl - 1) / 2), 8);
-    const bs = [];
-    for (let r = 0; r < baseRows; r++) {
-      for (let c = 0; c < BK_COLS; c++) {
-        let include = true;
-        if (lvl === 3 || lvl === 6 || lvl === 9) {
-          // Diamond
-          const midC = (BK_COLS - 1) / 2;
-          const midR = (baseRows - 1) / 2;
-          if (Math.abs(c - midC) + Math.abs(r - midR) > baseRows / 2 + 0.5) include = false;
-        } else if (lvl === 4 || lvl === 7 || lvl === 10) {
-          // Checkerboard
-          include = (r + c) % 2 === 0;
-        } else if (lvl === 5 || lvl === 8) {
-          // Inverted V
-          const halfCols = BK_COLS / 2;
-          const targetRow = Math.floor(Math.abs(c - halfCols + 0.5));
-          if (r < targetRow) include = false;
-        }
-        if (!include) continue;
-        const hits = lvl >= 3 && r < 2 ? 2 : 1;
-        bs.push({
-          id: r * 100 + c,
-          x: BK_MARGIN + c * (brickW + BK_MARGIN),
-          y: BK_BRICKS_TOP + r * (BK_BRICK_H + BK_MARGIN),
-          w: brickW,
-          h: BK_BRICK_H,
-          hits,
-          maxHits: hits,
-          color: BRICK_COLORS[r % BRICK_COLORS.length],
-          active: true,
-        });
-      }
+  const COLS = 8, PAD = 8, BH = 20, TOP = 52, BG = 3;
+  const BW = (AREA_W - PAD * 2 - BG * (COLS - 1)) / COLS;
+  const PY = AREA_H - 44, BR = 7;
+  const fx = useFX();
+  const [best, submitBest] = useBest('breakout');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const HUES = [350, 25, 48, 130, 190, 260, 300, 330];
+  const makeBricks = level => {
+    const rows = Math.min(8, 4 + Math.floor(level / 2));
+    const pat = level % 4;
+    const out = [];
+    for (let r = 0; r < rows; r++) for (let c = 0; c < COLS; c++) {
+      let hp = 1;
+      if (pat === 1 && (r + c) % 2) continue;                       // ajedrez
+      if (pat === 2 && (c < r - 1 || c > COLS - 2 - r + 1) && r > 1) continue;   // pirámide invertida
+      if (pat === 3 && c % 3 === 1) continue;                      // columnas
+      if (level >= 2 && r === 0) hp = 2;
+      if (level >= 4 && r < 2) hp = 3;
+      out.push({ id: uid(), r, c, hp, max: hp, x: PAD + c * (BW + BG), y: TOP + r * (BH + BG), hue: HUES[r % 8] });
     }
-    bricksRef.current = bs;
+    return out;
   };
-
-  const resetBallToPaddle = () => {
-    launched.current = false;
-    ball.current.vx = 0;
-    ball.current.vy = 0;
+  const initState = () => ({ px: AREA_W / 2, pw: 84, balls: [{ x: AREA_W / 2, y: PY - BR - 2, vx: 0, vy: 0, stuck: true }], bricks: makeBricks(1), items: [], lives: 3, level: 1, score: 0, combo: 0, wide: 0, fire: 0, slow: 0, t: 0, banner: { text: 'NIVEL 1', t: 1.4 } });
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
+  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
+  const speedOf = s => (330 + s.level * 20) * (s.slow > 0 ? 0.7 : 1);
+  const launch = s => {
+    s.balls.forEach(b => { if (b.stuck) { b.stuck = false; const a = -Math.PI / 2 + rand(-0.35, 0.35); b.vx = Math.cos(a) * speedOf(s); b.vy = Math.sin(a) * speedOf(s); } });
+    hx.tap();
   };
-
-  const launchBall = () => {
-    if (launched.current || bkGameStateRef.current !== 'playing') return;
-    launched.current = true;
-    const spd = 7 + levelRef.current * 0.4;
-    ball.current.vx = (Math.random() > 0.5 ? 1 : -1) * (4 + Math.random() * 2);
-    ball.current.vy = -spd;
+  const loseLife = s => {
+    s.lives -= 1; s.combo = 0; s.wide = 0; s.fire = 0;
+    fx.shake(8, 0.3); fx.flash(C.red, 0.3); hx.bad();
+    if (s.lives <= 0) { hx.die(); setRes({ isNew: submitBest(s.score) }); setPhase('over'); return; }
+    s.balls = [{ x: s.px, y: PY - BR - 2, vx: 0, vy: 0, stuck: true }];
   };
-
-  const startGame = () => {
-    scoreRef.current = 0;
-    livesRef.current = 3;
-    levelRef.current = 1;
-    setScore(0);
-    setLives(3);
-    setLevel(1);
-    paddleX.current = width / 2 - BK_PADDLE_W / 2;
-    buildLevel(1);
-    resetBallToPaddle();
-    setGameState('playing');
-    bkGameStateRef.current = 'playing';
-  };
-
-  useEffect(() => {
-    if (gameState !== 'playing') return;
-    const loop = setInterval(() => {
-      const b = ball.current;
-
-      if (!launched.current) {
-        b.x = paddleX.current + BK_PADDLE_W / 2 - BK_BALL_R;
-        b.y = GAME_HEIGHT - BK_PADDLE_H - 42 - BK_BALL_R * 2;
-        setTick(t => t + 1);
-        return;
+  useLoop(phase === 'play', dt => {
+    const s = g.current;
+    s.t += dt;
+    ['wide', 'fire', 'slow'].forEach(k => { if (s[k] > 0) s[k] = Math.max(0, s[k] - dt); });
+    s.pw += ((s.wide > 0 ? 136 : 84) - s.pw) * Math.min(1, dt * 10);
+    if (s.banner) { s.banner.t -= dt; if (s.banner.t <= 0) s.banner = null; }
+    const sp = speedOf(s);
+    for (let bi = s.balls.length - 1; bi >= 0; bi--) {
+      const b = s.balls[bi];
+      if (b.stuck) { b.x = s.px; b.y = PY - BR - 2; continue; }
+      const m = Math.hypot(b.vx, b.vy) || 1;
+      b.vx *= sp / m; b.vy *= sp / m;
+      b.x += b.vx * dt; b.y += b.vy * dt;
+      if (b.x < BR) { b.x = BR; b.vx = Math.abs(b.vx); }
+      if (b.x > AREA_W - BR) { b.x = AREA_W - BR; b.vx = -Math.abs(b.vx); }
+      if (b.y < BR) { b.y = BR; b.vy = Math.abs(b.vy); }
+      // pala
+      if (b.vy > 0 && b.y + BR >= PY && b.y + BR <= PY + 14 && b.x > s.px - s.pw / 2 - 4 && b.x < s.px + s.pw / 2 + 4) {
+        const rel = clamp((b.x - s.px) / (s.pw / 2), -1, 1);
+        const a = -Math.PI / 2 + rel * 1.05;
+        b.vx = Math.cos(a) * sp; b.vy = Math.sin(a) * sp; b.y = PY - BR;
+        s.combo = 0; hx.tap();
       }
-
-      b.x += b.vx;
-      b.y += b.vy;
-
-      // Wall bounce
-      if (b.x <= 0) { b.x = 0; b.vx = Math.abs(b.vx); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }
-      if (b.x + BK_BALL_R * 2 >= width) { b.x = width - BK_BALL_R * 2; b.vx = -Math.abs(b.vx); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }
-      if (b.y <= 0) { b.y = 0; b.vy = Math.abs(b.vy); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }
-
-      // Paddle collision
-      const pY = GAME_HEIGHT - BK_PADDLE_H - 42;
-      if (b.vy > 0 && b.y + BK_BALL_R * 2 >= pY && b.y <= pY + BK_PADDLE_H) {
-        if (b.x + BK_BALL_R * 2 > paddleX.current && b.x < paddleX.current + BK_PADDLE_W) {
-          b.vy = -Math.abs(b.vy);
-          const rel = (b.x + BK_BALL_R - paddleX.current) / BK_PADDLE_W;
-          b.vx = (rel - 0.5) * 14;
-          const spd = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
-          const maxSpd = 8 + levelRef.current * 0.4;
-          if (spd > maxSpd + 3) { b.vx = (b.vx / spd) * (maxSpd + 3); b.vy = (b.vy / spd) * (maxSpd + 3); }
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light), 50);
+      // ladrillos
+      for (let i = s.bricks.length - 1; i >= 0; i--) {
+        const k = s.bricks[i];
+        if (b.x + BR < k.x || b.x - BR > k.x + BW || b.y + BR < k.y || b.y - BR > k.y + BH) continue;
+        if (s.fire <= 0) {
+          const ox = Math.min(b.x + BR - k.x, k.x + BW - (b.x - BR));
+          const oy = Math.min(b.y + BR - k.y, k.y + BH - (b.y - BR));
+          if (ox < oy) b.vx = (b.x < k.x + BW / 2 ? -1 : 1) * Math.abs(b.vx); else b.vy = (b.y < k.y + BH / 2 ? -1 : 1) * Math.abs(b.vy);
         }
+        k.hp -= s.fire > 0 ? 3 : 1;
+        const cx = k.x + BW / 2, cy = k.y + BH / 2;
+        if (k.hp <= 0) {
+          s.bricks.splice(i, 1); s.combo += 1;
+          const pts = 10 * s.level + s.combo * 2;
+          s.score += pts;
+          fx.burst(cx, cy, `hsl(${k.hue},90%,60%)`, 10, 170, 0.5, 4); fx.pop(cx, cy, `+${pts}`, C.text, 12); hx.hit();
+          if (Math.random() < 0.2) s.items.push({ id: uid(), x: cx, y: cy, k: pick(['W', 'M', 'F', 'L', 'S']) });
+        } else { fx.burst(cx, cy, '#fff', 3, 80, 0.2, 3); hx.tick(); }
+        if (s.fire <= 0) break;
       }
-
-      // Brick collisions
-      for (let i = bricksRef.current.length - 1; i >= 0; i--) {
-        const br = bricksRef.current[i];
-        if (!br.active) continue;
-        const cx = b.x + BK_BALL_R;
-        const cy = b.y + BK_BALL_R;
-        if (cx > br.x && cx < br.x + br.w && cy > br.y && cy < br.y + br.h) {
-          br.hits -= 1;
-          if (br.hits <= 0) br.active = false;
-          const fromTop = cy - br.y;
-          const fromBottom = br.y + br.h - cy;
-          const fromLeft = cx - br.x;
-          const fromRight = br.x + br.w - cx;
-          const minPen = Math.min(fromTop, fromBottom, fromLeft, fromRight);
-          if (minPen === fromTop || minPen === fromBottom) b.vy = -b.vy;
-          else b.vx = -b.vx;
-          scoreRef.current += br.maxHits * 10;
-          setScore(scoreRef.current);
-          if (br.hits <= 0) { popVibrate(); } else { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }
-          break;
+      if (b.y > AREA_H + 10) s.balls.splice(bi, 1);
+    }
+    if (!s.balls.length) { loseLife(s); return; }
+    s.items.forEach(it => { it.y += 130 * dt; });
+    for (let i = s.items.length - 1; i >= 0; i--) {
+      const it = s.items[i];
+      if (it.y > PY - 8 && it.y < PY + 16 && Math.abs(it.x - s.px) < s.pw / 2 + 10) {
+        s.items.splice(i, 1); hx.good(); fx.ring(it.x, PY, C.lime, 46);
+        if (it.k === 'W') { s.wide = 10; fx.pop(it.x, PY - 24, 'PALA GRANDE', C.cyan, 14); }
+        if (it.k === 'F') { s.fire = 8; fx.pop(it.x, PY - 24, '🔥 BOLA DE FUEGO', C.orange, 14); }
+        if (it.k === 'L') { s.lives = Math.min(5, s.lives + 1); fx.pop(it.x, PY - 24, '+1 VIDA', C.red, 14); }
+        if (it.k === 'S') { s.slow = 9; fx.pop(it.x, PY - 24, 'LENTO', C.violet, 14); }
+        if (it.k === 'M') {
+          const b0 = s.balls[0];
+          [-0.5, 0.5].forEach(d => { const a = Math.atan2(b0.vy, b0.vx) + d; s.balls.push({ x: b0.x, y: b0.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, stuck: b0.stuck }); });
+          fx.pop(it.x, PY - 24, 'MULTIBOLA', C.pink, 14);
         }
-      }
-
-      // Level clear
-      if (bricksRef.current.every(br => !br.active)) {
-        levelRef.current += 1;
-        setLevel(levelRef.current);
-        buildLevel(levelRef.current);
-        resetBallToPaddle();
-        celebrateVibrate();
-      }
-
-      // Ball lost
-      if (b.y > GAME_HEIGHT + 30) {
-        livesRef.current -= 1;
-        setLives(livesRef.current);
-        if (livesRef.current <= 0) {
-          if (scoreRef.current > highScore.current) highScore.current = scoreRef.current;
-          bkGameStateRef.current = 'gameover';
-          deathVibrate();
-          setGameState('gameover');
-          return;
-        }
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-        setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 90);
-        resetBallToPaddle();
-      }
-
-      setTick(t => t + 1);
-    }, 16);
-    return () => clearInterval(loop);
-  }, [gameState]);
-
-  const bkPanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: () => launchBall(),
-      onPanResponderMove: (_, gs) => {
-        paddleX.current = Math.max(0, Math.min(width - BK_PADDLE_W, gs.moveX - BK_PADDLE_W / 2));
-      },
-    })
-  ).current;
-
+      } else if (it.y > AREA_H + 20) s.items.splice(i, 1);
+    }
+    if (!s.bricks.length) {
+      s.score += 100 * s.level; fx.pop(AREA_W / 2, AREA_H / 2, `NIVEL SUPERADO +${100 * s.level}`, C.lime, 20); hx.win(); fx.flash('#fff', 0.3);
+      s.level += 1; s.bricks = makeBricks(s.level); s.items = []; s.balls = [{ x: s.px, y: PY - BR - 2, vx: 0, vy: 0, stuck: true }];
+      s.banner = { text: `NIVEL ${s.level}`, t: 1.4 };
+    }
+  });
+  const pan = usePan(fx, {
+    down: x => { const s = g.current; s.px = clamp(x, s.pw / 2, AREA_W - s.pw / 2); if (s.balls.some(b => b.stuck) && phase === 'play') launch(s); },
+    move: x => { const s = g.current; s.px = clamp(x, s.pw / 2, AREA_W - s.pw / 2); },
+  });
+  const s = g.current;
+  const ITEMC = { W: [C.cyan, '↔'], M: [C.pink, '✱'], F: [C.orange, '🔥'], L: [C.red, '❤'], S: [C.violet, '❄'] };
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={onExit} style={styles.backBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}><Text style={styles.backText}>← BACK</Text></Pressable>
-        <Text style={[styles.title, { color: '#ff6600' }]}>BREAKOUT 🧱</Text>
-        <View style={styles.stats}>
-          <Text style={styles.statText}>LVL {level}</Text>
-          <Text style={styles.statText}>❤️ {lives}</Text>
-          <Text style={styles.statText}>{score}</Text>
-        </View>
-      </View>
-
-      <View style={[styles.gameArea, { backgroundColor: '#08080f' }]} {...bkPanResponder.panHandlers}>
-        {/* Bricks */}
-        {bricksRef.current.map(br => br.active && (
-          <View key={br.id} style={{
-            position: 'absolute', left: br.x, top: br.y, width: br.w, height: br.h,
-            backgroundColor: br.hits < br.maxHits ? '#555' : br.color,
-            borderRadius: 4, borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
-            justifyContent: 'center', alignItems: 'center',
-          }}>
-            {br.maxHits > 1 && (
-              <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>
-                {'●'.repeat(br.hits)}
-              </Text>
-            )}
-          </View>
-        ))}
-
-        {/* Ball */}
-        <View style={{
-          position: 'absolute',
-          left: ball.current.x, top: ball.current.y,
-          width: BK_BALL_R * 2, height: BK_BALL_R * 2,
-          backgroundColor: '#fff', borderRadius: BK_BALL_R,
-          shadowColor: '#fff', shadowOpacity: 1, shadowRadius: 6,
-        }} />
-
-        {/* Paddle */}
-        <View style={{
-          position: 'absolute',
-          left: paddleX.current, top: GAME_HEIGHT - BK_PADDLE_H - 42,
-          width: BK_PADDLE_W, height: BK_PADDLE_H,
-          backgroundColor: '#ff6600', borderRadius: 7,
-          shadowColor: '#ff6600', shadowOpacity: 0.9, shadowRadius: 8,
-        }} />
-
-        {/* Launch hint */}
-        {!launched.current && gameState === 'playing' && (
-          <Text style={{ position: 'absolute', bottom: 70, alignSelf: 'center', color: '#888', fontSize: 13 }}>
-            Toca para lanzar 🎯
-          </Text>
-        )}
-
-        {gameState !== 'playing' && (
-          <View style={styles.overlay}>
-            <Text style={styles.overlayTitle}>
-              {gameState === 'gameover' ? '💥 GAME OVER' : '🧱 BREAKOUT'}
-            </Text>
-            {gameState === 'gameover' && (
-              <Text style={[styles.overlaySub, { color: '#ffd700' }]}>
-                Score: {score}   Récord: {highScore.current}
-              </Text>
-            )}
-            <Text style={styles.overlaySub}>
-              {gameState === 'idle' ? 'Arrastra para mover la paleta. ¡Rompe todos los ladrillos!' : '¡Gracias por jugar!'}
-            </Text>
-            <Pressable style={styles.btn} onPress={startGame} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
-              <Text style={styles.btnText}>{gameState === 'gameover' ? 'RETRY' : 'START'}</Text>
-            </Pressable>
-          </View>
-        )}
-      </View>
-    </SafeAreaView>
+    <GameScreen title="BREAKOUT" emoji="🧱" accent={C.orange} onExit={onExit} score={s.score} best={best}
+      hud={<><Lives n={s.lives} max={Math.max(3, s.lives)} /><Text style={{ color: C.dim, fontSize: 12 }}>Nivel <Text style={{ color: C.orange, fontWeight: '800' }}>{s.level}</Text></Text><View style={{ minWidth: 60, alignItems: 'flex-end' }}>{s.combo > 1 ? <Combo n={s.combo} color={C.orange} /> : <Text style={{ color: C.cyan, fontSize: 12, fontWeight: '800' }}>{s.fire > 0 ? '🔥' : ''}{s.wide > 0 ? '↔' : ''}</Text>}</View></>}>
+      <PlayArea fx={fx} bg="#0b0604" {...pan}>
+        <GridBg color={C.orange} step={46} />
+        {s.bricks.map(k => <View key={k.id} style={{ position: 'absolute', left: k.x, top: k.y, width: BW, height: BH, borderRadius: 5, backgroundColor: `hsla(${k.hue},90%,${40 + (k.hp / k.max) * 18}%,${0.5 + 0.5 * (k.hp / k.max)})`, borderWidth: 1.5, borderColor: `hsl(${k.hue},95%,62%)`, ...glow(`hsl(${k.hue},95%,55%)`, 6, 0.5) }}>{k.max > 1 && <Text style={{ color: '#fff', fontSize: 10, fontWeight: '900', textAlign: 'center', lineHeight: BH - 3 }}>{k.hp}</Text>}</View>)}
+        {s.items.map(it => <View key={it.id} style={{ position: 'absolute', left: it.x - 13, top: it.y - 13, width: 26, height: 26, borderRadius: 13, backgroundColor: alpha(ITEMC[it.k][0], 0.25), borderWidth: 2, borderColor: ITEMC[it.k][0], alignItems: 'center', justifyContent: 'center', ...glow(ITEMC[it.k][0], 8, 0.8) }}><Text style={{ fontSize: 12, color: '#fff', fontWeight: '900' }}>{ITEMC[it.k][1]}</Text></View>)}
+        <View style={{ position: 'absolute', left: s.px - s.pw / 2, top: PY, width: s.pw, height: 12, borderRadius: 6, backgroundColor: s.wide > 0 ? C.cyan : '#fff', ...glow(s.wide > 0 ? C.cyan : C.orange, 12, 0.9) }} />
+        {s.balls.map((b, i) => <View key={i} style={{ position: 'absolute', left: b.x - BR, top: b.y - BR, width: BR * 2, height: BR * 2, borderRadius: BR, backgroundColor: s.fire > 0 ? C.orange : '#fff', ...glow(s.fire > 0 ? C.orange : '#fff', 12, 1) }} />)}
+        {s.balls.some(b => b.stuck) && phase === 'play' && <Text pointerEvents="none" style={{ position: 'absolute', top: PY - 60, width: AREA_W, textAlign: 'center', color: C.dim, fontSize: 12, fontWeight: '800', letterSpacing: 2 }}>TOCA PARA LANZAR</Text>}
+        {s.banner && <Text style={{ position: 'absolute', top: AREA_H * 0.55, width: AREA_W, textAlign: 'center', color: C.text, fontSize: 24, fontWeight: '900', letterSpacing: 3, opacity: Math.min(1, s.banner.t), ...tglow(C.orange, 12) }}>{s.banner.text}</Text>}
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🧱" title={phase === 'over' ? 'GAME OVER' : 'BREAKOUT'}
+          subtitle={phase === 'over' ? `Llegaste al nivel ${s.level}` : 'Rompe todos los ladrillos'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.orange} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Arrastra para mover la pala · toca para lanzar', '↔ pala grande · ✱ multibola · 🔥 fuego · ❄ lento · ❤ vida', 'Romper ladrillos seguidos sin tocar la pala da combo'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 
@@ -2542,416 +2324,126 @@ function GalacticHunt({ onExit }) {
 }
 
 function SnakePower({ onExit }) {
-  const COLS = 20;
-  const ROWS = 20;
-  const CELL_SIZE = Math.floor(Math.min(width, GAME_HEIGHT) / COLS);
-  const GRID_PX = CELL_SIZE * COLS;
-
-  const DIR_RIGHT = { x: 1, y: 0 };
-  const DIR_LEFT  = { x: -1, y: 0 };
-  const DIR_UP    = { x: 0, y: -1 };
-  const DIR_DOWN  = { x: 0, y: 1 };
-  const POWER_TYPES = ['⚡', '🛡️', '💎', '🌀'];
-
-  const initSnakeArr = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }];
-
-  const [gamePhase, setGamePhase] = useState('idle');
-  const [snakeDisp, setSnakeDisp] = useState(initSnakeArr);
-  const [foodDisp, setFoodDisp] = useState({ x: 15, y: 10 });
-  const [puDisp, setPuDisp] = useState(null);
-  const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(0);
-  const [activeEffect, setActiveEffect] = useState(null);
-
-  const snakeRef    = useRef(initSnakeArr);
-  const dirRef      = useRef(DIR_RIGHT);
-  const nextDirRef  = useRef(null);
-  const foodRef     = useRef({ x: 15, y: 10 });
-  const puRef       = useRef(null);
-  const scoreRef    = useRef(0);
-  const effectRef   = useRef(null);
-  const phaseRef    = useRef('idle');
-  const intervalRef = useRef(null);
-  const puTimeoutRef = useRef(null);
-  const fxTimeoutRef = useRef(null);
-  const tickFnRef   = useRef(null);
-
-  useEffect(() => {
-    AsyncStorage.getItem('snakeHighScore').then(v => {
-      if (v) setHighScore(parseInt(v, 10));
-    });
-    return () => {
-      clearInterval(intervalRef.current);
-      clearTimeout(puTimeoutRef.current);
-      clearTimeout(fxTimeoutRef.current);
-    };
-  }, []);
-
-  const randomPos = (exclude) => {
-    let pos;
-    do {
-      pos = { x: Math.floor(Math.random() * COLS), y: Math.floor(Math.random() * ROWS) };
-    } while (exclude.some(p => p.x === pos.x && p.y === pos.y));
-    return pos;
-  };
-
-  const startLoop = (ms) => {
-    clearInterval(intervalRef.current);
-    intervalRef.current = setInterval(() => { tickFnRef.current && tickFnRef.current(); }, ms);
-  };
-
-  const schedulePu = () => {
-    clearTimeout(puTimeoutRef.current);
-    puTimeoutRef.current = setTimeout(() => {
-      if (phaseRef.current !== 'playing') return;
-      const type = POWER_TYPES[Math.floor(Math.random() * POWER_TYPES.length)];
-      const pos  = randomPos([...snakeRef.current, foodRef.current]);
-      const pu   = { ...pos, type };
-      puRef.current = pu;
-      setPuDisp({ ...pu });
-      puTimeoutRef.current = setTimeout(() => {
-        puRef.current = null;
-        setPuDisp(null);
-        schedulePu();
-      }, 10000);
-    }, 30000);
-  };
-
-  const applyEffect = (type, currentSnake) => {
-    clearTimeout(fxTimeoutRef.current);
-    if (type === '⚡') {
-      effectRef.current = 'speed';
-      setActiveEffect('speed');
-      startLoop(75);
-      fxTimeoutRef.current = setTimeout(() => {
-        effectRef.current = null;
-        setActiveEffect(null);
-        if (phaseRef.current === 'playing') startLoop(150);
-      }, 5000);
-    } else if (type === '🛡️') {
-      effectRef.current = 'shield';
-      setActiveEffect('shield');
-      fxTimeoutRef.current = setTimeout(() => {
-        effectRef.current = null;
-        setActiveEffect(null);
-      }, 5000);
-    } else if (type === '💎') {
-      scoreRef.current += 50;
-      setScore(scoreRef.current);
-    } else if (type === '🌀') {
-      dirRef.current  = { x: -dirRef.current.x, y: -dirRef.current.y };
-      nextDirRef.current = null;
-      const rev = [...currentSnake].reverse();
-      snakeRef.current = rev;
-      setSnakeDisp([...rev]);
+  const CELL = 18;
+  const COLS = Math.floor(AREA_W / CELL), ROWS = Math.floor(AREA_H / CELL);
+  const OX = (AREA_W - COLS * CELL) / 2, OY = (AREA_H - ROWS * CELL) / 2;
+  const fx = useFX();
+  const [best, submitBest] = useBest('snake');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const initState = () => ({
+    body: [{ x: 8, y: Math.floor(ROWS / 2) }, { x: 7, y: Math.floor(ROWS / 2) }, { x: 6, y: Math.floor(ROWS / 2) }],
+    dir: { x: 1, y: 0 }, queue: [], acc: 0, stepT: 0.13, food: null, item: null, rocks: [], score: 0, eaten: 0, level: 1,
+    ghost: 0, slow: 0, dbl: 0, t: 0, lx: 0, ly: 0, grow: 0,
+  });
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
+  const cellPx = c => ({ x: OX + c.x * CELL + CELL / 2, y: OY + c.y * CELL + CELL / 2 });
+  const freeCell = s => {
+    for (let k = 0; k < 200; k++) {
+      const c = { x: randInt(0, COLS - 1), y: randInt(0, ROWS - 1) };
+      if (s.body.some(b => b.x === c.x && b.y === c.y)) continue;
+      if (s.rocks.some(b => b.x === c.x && b.y === c.y)) continue;
+      if (s.food && s.food.x === c.x && s.food.y === c.y) continue;
+      if (s.item && s.item.x === c.x && s.item.y === c.y) continue;
+      if (Math.abs(c.x - s.body[0].x) + Math.abs(c.y - s.body[0].y) < 4) continue;
+      return c;
     }
+    return { x: 1, y: 1 };
   };
-
-  const doGameOver = () => {
-    clearInterval(intervalRef.current);
-    clearTimeout(puTimeoutRef.current);
-    clearTimeout(fxTimeoutRef.current);
-    phaseRef.current  = 'gameover';
-    effectRef.current = null;
-    setGamePhase('gameover');
-    setActiveEffect(null);
-    const fs = scoreRef.current;
-    AsyncStorage.getItem('snakeHighScore').then(v => {
-      const prev = v ? parseInt(v, 10) : 0;
-      if (fs > prev) {
-        AsyncStorage.setItem('snakeHighScore', String(fs));
-        setHighScore(fs);
+  const start = () => { fx.clear(); const s = initState(); s.food = freeCell(s); g.current = s; setPhase('play'); };
+  const die = s => {
+    const p = cellPx(s.body[0]);
+    fx.burst(p.x, p.y, C.lime, 30, 260, 0.9, 6); fx.shake(10, 0.4); fx.flash(C.red, 0.3); hx.die();
+    setRes({ isNew: submitBest(s.score) });
+    setPhase('over');
+  };
+  const step = s => {
+    if (s.queue.length) { const d = s.queue.shift(); if (!(d.x === -s.dir.x && d.y === -s.dir.y)) s.dir = d; }
+    const h = s.body[0];
+    let nx = h.x + s.dir.x, ny = h.y + s.dir.y;
+    if (nx < 0 || ny < 0 || nx >= COLS || ny >= ROWS) {
+      if (s.ghost > 0) { nx = (nx + COLS) % COLS; ny = (ny + ROWS) % ROWS; } else { die(s); return false; }
+    }
+    const tailGrows = s.grow > 0;
+    const bodyCheck = tailGrows ? s.body : s.body.slice(0, -1);
+    if (s.ghost <= 0 && (bodyCheck.some(b => b.x === nx && b.y === ny) || s.rocks.some(r => r.x === nx && r.y === ny))) { die(s); return false; }
+    s.body.unshift({ x: nx, y: ny });
+    if (tailGrows) s.grow -= 1; else s.body.pop();
+    const p = cellPx({ x: nx, y: ny });
+    if (s.food && s.food.x === nx && s.food.y === ny) {
+      s.eaten += 1; s.grow += 1;
+      const pts = 10 * (s.dbl > 0 ? 2 : 1) * s.level;
+      s.score += pts;
+      fx.burst(p.x, p.y, C.red, 12, 170); fx.pop(p.x, p.y - 10, `+${pts}`, s.dbl > 0 ? C.amber : C.text, 15); hx.hit();
+      s.food = freeCell(s);
+      if (s.eaten % 5 === 0) {
+        s.level += 1; s.stepT = Math.max(0.065, 0.13 - s.level * 0.0065);
+        s.rocks.push(freeCell(s), freeCell(s));
+        fx.pop(AREA_W / 2, AREA_H / 2, `NIVEL ${s.level}`, C.lime, 26); hx.good();
       }
-    });
-    deathVibrate();
-  };
-
-  const tick = () => {
-    if (phaseRef.current !== 'playing') return;
-    const dir = nextDirRef.current || dirRef.current;
-    dirRef.current    = dir;
-    nextDirRef.current = null;
-
-    const head = snakeRef.current[0];
-    let nx = head.x + dir.x;
-    let ny = head.y + dir.y;
-
-    if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) {
-      if (effectRef.current === 'shield') {
-        nx = (nx + COLS) % COLS;
-        ny = (ny + ROWS) % ROWS;
-      } else {
-        doGameOver();
-        return;
-      }
+      if (!s.item && Math.random() < 0.3) s.item = { ...freeCell(s), k: pick(['ghost', 'slow', 'dbl', 'gem']), life: 9 };
     }
-
-    const newHead = { x: nx, y: ny };
-
-    if (effectRef.current !== 'shield') {
-      for (let i = 1; i < snakeRef.current.length; i++) {
-        if (snakeRef.current[i].x === newHead.x && snakeRef.current[i].y === newHead.y) {
-          doGameOver();
-          return;
-        }
-      }
+    if (s.item && s.item.x === nx && s.item.y === ny) {
+      const k = s.item.k; s.item = null; hx.good(); fx.ring(p.x, p.y, C.cyan, 44);
+      if (k === 'ghost') { s.ghost = 7; fx.pop(p.x, p.y, 'FANTASMA', C.violet, 15); }
+      if (k === 'slow') { s.slow = 7; fx.pop(p.x, p.y, 'LENTO', C.cyan, 15); }
+      if (k === 'dbl') { s.dbl = 9; fx.pop(p.x, p.y, 'PUNTOS ×2', C.amber, 15); }
+      if (k === 'gem') { s.score += 50; s.grow += 3; fx.pop(p.x, p.y, '+50', C.amber, 18); }
     }
-
-    const newSnake = [newHead, ...snakeRef.current];
-    let grew = false;
-
-    if (newHead.x === foodRef.current.x && newHead.y === foodRef.current.y) {
-      grew = true;
-      scoreRef.current += 10;
-      setScore(scoreRef.current);
-      const nf = randomPos(newSnake);
-      foodRef.current = nf;
-      setFoodDisp({ ...nf });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 60);
-    }
-
-    const pu = puRef.current;
-    if (pu && pu.x === newHead.x && pu.y === newHead.y) {
-      grew = true;
-      clearTimeout(puTimeoutRef.current);
-      puRef.current = null;
-      setPuDisp(null);
-      applyEffect(pu.type, newSnake);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      schedulePu();
-    }
-
-    if (!grew) newSnake.pop();
-    snakeRef.current = newSnake;
-    setSnakeDisp([...newSnake]);
+    return true;
   };
-
-  tickFnRef.current = tick;
-
-  const changeDir = (newDir) => {
-    const cur = dirRef.current;
-    if (newDir.x === -cur.x && newDir.y === -cur.y) return;
-    nextDirRef.current = newDir;
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-  };
-
-  const startGame = () => {
-    const iSnake = [{ x: 10, y: 10 }, { x: 9, y: 10 }, { x: 8, y: 10 }];
-    const iFood  = randomPos(iSnake);
-    snakeRef.current    = iSnake;
-    foodRef.current     = iFood;
-    dirRef.current      = DIR_RIGHT;
-    nextDirRef.current  = null;
-    scoreRef.current    = 0;
-    effectRef.current   = null;
-    puRef.current       = null;
-    phaseRef.current    = 'playing';
-    setSnakeDisp([...iSnake]);
-    setFoodDisp({ ...iFood });
-    setScore(0);
-    setActiveEffect(null);
-    setPuDisp(null);
-    setGamePhase('playing');
-    clearInterval(intervalRef.current);
-    clearTimeout(puTimeoutRef.current);
-    clearTimeout(fxTimeoutRef.current);
-    startLoop(150);
-    schedulePu();
-  };
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder:  () => true,
-      onPanResponderRelease: (_, gs) => {
-        if (phaseRef.current !== 'playing') return;
-        const { dx, dy } = gs;
-        if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
-        if (Math.abs(dx) > Math.abs(dy)) {
-          tickFnRef.current && (dx > 0
-            ? (nextDirRef.current = DIR_RIGHT)
-            : (nextDirRef.current = DIR_LEFT));
-          if (dx > 0 && dirRef.current.x !== -1) nextDirRef.current = DIR_RIGHT;
-          else if (dx < 0 && dirRef.current.x !== 1) nextDirRef.current = DIR_LEFT;
-        } else {
-          if (dy > 0 && dirRef.current.y !== -1) nextDirRef.current = DIR_DOWN;
-          else if (dy < 0 && dirRef.current.y !== 1) nextDirRef.current = DIR_UP;
-        }
-      },
-    })
-  ).current;
-
-  const snkStyles = StyleSheet.create({
-    cell: {
-      position: 'absolute',
-      textAlign: 'center',
-      lineHeight: CELL_SIZE,
-      fontSize: CELL_SIZE - 2,
-      width: CELL_SIZE,
-      height: CELL_SIZE,
-    },
-    grid: {
-      width: GRID_PX,
-      height: GRID_PX,
-      backgroundColor: '#0d1117',
-      position: 'relative',
-      alignSelf: 'center',
-      borderWidth: 2,
-      borderColor: '#21262d',
-      borderRadius: 4,
-    },
-    effectPill: {
-      paddingHorizontal: 10,
-      paddingVertical: 2,
-      borderRadius: 12,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    effectTxt: {
-      fontSize: 12,
-      fontWeight: 'bold',
-      color: '#000',
-    },
-    controls: {
-      alignItems: 'center',
-      paddingBottom: 6,
-      paddingTop: 4,
-    },
-    ctrlRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    ctrlBtn: {
-      width: 72,
-      height: 72,
-      backgroundColor: '#161b22',
-      borderRadius: 10,
-      margin: 4,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 1,
-      borderColor: '#30363d',
-    },
-    ctrlTxt: {
-      color: '#c9d1d9',
-      fontSize: 20,
-      fontWeight: 'bold',
-    },
-    ctrlGap: {
-      width: 54,
-      height: 54,
-      margin: 4,
+  useLoop(phase === 'play', dt => {
+    const s = g.current;
+    s.t += dt;
+    ['ghost', 'slow', 'dbl'].forEach(k => { if (s[k] > 0) s[k] = Math.max(0, s[k] - dt); });
+    if (s.item) { s.item.life -= dt; if (s.item.life <= 0) s.item = null; }
+    s.acc += dt;
+    const T = s.stepT * (s.slow > 0 ? 1.7 : 1);
+    while (s.acc >= T) { s.acc -= T; if (!step(s)) return; }
+  });
+  const pan = usePan(fx, {
+    down: (x, y) => { const s = g.current; s.lx = x; s.ly = y; },
+    move: (x, y) => {
+      const s = g.current;
+      if (phase !== 'play') return;
+      const dx = x - s.lx, dy = y - s.ly;
+      if (Math.abs(dx) < 14 && Math.abs(dy) < 14) return;
+      const d = Math.abs(dx) > Math.abs(dy) ? { x: Math.sign(dx), y: 0 } : { x: 0, y: Math.sign(dy) };
+      const ref = s.queue.length ? s.queue[s.queue.length - 1] : s.dir;
+      if (!(d.x === ref.x && d.y === ref.y) && !(d.x === -ref.x && d.y === -ref.y) && s.queue.length < 2) s.queue.push(d);
+      s.lx = x; s.ly = y;
     },
   });
-
-  const renderBoard = () => {
-    const nodes = [];
-    snakeDisp.forEach((seg, i) => {
-      nodes.push(
-        <Text
-          key={`s${i}`}
-          style={[snkStyles.cell, { left: seg.x * CELL_SIZE, top: seg.y * CELL_SIZE }]}
-        >
-          {i === 0 ? '🐍' : '🟢'}
-        </Text>
-      );
-    });
-    nodes.push(
-      <Text
-        key="food"
-        style={[snkStyles.cell, { left: foodDisp.x * CELL_SIZE, top: foodDisp.y * CELL_SIZE }]}
-      >
-        🍎
-      </Text>
-    );
-    if (puDisp) {
-      nodes.push(
-        <Text
-          key="pu"
-          style={[snkStyles.cell, { left: puDisp.x * CELL_SIZE, top: puDisp.y * CELL_SIZE }]}
-        >
-          {puDisp.type}
-        </Text>
-      );
-    }
-    return nodes;
-  };
-
+  const s = g.current;
+  const ITEM = { ghost: '👻', slow: '🐢', dbl: '✨', gem: '💎' };
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={onExit} style={styles.backBtn} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
-          <Text style={styles.backText}>←</Text>
-        </Pressable>
-        <Text style={styles.title}>🐍 SNAKE POWER</Text>
-        <View style={{ width: 40 }} />
-      </View>
-
-      <View style={[styles.stats, { alignItems: 'center' }]}>
-        <Text style={styles.statText}>Score: {score}</Text>
-        <Text style={styles.statText}>Best: {highScore}</Text>
-        {activeEffect === 'speed'  && (
-          <View style={[snkStyles.effectPill, { backgroundColor: '#f6c90e' }]}>
-            <Text style={snkStyles.effectTxt}>⚡ FAST</Text>
-          </View>
-        )}
-        {activeEffect === 'shield' && (
-          <View style={[snkStyles.effectPill, { backgroundColor: '#3fb950' }]}>
-            <Text style={snkStyles.effectTxt}>🛡️ SHIELD</Text>
-          </View>
-        )}
-      </View>
-
-      <View style={styles.gameArea} {...panResponder.panHandlers}>
-        <View style={snkStyles.grid}>
-          {renderBoard()}
-        </View>
-        {gamePhase !== 'playing' && (
-          <View style={styles.overlay}>
-            <Text style={styles.overlayTitle}>
-              {gamePhase === 'idle' ? '🐍 Snake Power' : '💀 Game Over'}
-            </Text>
-            <Text style={styles.overlaySub}>
-              {gamePhase === 'idle'
-                ? 'Desliza o usa los botones'
-                : `Puntuación: ${score}`}
-            </Text>
-            {gamePhase === 'gameover' && (
-              <Text style={[styles.overlaySub, { marginBottom: 10 }]}>
-                Récord: {highScore}
-              </Text>
-            )}
-            <Pressable style={styles.btn} onPress={startGame} hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}>
-              <Text style={styles.btnText}>
-                {gamePhase === 'idle' ? 'START' : 'RETRY'}
-              </Text>
-            </Pressable>
-          </View>
-        )}
-      </View>
-
-      <View style={snkStyles.controls}>
-        <View style={snkStyles.ctrlRow}>
-          <View style={snkStyles.ctrlGap} />
-          <View style={snkStyles.ctrlBtn} onTouchStart={() => changeDir(DIR_UP)}>
-            <Text style={snkStyles.ctrlTxt}>▲</Text>
-          </View>
-          <View style={snkStyles.ctrlGap} />
-        </View>
-        <View style={snkStyles.ctrlRow}>
-          <View style={snkStyles.ctrlBtn} onTouchStart={() => changeDir(DIR_LEFT)}>
-            <Text style={snkStyles.ctrlTxt}>◀</Text>
-          </View>
-          <View style={snkStyles.ctrlBtn} onTouchStart={() => changeDir(DIR_DOWN)}>
-            <Text style={snkStyles.ctrlTxt}>▼</Text>
-          </View>
-          <View style={snkStyles.ctrlBtn} onTouchStart={() => changeDir(DIR_RIGHT)}>
-            <Text style={snkStyles.ctrlTxt}>▶</Text>
-          </View>
-        </View>
-      </View>
-    </SafeAreaView>
+    <GameScreen title="SNAKE POWER" emoji="🐍" accent={C.lime} onExit={onExit} score={s.score} best={best}
+      hud={<><Text style={{ color: C.dim, fontSize: 12 }}>Nivel <Text style={{ color: C.lime, fontWeight: '800' }}>{s.level}</Text> · Largo <Text style={{ color: C.lime, fontWeight: '800' }}>{s.body.length}</Text></Text>
+        <Text style={{ color: C.violet, fontSize: 12, fontWeight: '800' }}>{s.ghost > 0 ? `👻${Math.ceil(s.ghost)} ` : ''}{s.slow > 0 ? `🐢${Math.ceil(s.slow)} ` : ''}{s.dbl > 0 ? `✨${Math.ceil(s.dbl)}` : ''}</Text></>}>
+      <PlayArea fx={fx} bg="#04100a" border={alpha(C.lime, 0.4)} {...pan}>
+        <GridBg color={C.lime} step={CELL * 2} />
+        {s.rocks.map((r, i) => <Text key={i} style={{ position: 'absolute', left: OX + r.x * CELL - 2, top: OY + r.y * CELL - 3, fontSize: CELL, lineHeight: CELL + 4 }}>🪨</Text>)}
+        {s.food && <Text style={{ position: 'absolute', left: OX + s.food.x * CELL - 2, top: OY + s.food.y * CELL - 3, fontSize: CELL, lineHeight: CELL + 4, transform: [{ scale: 1 + Math.sin(s.t * 6) * 0.1 }] }}>🍎</Text>}
+        {s.item && <Text style={{ position: 'absolute', left: OX + s.item.x * CELL - 3, top: OY + s.item.y * CELL - 4, fontSize: CELL + 3, lineHeight: CELL + 6, opacity: s.item.life < 3 && Math.floor(s.t * 8) % 2 ? 0.3 : 1, ...glow(C.cyan, 8, 0.9) }}>{ITEM[s.item.k]}</Text>}
+        {s.body.map((b, i) => {
+          const head = i === 0;
+          const col = s.ghost > 0 ? `hsla(270,90%,${70 - Math.min(30, i)}%,0.75)` : `hsl(${135 - Math.min(60, i * 2)},90%,${head ? 62 : 52 - Math.min(18, i * 0.8)}%)`;
+          return (
+            <View key={i} style={{ position: 'absolute', left: OX + b.x * CELL + 1, top: OY + b.y * CELL + 1, width: CELL - 2, height: CELL - 2, borderRadius: head ? 7 : 5, backgroundColor: col, ...(head ? glow(C.lime, 10, 0.9) : null) }}>
+              {head && <>
+                <View style={{ position: 'absolute', left: 3 + (s.dir.x > 0 ? 3 : 0), top: 3 + (s.dir.y > 0 ? 3 : 0), width: 4, height: 4, borderRadius: 2, backgroundColor: '#04100a' }} />
+                <View style={{ position: 'absolute', left: (s.dir.x !== 0 ? 3 : 9) + (s.dir.x > 0 ? 3 : 0), top: (s.dir.y !== 0 ? 3 : 9) + (s.dir.y > 0 ? 3 : 0), width: 4, height: 4, borderRadius: 2, backgroundColor: '#04100a' }} />
+              </>}
+            </View>
+          );
+        })}
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🐍" title={phase === 'over' ? 'GAME OVER' : 'SNAKE POWER'}
+          subtitle={phase === 'over' ? `Nivel ${s.level} · Largo ${s.body.length}` : 'El clásico con poderes'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.lime} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Desliza el dedo para girar', '👻 atraviesa muros · 🐢 lento · ✨ ×2 · 💎 +50', 'Cada 5 manzanas sube el nivel y aparecen rocas'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 
@@ -5191,64 +4683,84 @@ function AsteroidDodge({ onExit }) {
 // ─────────────────────────────────────────────────────────────────
 // TOWER STACK
 function TowerStack({ onExit }) {
-  const W = Dimensions.get('window').width - 40;
-  const BASE_W = 220;
-  const H_BLOCK = 30;
-  const [blocks, setBlocks] = React.useState([{ x: W / 2 - BASE_W / 2, w: BASE_W }]);
-  const [moving, setMoving] = React.useState({ x: 0, w: BASE_W, dir: 1 });
-  const [score, setScore] = React.useState(0);
-  const [best, setBest] = React.useState(0);
-  const [alive, setAlive] = React.useState(true);
-  const movingRef = React.useRef(moving);
-  movingRef.current = moving;
-
-  React.useEffect(() => {
-    if (!alive) return;
-    const speed = 3 + score * 0.1;
-    const t = setInterval(() => {
-      setMoving(m => {
-        let nx = m.x + speed * m.dir;
-        let nd = m.dir;
-        if (nx < 0) { nx = 0; nd = 1; }
-        if (nx + m.w > W) { nx = W - m.w; nd = -1; }
-        return { ...m, x: nx, dir: nd };
-      });
-    }, 16);
-    return () => clearInterval(t);
-  }, [alive, score]);
-
+  const BH = 28, BASE = Math.min(170, AREA_W * 0.46), FLOORY = AREA_H - 60;
+  const fx = useFX();
+  const [best, submitBest] = useBest('towerstack');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const stars = useRef(makeStars(40)).current;
+  const initState = () => ({ stack: [{ x: (AREA_W - BASE) / 2, w: BASE, hue: 200 }], cur: { x: 0, w: BASE, dir: 1, hue: 214 }, speed: 170, cam: 0, debris: [], score: 0, perfect: 0, maxPerfect: 0, t: 0, over: false });
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
+  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
+  const topY = (s, i) => FLOORY - (i + 1) * BH + s.cam;
   const drop = () => {
-    if (!alive) { setBlocks([{ x: W / 2 - BASE_W / 2, w: BASE_W }]); setMoving({ x: 0, w: BASE_W, dir: 1 }); setScore(0); setAlive(true); return; }
-    const top = blocks[blocks.length - 1];
-    const m = movingRef.current;
-    const left = Math.max(m.x, top.x);
-    const right = Math.min(m.x + m.w, top.x + top.w);
-    const newW = right - left;
-    if (newW <= 0) { setAlive(false); setBest(b => Math.max(b, score)); return; }
-    const newBlocks = [...blocks, { x: left, w: newW }];
-    setBlocks(newBlocks); setScore(s => s + 1);
-    setMoving({ x: 0, w: newW, dir: 1 });
+    const s = g.current;
+    if (phase !== 'play') return;
+    const prev = s.stack[s.stack.length - 1];
+    const c = s.cur;
+    const left = Math.max(prev.x, c.x), right = Math.min(prev.x + prev.w, c.x + c.w);
+    const ov = right - left;
+    const n = s.stack.length;
+    const y = topY(s, n);
+    if (ov <= 0) {
+      s.debris.push({ x: c.x, y, w: c.w, vy: 0, vx: c.dir * 40, hue: c.hue, rot: 0 });
+      fx.shake(8, 0.3); fx.flash(C.red, 0.25); hx.die();
+      setRes({ isNew: submitBest(s.score) });
+      setPhase('over');
+      return;
+    }
+    let nx = left, nw = ov;
+    if (Math.abs(c.x - prev.x) < 6) {
+      nx = prev.x; nw = prev.w; s.perfect += 1; s.maxPerfect = Math.max(s.maxPerfect, s.perfect);
+      if (s.perfect >= 3) nw = Math.min(BASE, nw + 6);
+      s.score += 2 + s.perfect;
+      fx.ring(AREA_W / 2, y + BH / 2, C.lime, 90); fx.pop(AREA_W / 2, y - 14, s.perfect > 1 ? `¡PERFECTO ×${s.perfect}!` : '¡PERFECTO!', C.lime, 18); hx.good();
+    } else {
+      s.perfect = 0; s.score += 1;
+      const cutL = left - c.x, cutR = (c.x + c.w) - right;
+      if (cutL > 0) s.debris.push({ x: c.x, y, w: cutL, vy: 0, vx: -40, hue: c.hue, rot: 0 });
+      if (cutR > 0) s.debris.push({ x: right, y, w: cutR, vy: 0, vx: 40, hue: c.hue, rot: 0 });
+      hx.hit();
+    }
+    s.stack.push({ x: nx, w: nw, hue: c.hue });
+    s.speed = Math.min(430, 170 + s.stack.length * 5);
+    const hue = (c.hue + 13) % 360;
+    s.cur = { x: s.cur.dir > 0 ? -nw : AREA_W, w: nw, dir: -s.cur.dir, hue };
+    s.cur.x = s.cur.dir > 0 ? -nw + 10 : AREA_W - 10;
   };
-
-  const visibleBlocks = blocks.slice(-12);
+  useLoop(phase !== 'ready', dt => {
+    const s = g.current;
+    s.t += dt;
+    const targetCam = Math.max(0, (s.stack.length - 7) * BH);
+    s.cam += (targetCam - s.cam) * Math.min(1, dt * 5);
+    s.debris.forEach(d => { d.vy += 1500 * dt; d.y += d.vy * dt; d.x += d.vx * dt; d.rot += d.vx * dt * 0.004; });
+    s.debris = s.debris.filter(d => d.y < AREA_H + 100);
+    if (phase !== 'play') return;
+    const c = s.cur;
+    c.x += c.dir * s.speed * dt;
+    if (c.x + c.w > AREA_W - 4) { c.x = AREA_W - 4 - c.w; c.dir = -1; }
+    if (c.x < 4) { c.x = 4; c.dir = 1; }
+  });
+  const pan = usePan(fx, { down: drop });
+  const s = g.current;
+  const n = s.stack.length;
+  const blk = (x, y, w, hue, extra) => ({ position: 'absolute', left: x, top: y, width: w, height: BH - 2, borderRadius: 5, backgroundColor: `hsl(${hue},80%,52%)`, borderWidth: 1.5, borderColor: `hsl(${hue},95%,72%)`, ...glow(`hsl(${hue},90%,55%)`, 8, 0.5), ...extra });
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#080818' }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 10 }}>
-        <Pressable onPress={onExit}><Text style={{ color: '#fa0', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
-        <Text style={{ color: '#fa0', fontSize: 18, fontWeight: '900' }}>Score: {score}  Best: {best}</Text>
-      </View>
-      <Pressable onPress={drop} style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 20 }}>
-        {!alive && <View style={{ position: 'absolute', top: 80, alignItems: 'center' }}><Text style={{ color: '#f44', fontSize: 28, fontWeight: '900' }}>GAME OVER</Text><Text style={{ color: '#aaa', marginTop: 8 }}>Toca para reiniciar</Text></View>}
-        <View style={{ width: W, height: visibleBlocks.length * H_BLOCK + H_BLOCK + 10, position: 'relative' }}>
-          {alive && <View style={{ position: 'absolute', top: 0, left: moving.x, width: moving.w, height: H_BLOCK, backgroundColor: '#0ff', borderRadius: 4, opacity: 0.9 }} />}
-          {visibleBlocks.map((b, i) => {
-            const colors = ['#fa0', '#f70', '#f40', '#e00', '#c00', '#a00', '#900', '#800', '#700', '#600', '#500', '#400'];
-            return <View key={i} style={{ position: 'absolute', top: H_BLOCK + (visibleBlocks.length - 1 - i) * H_BLOCK, left: b.x, width: b.w, height: H_BLOCK, backgroundColor: colors[i % colors.length], borderRadius: 4 }} />;
-          })}
-        </View>
-        <Text style={{ color: '#888', marginTop: 10 }}>Toca para soltar el bloque</Text>
-      </Pressable>
-    </SafeAreaView>
+    <GameScreen title="TOWER STACK" emoji="🏗️" accent={C.amber} onExit={onExit} score={s.score} best={best}
+      hud={<><Text style={{ color: C.dim, fontSize: 12 }}>Pisos <Text style={{ color: C.amber, fontWeight: '800' }}>{n - 1}</Text></Text>{s.perfect > 1 ? <Combo n={s.perfect} color={C.lime} /> : <Text style={{ color: C.dim, fontSize: 12 }}>3 perfectos recuperan ancho</Text>}</>}>
+      <PlayArea fx={fx} bg="#07071a" border={alpha(C.amber, 0.35)} {...pan}>
+        <Starfield stars={stars} offset={s.cam * 0.3} />
+        <View style={{ position: 'absolute', left: 0, right: 0, top: FLOORY + s.cam, height: 400, backgroundColor: '#12122a', borderTopWidth: 2, borderTopColor: alpha(C.amber, 0.6) }} />
+        {s.stack.map((b, i) => { const y = topY(s, i); if (y > AREA_H || y < -BH) return null; return <View key={i} style={blk(b.x, y, b.w, b.hue)} />; })}
+        {phase === 'play' && <View style={blk(s.cur.x, topY(s, n), s.cur.w, s.cur.hue)} />}
+        {s.debris.map((d, i) => <View key={i} style={blk(d.x, d.y, d.w, d.hue, { transform: [{ rotate: `${d.rot}rad` }], opacity: 0.85 })} />)}
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🏗️" title={phase === 'over' ? 'SE DERRUMBÓ' : 'TOWER STACK'}
+          subtitle={phase === 'over' ? `${n - 1} ${n - 1 === 1 ? 'piso' : 'pisos'} · mejor racha perfecta ${s.maxPerfect}` : 'Apila hasta el cielo'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.amber} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Toca para soltar el bloque', 'Lo que sobresale se corta', 'Los encajes perfectos dan bonus y devuelven ancho'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 // ─────────────────────────────────────────────────────────────────
@@ -5302,74 +4814,87 @@ function NumberPuzzle({ onExit }) {
 // ─────────────────────────────────────────────────────────────────
 // COIN COLLECTOR
 function CoinCollector({ onExit }) {
-  const W = Dimensions.get('window').width;
-  const H = 480;
-  const PSIZE = 40;
-  const CSIZE = 24;
-  const [px, setPx] = React.useState(W / 2 - PSIZE / 2);
-  const [coins, setCoins] = React.useState([]);
-  const [bombs, setBombs] = React.useState([]);
-  const [score, setScore] = React.useState(0);
-  const [best, setBest] = React.useState(0);
-  const [alive, setAlive] = React.useState(false);
-  const [time, setTime] = React.useState(30);
-  const pxRef = React.useRef(px);
-  const aliveRef = React.useRef(false);
-  const scoreRef = React.useRef(0);
-  pxRef.current = px; aliveRef.current = alive; scoreRef.current = score;
-
-  const start = () => { setPx(W / 2 - PSIZE / 2); setCoins([]); setBombs([]); setScore(0); setTime(30); setAlive(true); };
-  const move = (e) => { if (!aliveRef.current) return; setPx(Math.max(0, Math.min(W - PSIZE, e.nativeEvent.locationX - PSIZE / 2))); };
-
-  React.useEffect(() => {
-    const t = setInterval(() => {
-      if (!aliveRef.current) return;
-      setTime(prev => { if (prev <= 1) { aliveRef.current = false; setAlive(false); setBest(b => Math.max(b, scoreRef.current)); return 0; } return prev - 1; });
-    }, 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  React.useEffect(() => {
-    const t = setInterval(() => {
-      if (!aliveRef.current) return;
-      setCoins(prev => {
-        const moved = prev.map(c => ({ ...c, y: c.y + 4 })).filter(c => c.y < H);
-        if (Math.random() < 0.06) moved.push({ x: Math.random() * (W - CSIZE), y: -CSIZE, id: Date.now() + Math.random(), type: 'coin' });
-        const kept = []; let gained = 0;
-        for (const c of moved) {
-          if (c.y + CSIZE > H - PSIZE - 20 && c.x + CSIZE > pxRef.current && c.x < pxRef.current + PSIZE) gained++;
-          else kept.push(c);
-        }
-        if (gained) { scoreRef.current += gained; setScore(s => s + gained); }
-        return kept;
-      });
-      setBombs(prev => {
-        const moved = prev.map(b => ({ ...b, y: b.y + 3 })).filter(b => b.y < H);
-        if (Math.random() < 0.03) moved.push({ x: Math.random() * (W - CSIZE), y: -CSIZE, id: Date.now() + Math.random() });
-        for (const b of moved) {
-          if (b.y + CSIZE > H - PSIZE - 20 && b.x + CSIZE > pxRef.current && b.x < pxRef.current + PSIZE) {
-            aliveRef.current = false; setAlive(false); setBest(bb => Math.max(bb, scoreRef.current));
-          }
-        }
-        return moved;
-      });
-    }, 16);
-    return () => clearInterval(t);
-  }, []);
-
+  const DUR = 30;
+  const fx = useFX();
+  const [best, submitBest] = useBest('coinrush');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const initState = () => ({ time: DUR, t: 0, score: 0, combo: 0, maxCombo: 0, coins: [], spawn: 0.3, frenzy: 0, taps: 0, hits: 0 });
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
+  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
+  const multOf = s => (1 + (s.combo >= 5 ? 1 : 0) + (s.combo >= 15 ? 1 : 0) + (s.combo >= 30 ? 1 : 0)) * (s.frenzy > 0 ? 2 : 1);
+  const spawn = s => {
+    const r = Math.random();
+    const type = r < 0.62 ? 'coin' : r < 0.74 ? 'gold' : r < 0.9 ? 'bomb' : 'clock';
+    const size = type === 'gold' ? 38 : 46;
+    const life = (type === 'gold' ? 0.9 : 1.5) * Math.max(0.55, 1 - s.t * 0.012);
+    s.coins.push({ id: uid(), type, size, x: rand(size / 2 + 6, AREA_W - size / 2 - 6), y: rand(size / 2 + 6, AREA_H - size / 2 - 6), age: 0, life });
+  };
+  const tap = (x, y) => {
+    const s = g.current;
+    if (phase !== 'play') return;
+    s.taps += 1;
+    let idx = -1, bd = 1e9;
+    s.coins.forEach((c, i) => { const d = Math.hypot(c.x - x, c.y - y); if (d < c.size / 2 + 12 && d < bd) { bd = d; idx = i; } });
+    if (idx < 0) { s.combo = 0; hx.tick(); return; }
+    const c = s.coins.splice(idx, 1)[0];
+    s.hits += 1;
+    if (c.type === 'bomb') {
+      s.time = Math.max(0, s.time - 3); s.combo = 0;
+      fx.burst(c.x, c.y, C.red, 22, 260); fx.shake(9, 0.3); fx.flash(C.red, 0.3); fx.pop(c.x, c.y, '-3s', C.red, 22); hx.bad();
+    } else if (c.type === 'clock') {
+      s.time += 2; fx.burst(c.x, c.y, C.lime, 12, 190); fx.pop(c.x, c.y, '+2s', C.lime, 22); hx.good();
+    } else {
+      s.combo += 1; s.maxCombo = Math.max(s.maxCombo, s.combo);
+      const base = c.type === 'gold' ? 5 : 1;
+      const pts = base * multOf(s);
+      s.score += pts;
+      fx.burst(c.x, c.y, C.amber, 10, 200, 0.5, 4); fx.pop(c.x, c.y - 10, `+${pts}`, multOf(s) > 1 ? C.amber : C.text, 16); hx.hit();
+      if (s.combo > 0 && s.combo % 12 === 0) { s.frenzy = 5; fx.flash(C.amber, 0.25); fx.pop(AREA_W / 2, AREA_H / 2, '¡FRENESÍ!', C.amber, 28); hx.win(); }
+    }
+  };
+  useLoop(phase === 'play', dt => {
+    const s = g.current;
+    s.t += dt; s.time -= dt;
+    if (s.frenzy > 0) s.frenzy = Math.max(0, s.frenzy - dt);
+    s.spawn -= dt;
+    if (s.spawn <= 0) { spawn(s); s.spawn = Math.max(0.16, 0.5 - s.t * 0.01) * (s.frenzy > 0 ? 0.4 : 1) * rand(0.7, 1.2); }
+    for (let i = s.coins.length - 1; i >= 0; i--) {
+      const c = s.coins[i];
+      c.age += dt;
+      if (c.age >= c.life) {
+        s.coins.splice(i, 1);
+        if (c.type === 'coin' || c.type === 'gold') s.combo = 0;
+      }
+    }
+    if (s.time <= 0) { s.time = 0; hx.win(); setRes({ isNew: submitBest(s.score) }); setPhase('over'); }
+  });
+  const pan = usePan(fx, { down: tap });
+  const s = g.current;
+  const E = { coin: '🪙', gold: '🥇', bomb: '💣', clock: '⏱️' };
+  const m = multOf(s);
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#0a0500' }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 10 }}>
-        <Pressable onPress={onExit}><Text style={{ color: '#ffd700', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
-        <Text style={{ color: '#ffd700', fontSize: 16, fontWeight: '900' }}>⭐{score}  ⏱{time}s  Best:{best}</Text>
-      </View>
-      <Pressable onPress={!alive ? start : undefined} onTouchMove={move} style={{ alignSelf: 'center', width: W, height: H, backgroundColor: '#0a0800', overflow: 'hidden' }}>
-        {!alive && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}><Text style={{ color: '#ffd700', fontSize: 28, fontWeight: '900' }}>COIN COLLECTOR</Text><Text style={{ color: score > 0 ? '#fff' : '#aaa', fontSize: 18, marginTop: 8 }}>{score > 0 ? `Score: ${score}` : 'Toca para comenzar'}</Text><Text style={{ color: '#888', marginTop: 6 }}>Desliza para recoger monedas</Text></View>}
-        {coins.map(c => <Text key={c.id} style={{ position: 'absolute', left: c.x, top: c.y, fontSize: 22 }}>🪙</Text>)}
-        {bombs.map(b => <Text key={b.id} style={{ position: 'absolute', left: b.x, top: b.y, fontSize: 22 }}>💣</Text>)}
-        {alive && <Text style={{ position: 'absolute', left: px, top: H - PSIZE - 20, fontSize: 34 }}>🧺</Text>}
-      </Pressable>
-    </SafeAreaView>
+    <GameScreen title="COIN RUSH" emoji="🪙" accent={C.amber} onExit={onExit} score={s.score} best={best}
+      hud={<><Text style={{ color: s.time < 8 ? C.red : C.text, fontWeight: '900', fontSize: 15 }}>⏱ {Math.ceil(s.time)}s</Text>{s.frenzy > 0 ? <Text style={{ color: C.amber, fontWeight: '900', fontSize: 13 }}>🔥 FRENESÍ {Math.ceil(s.frenzy)}</Text> : <Text style={{ color: C.dim, fontSize: 12 }}>Racha {s.combo}</Text>}<View style={{ minWidth: 64, alignItems: 'flex-end' }}>{m > 1 ? <Combo n={m} /> : null}</View></>}>
+      <PlayArea fx={fx} bg={s.frenzy > 0 ? '#1a0f02' : '#0a0803'} border={alpha(C.amber, 0.4)} {...pan}>
+        <GridBg color={C.amber} step={46} />
+        {s.coins.map(c => {
+          const pop = Math.min(1, c.age * 7);
+          const left = 1 - c.age / c.life;
+          return (
+            <View key={c.id} style={{ position: 'absolute', left: c.x - c.size / 2, top: c.y - c.size / 2, width: c.size, height: c.size, alignItems: 'center', justifyContent: 'center', transform: [{ scale: pop * (left < 0.25 ? 0.85 + Math.sin(c.age * 40) * 0.1 : 1) }], opacity: left < 0.25 ? 0.7 : 1 }}>
+              <View style={{ position: 'absolute', width: c.size + 8, height: c.size + 8, borderRadius: (c.size + 8) / 2, borderWidth: 2, borderColor: c.type === 'bomb' ? alpha(C.red, 0.5) : alpha(C.amber, 0.5 * left + 0.1) }} />
+              <Text style={{ fontSize: c.size - 10 }}>{E[c.type]}</Text>
+            </View>
+          );
+        })}
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🪙" title={phase === 'over' ? '¡TIEMPO!' : 'COIN RUSH'}
+          subtitle={phase === 'over' ? `Precisión ${s.taps ? Math.round((s.hits / s.taps) * 100) : 0}% · Mejor racha ${s.maxCombo}` : '30 segundos para recoger monedas'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.amber} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Toca las monedas antes de que desaparezcan', '🥇 vale 5 · ⏱️ +2s · 💣 -3s', 'Las rachas suben el multiplicador y activan el frenesí'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 // ─────────────────────────────────────────────────────────────────
@@ -5479,58 +5004,79 @@ function ColorRush({ onExit }) {
 // ─────────────────────────────────────────────────────────────────
 // PONG SOLO – jugador vs pared rebotante
 function PongSolo({ onExit }) {
-  const W = Dimensions.get('window').width - 20;
-  const H = 500;
-  const PAD_W = 90, PAD_H = 14, BALL = 14;
-  const [padX, setPadX] = React.useState(W / 2 - PAD_W / 2);
-  const [ball, setBall] = React.useState({ x: W / 2, y: H / 2, vx: 3, vy: -4 });
-  const [score, setScore] = React.useState(0);
-  const [best, setBest] = React.useState(0);
-  const [alive, setAlive] = React.useState(false);
-  const padRef = React.useRef(W / 2 - PAD_W / 2);
-  const ballRef = React.useRef(ball);
-  const aliveRef = React.useRef(false);
-  const scoreRef = React.useRef(0);
-  padRef.current = padX; ballRef.current = ball; aliveRef.current = alive; scoreRef.current = score;
-
-  const start = () => { setPadX(W / 2 - PAD_W / 2); setBall({ x: W / 2, y: H / 2, vx: 3 + Math.random() * 2 - 1, vy: -4 }); setScore(0); setAlive(true); };
-  const move = (e) => { if (!aliveRef.current) return; setPadX(Math.max(0, Math.min(W - PAD_W, e.nativeEvent.locationX - PAD_W / 2))); };
-
-  React.useEffect(() => {
-    const t = setInterval(() => {
-      if (!aliveRef.current) return;
-      setBall(prev => {
-        let { x, y, vx, vy } = prev;
-        x += vx; y += vy;
-        if (x < 0) { x = 0; vx = -vx; }
-        if (x + BALL > W) { x = W - BALL; vx = -vx; }
-        if (y < 0) { y = 0; vy = -vy; }
-        const pad = padRef.current;
-        if (y + BALL >= H - PAD_H - 20 && x + BALL > pad && x < pad + PAD_W && vy > 0) {
-          vy = -(Math.abs(vy) + 0.05); vx += (x + BALL / 2 - (pad + PAD_W / 2)) * 0.05;
-          scoreRef.current += 1; setScore(s => s + 1); y = H - PAD_H - 20 - BALL;
-        }
-        if (y > H) { aliveRef.current = false; setAlive(false); setBest(b => Math.max(b, scoreRef.current)); return prev; }
-        return { x, y, vx, vy };
-      });
-    }, 16);
-    return () => clearInterval(t);
-  }, []);
-
+  const BR = 8, PY = AREA_H - 38;
+  const fx = useFX();
+  const [best, submitBest] = useBest('pongsolo');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const initState = () => ({ px: AREA_W / 2, pw: 84, ball: { x: AREA_W / 2, y: PY - 40, vx: 120, vy: -260 }, speed: 300, lives: 3, score: 0, hits: 0, bumpers: [], orb: null, orbT: 6, trail: [], t: 0, wait: 0.8, combo: 0 });
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
+  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
+  const launch = s => { const a = -Math.PI / 2 + rand(-0.4, 0.4); s.ball = { x: s.px, y: PY - 20, vx: Math.cos(a) * s.speed, vy: Math.sin(a) * s.speed }; s.wait = 0; s.combo = 0; };
+  useLoop(phase === 'play', dt => {
+    const s = g.current;
+    s.t += dt;
+    s.bumpers.forEach(b => { if (b.mv) { b.x += b.vx * dt; if (b.x < 40 || b.x > AREA_W - 40) b.vx *= -1; } });
+    s.orbT -= dt; if (s.orbT <= 0 && !s.orb) { s.orb = { x: rand(50, AREA_W - 50), y: rand(120, AREA_H * 0.55), life: 7 }; s.orbT = rand(6, 11); }
+    if (s.orb) { s.orb.life -= dt; if (s.orb.life <= 0) s.orb = null; }
+    const b = s.ball;
+    if (s.wait > 0) { s.wait -= dt; b.x = s.px; b.y = PY - 20; if (s.wait <= 0) launch(s); return; }
+    const m = Math.hypot(b.vx, b.vy) || 1; b.vx *= s.speed / m; b.vy *= s.speed / m;
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    s.trail.push({ x: b.x, y: b.y, a: 0.5 }); s.trail.forEach(p => { p.a -= dt * 2.5; }); s.trail = s.trail.filter(p => p.a > 0);
+    if (b.x < BR) { b.x = BR; b.vx = Math.abs(b.vx); hx.tick(); }
+    if (b.x > AREA_W - BR) { b.x = AREA_W - BR; b.vx = -Math.abs(b.vx); hx.tick(); }
+    if (b.y < BR) { b.y = BR; b.vy = Math.abs(b.vy); hx.tick(); }
+    if (b.vy > 0 && b.y + BR >= PY && b.y + BR <= PY + 18 && Math.abs(b.x - s.px) < s.pw / 2 + BR) {
+      const rel = clamp((b.x - s.px) / (s.pw / 2 + BR), -1, 1);
+      s.hits += 1; s.combo = 0; s.score += 1;
+      s.speed = Math.min(620, 300 + s.hits * 5);
+      s.pw = Math.max(54, 84 - Math.floor(s.hits / 6) * 4);
+      const a = -Math.PI / 2 + rel * 1.05;
+      b.vx = Math.cos(a) * s.speed; b.vy = Math.sin(a) * s.speed; b.y = PY - BR;
+      fx.burst(b.x, PY, C.cyan, 6, 120, 0.3, 3); hx.hit();
+      if (s.hits === 8) s.bumpers.push({ x: AREA_W * 0.5, y: AREA_H * 0.32, r: 20, mv: false, vx: 0 });
+      if (s.hits === 20) { s.bumpers = [{ x: AREA_W * 0.3, y: AREA_H * 0.3, r: 20, mv: true, vx: 60 }, { x: AREA_W * 0.7, y: AREA_H * 0.42, r: 20, mv: true, vx: -60 }]; }
+      if (s.hits === 36) s.bumpers.push({ x: AREA_W * 0.5, y: AREA_H * 0.2, r: 22, mv: true, vx: 90 });
+    }
+    for (const bm of s.bumpers) {
+      const dx = b.x - bm.x, dy = b.y - bm.y, d = Math.hypot(dx, dy);
+      if (d < bm.r + BR) {
+        const nx = dx / (d || 1), ny = dy / (d || 1);
+        const dot = b.vx * nx + b.vy * ny;
+        b.vx -= 2 * dot * nx; b.vy -= 2 * dot * ny;
+        b.x = bm.x + nx * (bm.r + BR + 1); b.y = bm.y + ny * (bm.r + BR + 1);
+        s.combo += 1; const pts = 3 * s.combo; s.score += pts;
+        fx.burst(bm.x + nx * bm.r, bm.y + ny * bm.r, C.pink, 10, 170); fx.pop(bm.x, bm.y - 26, `+${pts}`, C.pink, 15); fx.ring(bm.x, bm.y, C.pink, 34); hx.heavy();
+      }
+    }
+    if (s.orb && Math.hypot(b.x - s.orb.x, b.y - s.orb.y) < BR + 16) {
+      s.score += 5; fx.burst(s.orb.x, s.orb.y, C.amber, 14, 190); fx.pop(s.orb.x, s.orb.y - 20, '+5', C.amber, 17); hx.good(); s.orb = null;
+    }
+    if (b.y > AREA_H + 12) {
+      s.lives -= 1; fx.shake(8, 0.3); fx.flash(C.red, 0.25); hx.bad();
+      if (s.lives <= 0) { hx.die(); setRes({ isNew: submitBest(s.score) }); setPhase('over'); } else { s.wait = 0.9; s.combo = 0; s.trail = []; }
+    }
+  });
+  const pan = usePan(fx, { down: x => { const s = g.current; s.px = clamp(x, s.pw / 2, AREA_W - s.pw / 2); }, move: x => { const s = g.current; s.px = clamp(x, s.pw / 2, AREA_W - s.pw / 2); } });
+  const s = g.current;
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#000a0a' }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', padding: 10 }}>
-        <Pressable onPress={onExit}><Text style={{ color: '#0ff', fontSize: 16, fontWeight: 'bold' }}>← Salir</Text></Pressable>
-        <Text style={{ color: '#0ff', fontSize: 18, fontWeight: '900' }}>Score: {score}  Best: {best}</Text>
-      </View>
-      <Pressable onPress={!alive ? start : undefined} onTouchMove={move} style={{ alignSelf: 'center', width: W, height: H, backgroundColor: '#001111', borderRadius: 10, overflow: 'hidden', borderWidth: 2, borderColor: '#0ff' }}>
-        {!alive && <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center' }}><Text style={{ color: '#0ff', fontSize: 28, fontWeight: '900' }}>PONG SOLO</Text><Text style={{ color: score > 0 ? '#f44' : '#aaa', fontSize: 18, marginTop: 8 }}>{score > 0 ? `Game Over · ${score} rebotes` : 'Toca para comenzar'}</Text></View>}
-        {alive && <>
-          <View style={{ position: 'absolute', left: ball.x, top: ball.y, width: BALL, height: BALL, backgroundColor: '#fff', borderRadius: BALL / 2, shadowColor: '#fff', shadowOpacity: 1, shadowRadius: 8 }} />
-          <View style={{ position: 'absolute', left: padX, top: H - PAD_H - 20, width: PAD_W, height: PAD_H, backgroundColor: '#0ff', borderRadius: 7, shadowColor: '#0ff', shadowOpacity: 0.8, shadowRadius: 8 }} />
-        </>}
-      </Pressable>
-    </SafeAreaView>
+    <GameScreen title="PONG SOLO" emoji="🎾" accent={C.cyan} onExit={onExit} score={s.score} best={best}
+      hud={<><Lives n={s.lives} max={3} /><Text style={{ color: C.dim, fontSize: 12 }}>Rebotes <Text style={{ color: C.cyan, fontWeight: '800' }}>{s.hits}</Text></Text>{s.combo > 1 ? <Combo n={s.combo} color={C.pink} /> : <View style={{ width: 60 }} />}</>}>
+      <PlayArea fx={fx} bg="#030a10" border={alpha(C.cyan, 0.4)} {...pan}>
+        <GridBg color={C.cyan} step={46} />
+        {s.trail.map((p, i) => <View key={i} style={{ position: 'absolute', left: p.x - BR * 0.7, top: p.y - BR * 0.7, width: BR * 1.4, height: BR * 1.4, borderRadius: BR, backgroundColor: C.cyan, opacity: Math.max(0, p.a * 0.6) }} />)}
+        {s.bumpers.map((bm, i) => <View key={i} style={{ position: 'absolute', left: bm.x - bm.r, top: bm.y - bm.r, width: bm.r * 2, height: bm.r * 2, borderRadius: bm.r, backgroundColor: alpha(C.pink, 0.2), borderWidth: 3, borderColor: C.pink, ...glow(C.pink, 14, 0.9) }} />)}
+        {s.orb && <Text style={{ position: 'absolute', left: s.orb.x - 16, top: s.orb.y - 18, fontSize: 30, opacity: s.orb.life < 2 && Math.floor(s.t * 8) % 2 ? 0.3 : 1 }}>🔮</Text>}
+        <View style={{ position: 'absolute', left: s.px - s.pw / 2, top: PY, width: s.pw, height: 12, borderRadius: 6, backgroundColor: C.cyan, ...glow(C.cyan, 12, 0.9) }} />
+        <View style={{ position: 'absolute', left: s.ball.x - BR, top: s.ball.y - BR, width: BR * 2, height: BR * 2, borderRadius: BR, backgroundColor: '#fff', ...glow('#fff', 12, 1) }} />
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🎾" title={phase === 'over' ? 'GAME OVER' : 'PONG SOLO'}
+          subtitle={phase === 'over' ? `${s.hits} rebotes` : 'Mantén la bola en juego'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.cyan} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Arrastra para mover la pala', 'La bola acelera y la pala se encoge', 'Los bumpers rosados dan combos · 🔮 +5'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 // ─────────────────────────────────────────────────────────────────
@@ -6688,124 +6234,73 @@ const SC_TYPE_WEIGHTS = [50,25,15,10];
 function scPickType() { const r=Math.random()*100; let acc=0; for(let i=0;i<SC_TYPE_WEIGHTS.length;i++){acc+=SC_TYPE_WEIGHTS[i];if(r<acc)return SC_OBJECT_TYPES[i];}return SC_OBJECT_TYPES[0]; }
 
 function StarCatcher({ onExit }) {
-  const [gameState, setGameState] = useState('idle');
-  const [score, setScore] = useState(0); const [bestScore, setBestScore] = useState(0);
-  const [lives, setLives] = useState(SC_INIT_LIVES); const [multiplier, setMultiplier] = useState(1);
-  const [timeLeft, setTimeLeft] = useState(SC_GAME_DURATION); const [objects, setObjects] = useState([]);
-  const [catcherX, setCatcherX] = useState(width / 2 - SC_CATCHER_W / 2); const [flashMsg, setFlashMsg] = useState(null);
-  const catcherXRef = useRef(width / 2 - SC_CATCHER_W / 2); const livesRef = useRef(SC_INIT_LIVES);
-  const scoreRef = useRef(0); const multiplierRef = useRef(1); const consecutiveRef = useRef(0);
-  const objectsRef = useRef([]); const objectIdRef = useRef(0); const rafRef = useRef(null);
-  const lastTimeRef = useRef(null); const gameStateRef = useRef('idle'); const spawnTimerRef = useRef(0);
-  const timerIntervalRef = useRef(null); const moveIntervalRef = useRef(null); const flashTimerRef = useRef(null);
-
-  useEffect(() => { AsyncStorage.getItem('sc_best').then(v => { if (v) setBestScore(parseInt(v, 10)); }); return () => { cancelAnimationFrame(rafRef.current); clearInterval(timerIntervalRef.current); clearInterval(moveIntervalRef.current); if(flashTimerRef.current) clearTimeout(flashTimerRef.current); }; }, []);
-
-  const showFlash = (msg) => { if(flashTimerRef.current) clearTimeout(flashTimerRef.current); setFlashMsg(msg); flashTimerRef.current = setTimeout(() => setFlashMsg(null), 700); };
-
-  const startGame = () => {
-    catcherXRef.current = width/2-SC_CATCHER_W/2; setCatcherX(catcherXRef.current);
-    livesRef.current = SC_INIT_LIVES; scoreRef.current = 0; multiplierRef.current = 1; consecutiveRef.current = 0;
-    objectsRef.current = []; objectIdRef.current = 0; spawnTimerRef.current = 0; lastTimeRef.current = null;
-    setLives(SC_INIT_LIVES); setScore(0); setMultiplier(1); setTimeLeft(SC_GAME_DURATION); setObjects([]);
-    gameStateRef.current = 'playing'; setGameState('playing');
-    timerIntervalRef.current = setInterval(() => { setTimeLeft(t => { if(t<=1){endGame();return 0;}return t-1; }); }, 1000);
-    rafRef.current = requestAnimationFrame(gameLoop);
+  const CW = 78, CY = AREA_H - 54, DUR = 60;
+  const fx = useFX();
+  const [best, submitBest] = useBest('starcatcher');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const stars = useRef(makeStars(30)).current;
+  const initState = () => ({ x: AREA_W / 2, tx: AREA_W / 2, objs: [], spawn: 0.4, time: DUR, t: 0, score: 0, lives: 3, combo: 0, maxCombo: 0, magnet: 0, dbl: 0, freeze: 0 });
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
+  const TY = {
+    star: { e: '⭐', w: 50 }, gem: { e: '💎', w: 18 }, bomb: { e: '💣', w: 16 }, heart: { e: '❤️', w: 5 }, magnet: { e: '🧲', w: 4 }, dbl: { e: '🌈', w: 4 }, ice: { e: '❄️', w: 3 },
   };
-
-  const endGame = async () => {
-    gameStateRef.current = 'over'; setGameState('over');
-    cancelAnimationFrame(rafRef.current); clearInterval(timerIntervalRef.current); clearInterval(moveIntervalRef.current);
-    const finalScore = scoreRef.current;
-    const stored = await AsyncStorage.getItem('sc_best'); const prev = stored ? parseInt(stored,10) : 0;
-    if(finalScore>prev){await AsyncStorage.setItem('sc_best',String(finalScore));setBestScore(finalScore);}
+  const pickType = () => { const tot = Object.values(TY).reduce((a, b) => a + b.w, 0); let r = Math.random() * tot; for (const k of Object.keys(TY)) { r -= TY[k].w; if (r <= 0) return k; } return 'star'; };
+  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
+  const finish = (s, why) => {
+    hx.win(); setRes({ isNew: submitBest(s.score), why }); setPhase('over');
   };
-
-  const gameLoop = (ts) => {
-    if(gameStateRef.current!=='playing') return;
-    if(!lastTimeRef.current) lastTimeRef.current = ts;
-    const delta = ts - lastTimeRef.current; lastTimeRef.current = ts;
-    const fallSpeed = Math.min(1+scoreRef.current*0.015, 3.5) * 3.5 * (delta/16);
-    spawnTimerRef.current += delta;
-    if(spawnTimerRef.current >= Math.max(400,1200-scoreRef.current*8) && objectsRef.current.length < SC_MAX_OBJECTS) {
-      spawnTimerRef.current = 0;
-      const type = scPickType(); const x = Math.random()*(width-SC_OBJ_SIZE);
-      objectsRef.current = [...objectsRef.current, {id:objectIdRef.current++,x,y:-SC_OBJ_SIZE,...type}];
-    }
-    const catcherLeft = catcherXRef.current; const catcherRight = catcherLeft+SC_CATCHER_W;
-    const catcherTop = GAME_HEIGHT-SC_CATCHER_H-10;
-    let livesChanged = false; let newScore = scoreRef.current; let newMult = multiplierRef.current; let newConsec = consecutiveRef.current;
-    const surviving = [];
-    for(const obj of objectsRef.current) {
-      const ny = obj.y+fallSpeed; const objCenterX = obj.x+SC_OBJ_SIZE/2; const objBottom = ny+SC_OBJ_SIZE;
-      if(objBottom>=catcherTop && ny<catcherTop+SC_CATCHER_H && objCenterX>=catcherLeft && objCenterX<=catcherRight) {
-        if(obj.type==='bomb'){livesRef.current=Math.max(0,livesRef.current-1);livesChanged=true;newConsec=0;newMult=1;Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);showFlash('💥 -1 vida');}
-        else if(obj.type==='heart'){livesRef.current=Math.min(SC_MAX_LIVES,livesRef.current+1);livesChanged=true;Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);showFlash('❤️ +1 vida');}
-        else{newConsec++;if(newConsec>=5)newMult=3;else if(newConsec>=3)newMult=2;const pts=obj.points*newMult;newScore+=pts;scoreRef.current=newScore;Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);showFlash(`+${pts}${newMult>1?` x${newMult}`:''}`);}
-        continue;
+  useLoop(phase === 'play', dt => {
+    const s = g.current;
+    s.t += dt; s.time -= dt;
+    ['magnet', 'dbl', 'freeze'].forEach(k => { if (s[k] > 0) s[k] = Math.max(0, s[k] - dt); });
+    s.x += (s.tx - s.x) * Math.min(1, dt * 20);
+    const fall = (150 + s.t * 3.2) * (s.freeze > 0 ? 0.4 : 1);
+    s.spawn -= dt;
+    if (s.spawn <= 0) { s.objs.push({ id: uid(), type: pickType(), x: rand(22, AREA_W - 22), y: -20, vy: fall * rand(0.9, 1.25), rot: 0 }); s.spawn = Math.max(0.22, 0.6 - s.t * 0.005); }
+    for (let i = s.objs.length - 1; i >= 0; i--) {
+      const o = s.objs[i];
+      if (s.magnet > 0 && (o.type === 'star' || o.type === 'gem') && o.y > AREA_H * 0.3) o.x += clamp(s.x - o.x, -1, 1) * 160 * dt;
+      o.y += (s.freeze > 0 ? fall : o.vy) * dt;
+      const caught = o.y > CY - 8 && o.y < CY + 22 && Math.abs(o.x - s.x) < CW / 2 + 8;
+      if (caught) {
+        s.objs.splice(i, 1);
+        const m = s.dbl > 0 ? 2 : 1;
+        if (o.type === 'star' || o.type === 'gem') {
+          s.combo += 1; s.maxCombo = Math.max(s.maxCombo, s.combo);
+          const pts = (o.type === 'gem' ? 5 : 1) * m * (1 + Math.floor(s.combo / 8));
+          s.score += pts; fx.burst(o.x, CY, o.type === 'gem' ? C.cyan : C.amber, 8, 150, 0.4, 4); fx.pop(o.x, CY - 20, `+${pts}`, C.text, 14); hx.tap();
+        } else if (o.type === 'bomb') {
+          s.lives -= 1; s.combo = 0; fx.burst(o.x, CY, C.red, 22, 260); fx.shake(9, 0.3); fx.flash(C.red, 0.3); hx.bad();
+          if (s.lives <= 0) { hx.die(); setRes({ isNew: submitBest(s.score), why: 'bombas' }); setPhase('over'); return; }
+        } else if (o.type === 'heart') { s.lives = Math.min(5, s.lives + 1); fx.pop(o.x, CY - 20, '+1 VIDA', C.red, 15); fx.ring(o.x, CY, C.red, 44); hx.good(); }
+        else if (o.type === 'magnet') { s.magnet = 8; fx.pop(o.x, CY - 20, 'IMÁN', C.cyan, 15); hx.good(); }
+        else if (o.type === 'dbl') { s.dbl = 8; fx.pop(o.x, CY - 20, 'PUNTOS ×2', C.pink, 15); hx.good(); }
+        else if (o.type === 'ice') { s.freeze = 5; fx.pop(o.x, CY - 20, 'CONGELADO', C.cyan, 15); fx.flash(C.cyan, 0.2); hx.good(); }
+      } else if (o.y > AREA_H + 20) {
+        s.objs.splice(i, 1);
+        if (o.type === 'star' || o.type === 'gem') s.combo = 0;
       }
-      if(objBottom>=GAME_HEIGHT){if(obj.type==='star'||obj.type==='diamond'){newConsec=0;newMult=1;}continue;}
-      surviving.push({...obj,y:ny});
     }
-    multiplierRef.current=newMult; consecutiveRef.current=newConsec; scoreRef.current=newScore;
-    objectsRef.current=surviving;
-    setScore(newScore); setMultiplier(newMult); setObjects([...surviving]);
-    if(livesChanged) setLives(livesRef.current);
-    if(livesRef.current<=0){endGame();return;}
-    rafRef.current = requestAnimationFrame(gameLoop);
-  };
-
-  const moveCatcher = (dir) => { catcherXRef.current=Math.max(0,Math.min(width-SC_CATCHER_W,catcherXRef.current+dir*18)); setCatcherX(catcherXRef.current); };
-  const startMoving = (dir) => { moveCatcher(dir); moveIntervalRef.current=setInterval(()=>moveCatcher(dir),50); };
-  const stopMoving = () => clearInterval(moveIntervalRef.current);
-
-  const panResponder = useRef(PanResponder.create({
-    onStartShouldSetPanResponder: () => gameStateRef.current === 'playing',
-    onMoveShouldSetPanResponder: () => gameStateRef.current === 'playing',
-    onPanResponderMove: (_, gs) => { const nx=gs.moveX-SC_CATCHER_W/2; catcherXRef.current=Math.max(0,Math.min(width-SC_CATCHER_W,nx)); setCatcherX(catcherXRef.current); },
-  })).current;
-
+    if (s.time <= 0) { s.time = 0; finish(s, 'tiempo'); }
+  });
+  const pan = usePan(fx, { down: x => { g.current.tx = clamp(x, CW / 2, AREA_W - CW / 2); }, move: x => { g.current.tx = clamp(x, CW / 2, AREA_W - CW / 2); } });
+  const s = g.current;
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#0a0a1a' }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 8, backgroundColor: '#12122a' }}>
-        <Pressable onPress={onExit} style={{ padding: 6 }}><Text style={{ color: '#ff6b6b', fontSize: 20, fontWeight: 'bold' }}>✕</Text></Pressable>
-        <Text style={{ color: '#ffe066', fontSize: 18, fontWeight: 'bold' }}>⭐ Star Catcher</Text>
-        <Text style={{ color: '#aaa', fontSize: 13 }}>Mejor: {bestScore}</Text>
-      </View>
-      {gameState === 'playing' && (
-        <View style={{ flexDirection:'row', alignItems:'center', justifyContent:'space-around', paddingVertical:6, backgroundColor:'#0d0d2b' }}>
-          <Text style={{ color:'#fff', fontSize:14, fontWeight:'600' }}>⏱ {timeLeft}s</Text>
-          <Text style={{ color:'#fff', fontSize:14, fontWeight:'600' }}>Score: {score}</Text>
-          <Text style={{ color:'#ffd700', fontSize:16, fontWeight:'bold' }}>x{multiplier}</Text>
-          <Text style={{ fontSize:14 }}>{Array.from({length:SC_MAX_LIVES},(_,i)=>i<lives?'❤️':'🖤').join('')}</Text>
-        </View>
-      )}
-      <View style={{ width, height: GAME_HEIGHT, backgroundColor: '#0d0d2b', overflow: 'hidden', position: 'relative' }} {...panResponder.panHandlers}>
-        {gameState === 'idle' && <View style={{ flex:1, alignItems:'center', justifyContent:'center' }}>
-          <Text style={{ color:'#ffe066', fontSize:30, fontWeight:'bold', marginBottom:10 }}>⭐ Star Catcher</Text>
-          <Text style={{ color:'#ccc', fontSize:15, textAlign:'center', marginBottom:24, lineHeight:22 }}>Atrapa estrellas y gemas.{'\n'}¡Evita las bombas!</Text>
-          <Pressable style={{ backgroundColor:'#00e5ff', paddingHorizontal:40, paddingVertical:14, borderRadius:30 }} onPress={startGame}><Text style={{ color:'#0a0a1a', fontSize:18, fontWeight:'bold' }}>JUGAR</Text></Pressable>
-        </View>}
-        {gameState === 'over' && <View style={{ flex:1, alignItems:'center', justifyContent:'center' }}>
-          <Text style={{ color:'#ffe066', fontSize:30, fontWeight:'bold', marginBottom:10 }}>Game Over</Text>
-          <Text style={{ color:'#fff', fontSize:22, marginBottom:8 }}>Puntuación: {score}</Text>
-          {score >= bestScore && score > 0 && <Text style={{ color:'#ffd700', fontSize:18, marginBottom:16 }}>¡Nuevo récord! 🏆</Text>}
-          <Pressable style={{ backgroundColor:'#00e5ff', paddingHorizontal:40, paddingVertical:14, borderRadius:30, marginBottom:12 }} onPress={startGame}><Text style={{ color:'#0a0a1a', fontSize:18, fontWeight:'bold' }}>REINICIAR</Text></Pressable>
-          <Pressable onPress={onExit}><Text style={{ color:'#aaa', fontSize:15 }}>Salir</Text></Pressable>
-        </View>}
-        {gameState === 'playing' && objects.map(obj => (
-          <Text key={obj.id} style={{ position:'absolute', fontSize:SC_OBJ_SIZE-4, left:obj.x, top:obj.y }}>{obj.emoji}</Text>
-        ))}
-        {gameState === 'playing' && <View style={{ position:'absolute', width:SC_CATCHER_W, height:SC_CATCHER_H, left:catcherX, top:GAME_HEIGHT-SC_CATCHER_H-10, backgroundColor:'#00e5ff', borderRadius:6, shadowColor:'#00e5ff', shadowOpacity:0.9, shadowRadius:8 }} />}
-        {flashMsg && <Text style={{ position:'absolute', top:GAME_HEIGHT/2-30, width:'100%', textAlign:'center', color:'#ffe066', fontSize:22, fontWeight:'bold' }}>{flashMsg}</Text>}
-      </View>
-      {gameState === 'playing' && (
-        <View style={{ flexDirection:'row', justifyContent:'space-around', paddingVertical:10, backgroundColor:'#12122a' }}>
-          <Pressable style={{ backgroundColor:'#1e1e4a', paddingHorizontal:50, paddingVertical:14, borderRadius:16, borderWidth:1, borderColor:'#00e5ff44' }} onPressIn={() => startMoving(-1)} onPressOut={stopMoving}><Text style={{ color:'#00e5ff', fontSize:22, fontWeight:'bold' }}>◀</Text></Pressable>
-          <Pressable style={{ backgroundColor:'#1e1e4a', paddingHorizontal:50, paddingVertical:14, borderRadius:16, borderWidth:1, borderColor:'#00e5ff44' }} onPressIn={() => startMoving(1)} onPressOut={stopMoving}><Text style={{ color:'#00e5ff', fontSize:22, fontWeight:'bold' }}>▶</Text></Pressable>
-        </View>
-      )}
-    </SafeAreaView>
+    <GameScreen title="STAR CATCHER" emoji="⭐" accent={C.amber} onExit={onExit} score={s.score} best={best}
+      hud={<><Text style={{ color: s.time < 10 ? C.red : C.text, fontWeight: '900', fontSize: 15 }}>⏱ {Math.ceil(s.time)}s</Text><Lives n={s.lives} max={Math.max(3, s.lives)} /><View style={{ minWidth: 80, alignItems: 'flex-end' }}>{s.combo > 2 ? <Combo n={s.combo} /> : <Text style={{ color: C.cyan, fontSize: 12, fontWeight: '800' }}>{s.magnet > 0 ? '🧲' : ''}{s.dbl > 0 ? '🌈' : ''}{s.freeze > 0 ? '❄️' : ''}</Text>}</View></>}>
+      <PlayArea fx={fx} bg="#06061a" border={alpha(C.amber, 0.35)} {...pan}>
+        <Starfield stars={stars} offset={s.t * 40} />
+        {s.objs.map(o => <Text key={o.id} style={{ position: 'absolute', left: o.x - 18, top: o.y - 20, width: 36, textAlign: 'center', fontSize: 28, lineHeight: 36 }}>{TY[o.type].e}</Text>)}
+        <View style={{ position: 'absolute', left: s.x - CW / 2, top: CY, width: CW, height: 26, borderBottomLeftRadius: 22, borderBottomRightRadius: 22, borderTopLeftRadius: 4, borderTopRightRadius: 4, backgroundColor: alpha(C.amber, 0.25), borderWidth: 2, borderColor: C.amber, ...glow(C.amber, 14, 0.8) }} />
+        {s.magnet > 0 && <View style={{ position: 'absolute', left: s.x - 56, top: CY - 30, width: 112, height: 112, borderRadius: 56, borderWidth: 1, borderColor: alpha(C.cyan, 0.4) }} />}
+        <Overlay show={phase !== 'play'} kind={phase} emoji="⭐" title={phase === 'over' ? (res.why === 'bombas' ? 'DEMASIADAS BOMBAS' : '¡TIEMPO!') : 'STAR CATCHER'}
+          subtitle={phase === 'over' ? `Mejor racha: ${s.maxCombo}` : '60 segundos para atrapar estrellas'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.amber} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Arrastra la cesta para atrapar', '⭐ 1 · 💎 5 · 💣 quita vida', '🧲 imán · 🌈 ×2 · ❄️ congela · ❤️ vida', 'No dejar caer estrellas mantiene la racha'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 
@@ -6956,281 +6451,183 @@ function cr2_makeRows(speedMult) {
 }
 
 function CR2_CrossyRoad({ onExit }) {
-  const [frogPos, setFrogPos] = useState({ row: CR2_FROG_ROW_START, col: Math.floor(CR2_COLS / 2) });
-  const [score, setScore] = useState(0);
-  const [best, setBest] = useState(0);
-  const [dead, setDead] = useState(false);
-  const [rows, setRows] = useState(() => cr2_makeRows(1));
-  const [speedMult, setSpeedMult] = useState(1);
-  const vehiclePositions = useRef(null);
-  if (!vehiclePositions.current) {
-    vehiclePositions.current = rows.map(r => r.vehicles.map(v => v.col));
+  const COLS = 9, CELL = Math.floor(AREA_W / COLS), OX = (AREA_W - COLS * CELL) / 2;
+  const VIS = Math.ceil(AREA_H / CELL) + 2;
+  const fx = useFX();
+  const [best, submitBest] = useBest('crossy');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false, why: '' });
+  const CAR_COLORS = ['#ff4d6d', '#ffc233', '#22e6ff', '#7dff6b', '#9b6bff', '#ff8a3d'];
+
+  const genRow = (idx, prev) => {
+    if (idx < 3) return { type: 'grass', trees: [], coin: -1 };
+    const r = Math.random();
+    let type = 'grass';
+    if (prev && prev.type === 'grass') type = r < 0.5 ? 'road' : r < 0.74 ? 'river' : r < 0.84 ? 'rail' : 'grass';
+    else if (prev && prev.type === 'river') type = r < 0.3 ? 'river' : 'grass';
+    else if (prev && prev.type === 'road') type = r < 0.55 ? 'road' : 'grass';
+    const diff = Math.min(1, idx / 120);
+    if (type === 'grass') {
+      const trees = [];
+      const n = randInt(1, 3);
+      for (let i = 0; i < n; i++) { const c = randInt(0, COLS - 1); if (!trees.includes(c)) trees.push(c); }
+      return { type, trees, coin: Math.random() < 0.22 ? randInt(0, COLS - 1) : -1 };
+    }
+    const dir = prev && prev.type === type ? -prev.dir : (Math.random() < 0.5 ? 1 : -1);
+    if (type === 'road') {
+      const L = AREA_W + 220, n = randInt(2, 3), sp = rand(70, 120) + diff * 110;
+      const items = [];
+      for (let i = 0; i < n; i++) { const truck = Math.random() < 0.3; items.push({ x: i * (L / n) + rand(0, L / n * 0.35), w: truck ? CELL * 1.9 : CELL * 1.0, truck, color: pick(CAR_COLORS) }); }
+      return { type, dir, sp, L, items };
+    }
+    if (type === 'river') {
+      const L = AREA_W + 180, n = 3, sp = rand(45, 85) + diff * 50;
+      const items = [];
+      for (let i = 0; i < n; i++) items.push({ x: i * (L / n) + rand(0, 20), w: CELL * randInt(2, 3) });
+      return { type, dir, sp, L, items };
+    }
+    return { type: 'rail', dir, timer: rand(1, 4), period: rand(4, 6.5), train: null, warn: false };
+  };
+
+  const initState = () => {
+    const rows = []; let prev = null;
+    for (let i = 0; i < VIS + 6; i++) { const r = genRow(i, prev); rows.push(r); prev = r; }
+    return { rows, px: OX + 4 * CELL + CELL / 2, row: 1, cam: 0, maxRow: 1, started: false, hop: 0, hopFrom: { x: 0, y: 1 }, t: 0, score: 0, coins: 0, dead: null, scroll: 0.14 };
+  };
+  const g = useRef(null);
+  if (!g.current) g.current = initState();
+  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
+
+  const die = (s, why) => {
+    if (s.dead) return;
+    s.dead = why;
+    const y = AREA_H - (s.row - s.cam + 1) * CELL + CELL / 2;
+    fx.burst(s.px, y, why === 'water' ? C.cyan : C.red, 24, 260, 0.8, 5); fx.shake(9, 0.35); fx.flash(why === 'water' ? C.blue : C.red, 0.3); hx.die();
+    setRes({ isNew: submitBest(s.score), why });
+    setPhase('over');
+  };
+  const colOf = x => clamp(Math.round((x - OX - CELL / 2) / CELL), 0, COLS - 1);
+  const move = (dx, dy) => {
+    const s = g.current;
+    if (phase !== 'play' || s.dead) return;
+    let nrow = s.row + dy;
+    if (nrow < Math.floor(s.cam) ) { return; }
+    const cur = s.rows[s.row];
+    let nx = s.px;
+    if (dx) nx = clamp(s.px + dx * CELL, OX + CELL / 2, OX + COLS * CELL - CELL / 2);
+    else if (cur.type !== 'river' || s.rows[nrow].type !== 'river') nx = OX + colOf(s.px) * CELL + CELL / 2;
+    if (dx && cur.type !== 'river') nx = OX + colOf(nx) * CELL + CELL / 2;
+    const dest = s.rows[nrow];
+    if (!dest) return;
+    if (dest.type === 'grass' && dest.trees.includes(colOf(nx))) { fx.pop(nx, AREA_H - (s.row - s.cam + 1) * CELL, '🌲', C.dim, 16); hx.tick(); return; }
+    s.hopFrom = { x: s.px, y: s.row }; s.hop = 1;
+    s.px = nx; s.row = nrow;
+    hx.tap();
+    if (nrow > s.maxRow) { s.maxRow = nrow; s.score = (s.maxRow - 1) + s.coins * 5; s.started = true; }
+    while (s.rows.length < s.row + VIS + 4) s.rows.push(genRow(s.rows.length, s.rows[s.rows.length - 1]));
+    if (dest.type === 'grass' && dest.coin === colOf(nx)) { dest.coin = -1; s.coins += 1; s.score = (s.maxRow - 1) + s.coins * 5; fx.pop(nx, AREA_H - (nrow - s.cam + 1) * CELL, '+5', C.amber, 16); hx.good(); }
+  };
+
+  useLoop(phase === 'play', dt => {
+    const s = g.current;
+    if (s.dead) return;
+    s.t += dt;
+    if (s.hop > 0) s.hop = Math.max(0, s.hop - dt / 0.11);
+    // cámara: sigue al jugador y presiona con avance automático
+    const target = s.row - 4;
+    if (s.started) s.scroll = Math.min(0.7, 0.14 + s.t * 0.005);
+    s.cam = Math.max(s.cam + (s.started ? s.scroll * dt : 0), s.cam + (target - s.cam) * Math.min(1, dt * 5) * (target > s.cam ? 1 : 0));
+    if (s.row < Math.floor(s.cam)) { die(s, 'cámara'); return; }
+    const cur = s.rows[s.row];
+    // actualizar filas visibles
+    const lo = Math.max(0, Math.floor(s.cam) - 1), hi = Math.min(s.rows.length - 1, Math.ceil(s.cam) + VIS);
+    for (let i = lo; i <= hi; i++) {
+      const r = s.rows[i];
+      if (r.type === 'road' || r.type === 'river') r.items.forEach(it => {
+        it.x += r.dir * r.sp * dt;
+        if (r.dir > 0 && it.x > AREA_W + 110) it.x -= r.L;
+        if (r.dir < 0 && it.x + it.w < -110) it.x += r.L;
+      });
+      else if (r.type === 'rail') {
+        r.timer += dt;
+        r.warn = !r.train && r.timer > r.period - 1.4;
+        if (!r.train && r.timer >= r.period) { r.train = { x: r.dir > 0 ? -AREA_W * 1.3 : AREA_W, w: AREA_W * 1.3 }; hx.warn(); }
+        if (r.train) { r.train.x += r.dir * 900 * dt; if (r.train.x > AREA_W + 20 || r.train.x < -r.train.w - 20) { r.train = null; r.timer = 0; } }
+      }
+    }
+    const hw = CELL * 0.3;
+    if (cur.type === 'road') {
+      for (const c of cur.items) if (s.px + hw > c.x && s.px - hw < c.x + c.w) { die(s, 'coche'); return; }
+    } else if (cur.type === 'rail') {
+      if (cur.train && s.px + hw > cur.train.x && s.px - hw < cur.train.x + cur.train.w) { die(s, 'tren'); return; }
+    } else if (cur.type === 'river' && s.hop < 0.3) {
+      const log = cur.items.find(l => s.px > l.x - 2 && s.px < l.x + l.w + 2);
+      if (!log) { die(s, 'water'); return; }
+      s.px += cur.dir * cur.sp * dt;
+      if (s.px < OX || s.px > OX + COLS * CELL) { die(s, 'water'); return; }
+    }
+  });
+
+  const pan = usePan(fx, {
+    down: () => { const s = g.current; s.sx = null; s.used = false; },
+    move: (x, y, gs) => {
+      const s = g.current;
+      if (s.used) return;
+      if (Math.abs(gs.dx) > 22 || Math.abs(gs.dy) > 22) {
+        s.used = true;
+        if (Math.abs(gs.dx) > Math.abs(gs.dy)) move(gs.dx > 0 ? 1 : -1, 0); else if (gs.dy > 0) move(0, -1); else move(0, 1);
+      }
+    },
+    up: (x, y, gs) => { const s = g.current; if (!s.used && Math.abs(gs.dx) < 12 && Math.abs(gs.dy) < 12) move(0, 1); },
+  });
+
+  const s = g.current;
+  const rowY = i => AREA_H - (i - s.cam + 1) * CELL;
+  const lo = Math.max(0, Math.floor(s.cam) - 1), hi = Math.min(s.rows.length - 1, Math.ceil(s.cam) + VIS);
+  const py = s.hop > 0 ? lerp(rowY(s.row), rowY(s.hopFrom.y), s.hop) - Math.sin((1 - s.hop) * Math.PI) * 12 : rowY(s.row);
+  const pxv = s.hop > 0 ? lerp(s.px, s.hopFrom.x, s.hop) : s.px;
+  const rowEls = [];
+  for (let i = lo; i <= hi; i++) {
+    const r = s.rows[i]; const y = rowY(i);
+    const base = { position: 'absolute', left: 0, width: AREA_W, top: y, height: CELL };
+    if (r.type === 'grass') {
+      rowEls.push(<View key={`g${i}`} style={[base, { backgroundColor: i % 2 ? '#123a1c' : '#0f3318' }]}>
+        {r.trees.map(c => <Text key={c} style={{ position: 'absolute', left: OX + c * CELL, top: -2, width: CELL, textAlign: 'center', fontSize: CELL - 8, lineHeight: CELL }}>🌲</Text>)}
+        {r.coin >= 0 && <Text style={{ position: 'absolute', left: OX + r.coin * CELL, top: 0, width: CELL, textAlign: 'center', fontSize: CELL - 16, lineHeight: CELL }}>🪙</Text>}
+      </View>);
+    } else if (r.type === 'road') {
+      rowEls.push(<View key={`r${i}`} style={[base, { backgroundColor: '#1d1f2b' }]}>
+        <View style={{ position: 'absolute', left: 0, right: 0, top: CELL / 2 - 1, height: 2, backgroundColor: alpha('#ffffff', 0.12) }} />
+        {r.items.map((c, k) => <View key={k} style={{ position: 'absolute', left: c.x, top: 6, width: c.w, height: CELL - 12, borderRadius: 8, backgroundColor: c.color, ...glow(c.color, 6, 0.5) }}>
+          <View style={{ position: 'absolute', top: 4, bottom: 4, [r.dir > 0 ? 'right' : 'left']: 4, width: c.truck ? c.w * 0.28 : c.w * 0.32, borderRadius: 4, backgroundColor: 'rgba(8,10,24,0.65)' }} />
+        </View>)}
+      </View>);
+    } else if (r.type === 'river') {
+      rowEls.push(<View key={`w${i}`} style={[base, { backgroundColor: '#0b2a55' }]}>
+        {r.items.map((c, k) => <View key={k} style={{ position: 'absolute', left: c.x, top: 5, width: c.w, height: CELL - 10, borderRadius: 10, backgroundColor: '#8a5a2b', borderWidth: 2, borderColor: '#c28a4d' }} />)}
+      </View>);
+    } else {
+      rowEls.push(<View key={`t${i}`} style={[base, { backgroundColor: '#25222c' }]}>
+        <View style={{ position: 'absolute', left: 0, right: 0, top: CELL * 0.3, height: 2, backgroundColor: '#8a8a99' }} />
+        <View style={{ position: 'absolute', left: 0, right: 0, top: CELL * 0.7, height: 2, backgroundColor: '#8a8a99' }} />
+        {r.warn && <Text style={{ position: 'absolute', left: r.dir > 0 ? 6 : AREA_W - 34, top: 4, fontSize: 24, opacity: Math.floor(s.t * 8) % 2 ? 1 : 0.3 }}>🚨</Text>}
+        {r.train && <View style={{ position: 'absolute', left: r.train.x, top: 4, width: r.train.w, height: CELL - 8, borderRadius: 6, backgroundColor: '#c0392b', borderWidth: 2, borderColor: '#ff7a6b' }}>{[0.1, 0.3, 0.5, 0.7, 0.9].map(f => <View key={f} style={{ position: 'absolute', left: r.train.w * f, top: 5, width: 20, height: CELL - 22, backgroundColor: 'rgba(255,230,150,0.8)', borderRadius: 3 }} />)}</View>}
+      </View>);
+    }
   }
-  const animRef = useRef(null);
-  const lastTime = useRef(null);
-  const frogRef = useRef({ row: CR2_FROG_ROW_START, col: Math.floor(CR2_COLS / 2) });
-  const deadRef = useRef(false);
-  const rowsRef = useRef(rows);
-  const speedRef = useRef(1);
-  const scoreRef = useRef(0);
-  const [tick, setTick] = useState(0);
-
-  useEffect(() => {
-    AsyncStorage.getItem('cr2_best').then(v => { if (v) setBest(parseInt(v)); });
-  }, []);
-
-  useEffect(() => { rowsRef.current = rows; }, [rows]);
-  useEffect(() => { speedRef.current = speedMult; }, [speedMult]);
-
-  const checkCollision = (fRow, fCol) => {
-    if (fRow === 0 || fRow === CR2_ROWS - 1) return false;
-    const trafficRowIndex = fRow - 1;
-    if (trafficRowIndex < 0 || trafficRowIndex >= CR2_TRAFFIC_ROWS) return false;
-    const rowData = rowsRef.current[trafficRowIndex];
-    const positions = vehiclePositions.current[trafficRowIndex];
-    for (let vi = 0; vi < positions.length; vi++) {
-      const col = positions[vi];
-      const cellW = rowData.vehicles[vi].cellW;
-      const normalizedCol = ((col % CR2_COLS) + CR2_COLS) % CR2_COLS;
-      for (let c = 0; c < cellW; c++) {
-        if (((normalizedCol + c) % CR2_COLS) === fCol) return true;
-      }
-    }
-    return false;
-  };
-
-  useEffect(() => {
-    deadRef.current = dead;
-  }, [dead]);
-
-  useEffect(() => {
-    const loop = (timestamp) => {
-      if (deadRef.current) { animRef.current = null; return; }
-      if (!lastTime.current) lastTime.current = timestamp;
-      const delta = (timestamp - lastTime.current) / 16;
-      lastTime.current = timestamp;
-
-      const currentRows = rowsRef.current;
-      const sm = speedRef.current;
-      for (let i = 0; i < CR2_TRAFFIC_ROWS; i++) {
-        const row = currentRows[i];
-        const positions = vehiclePositions.current[i];
-        for (let vi = 0; vi < positions.length; vi++) {
-          positions[vi] = positions[vi] + row.dir * row.speed * sm * delta * 0.05;
-        }
-      }
-
-      const fp = frogRef.current;
-      if (checkCollision(fp.row, fp.col)) {
-        deadRef.current = true;
-        setDead(true);
-        deathVibrate();
-        return;
-      }
-
-      setTick(t => t + 1);
-      animRef.current = requestAnimationFrame(loop);
-    };
-    animRef.current = requestAnimationFrame(loop);
-    return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
-  }, []);
-
-  const move = (dr, dc) => {
-    if (dead) return;
-    setFrogPos(prev => {
-      const nr = Math.max(0, Math.min(CR2_ROWS - 1, prev.row + dr));
-      const nc = Math.max(0, Math.min(CR2_COLS - 1, prev.col + dc));
-      frogRef.current = { row: nr, col: nc };
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-      if (nr === 0) {
-        const ns = scoreRef.current + 1;
-        scoreRef.current = ns;
-        setScore(ns);
-        celebrateVibrate();
-        setBest(prev2 => {
-          const nb = Math.max(prev2, ns);
-          AsyncStorage.setItem('cr2_best', String(nb));
-          return nb;
-        });
-        const nm = 1 + ns * 0.12;
-        speedRef.current = nm;
-        setSpeedMult(nm);
-        const newRows = cr2_makeRows(nm);
-        rowsRef.current = newRows;
-        setRows(newRows);
-        vehiclePositions.current = newRows.map(r => r.vehicles.map(v => v.col));
-        const startPos = { row: CR2_FROG_ROW_START, col: Math.floor(CR2_COLS / 2) };
-        frogRef.current = startPos;
-        return startPos;
-      }
-
-      if (checkCollision(nr, nc)) {
-        deadRef.current = true;
-        setDead(true);
-        deathVibrate();
-      }
-      return { row: nr, col: nc };
-    });
-  };
-
-  const restart = () => {
-    const startPos = { row: CR2_FROG_ROW_START, col: Math.floor(CR2_COLS / 2) };
-    frogRef.current = startPos;
-    deadRef.current = false;
-    scoreRef.current = 0;
-    speedRef.current = 1;
-    const newRows = cr2_makeRows(1);
-    rowsRef.current = newRows;
-    vehiclePositions.current = newRows.map(r => r.vehicles.map(v => v.col));
-    setFrogPos(startPos);
-    setDead(false);
-    setScore(0);
-    setSpeedMult(1);
-    setRows(newRows);
-    lastTime.current = null;
-    animRef.current = requestAnimationFrame(function loop(ts) {
-      if (deadRef.current) { animRef.current = null; return; }
-      if (!lastTime.current) lastTime.current = ts;
-      const delta = (ts - lastTime.current) / 16;
-      lastTime.current = ts;
-      const currentRows = rowsRef.current;
-      const sm = speedRef.current;
-      for (let i = 0; i < CR2_TRAFFIC_ROWS; i++) {
-        const row = currentRows[i];
-        const positions = vehiclePositions.current[i];
-        for (let vi = 0; vi < positions.length; vi++) {
-          positions[vi] = positions[vi] + row.dir * row.speed * sm * delta * 0.05;
-        }
-      }
-      const fp = frogRef.current;
-      if (checkCollision(fp.row, fp.col)) {
-        deadRef.current = true;
-        setDead(true);
-        deathVibrate();
-        return;
-      }
-      setTick(t => t + 1);
-      animRef.current = requestAnimationFrame(loop);
-    });
-  };
-
-  const boardH = CR2_CELL * CR2_ROWS;
-
-  const renderGrid = () => {
-    const cells = [];
-    for (let r = 0; r < CR2_ROWS; r++) {
-      const isGrass = r === 0 || r === CR2_ROWS - 1;
-      const bgColor = isGrass ? '#2d6a2d' : (r % 2 === 0 ? '#555' : '#444');
-      cells.push(
-        <View key={r} style={{ flexDirection: 'row', height: CR2_CELL, backgroundColor: bgColor }}>
-          {Array.from({ length: CR2_COLS }, (_, c) => (
-            <View key={c} style={{ width: CR2_CELL, height: CR2_CELL, borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.05)' }} />
-          ))}
-        </View>
-      );
-    }
-    return cells;
-  };
-
-  const renderVehicles = () => {
-    const els = [];
-    for (let i = 0; i < CR2_TRAFFIC_ROWS; i++) {
-      const rowData = rows[i];
-      const positions = vehiclePositions.current[i];
-      const rowIndex = i + 1;
-      for (let vi = 0; vi < positions.length; vi++) {
-        const rawCol = positions[vi];
-        const col = ((rawCol % CR2_COLS) + CR2_COLS) % CR2_COLS;
-        const x = col * CR2_CELL;
-        const y = rowIndex * CR2_CELL;
-        const w = rowData.vehicles[vi].cellW * CR2_CELL;
-        els.push(
-          <View key={`v-${i}-${vi}`} style={{
-            position: 'absolute', left: x, top: y,
-            width: w, height: CR2_CELL,
-            justifyContent: 'center', alignItems: 'center',
-          }}>
-            <Text style={{ fontSize: CR2_CELL * 0.65 }}>{rowData.vehicles[vi].emoji}</Text>
-          </View>
-        );
-        if (col + rowData.vehicles[vi].cellW > CR2_COLS) {
-          const overflowX = (col - CR2_COLS) * CR2_CELL;
-          els.push(
-            <View key={`v-${i}-${vi}-ov`} style={{
-              position: 'absolute', left: overflowX, top: y,
-              width: w, height: CR2_CELL,
-              justifyContent: 'center', alignItems: 'center',
-            }}>
-              <Text style={{ fontSize: CR2_CELL * 0.65 }}>{rowData.vehicles[vi].emoji}</Text>
-            </View>
-          );
-        }
-      }
-    }
-    return els;
-  };
-
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#1a1a2e' }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 }}>
-        <Pressable onPress={onExit} style={{ padding: 8 }}>
-          <Text style={{ color: '#aaa', fontSize: 15 }}>✕ Salir</Text>
-        </Pressable>
-        <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>🐸 Rana Veloz</Text>
-        <View style={{ alignItems: 'flex-end' }}>
-          <Text style={{ color: '#FFD700', fontSize: 16, fontWeight: 'bold' }}>Pts: {score}</Text>
-          <Text style={{ color: '#aaa', fontSize: 12 }}>Mejor: {best}</Text>
-        </View>
-      </View>
-
-      <View style={{ alignItems: 'center', marginTop: 4 }}>
-        <View style={{ width: CR2_CELL * CR2_COLS, height: boardH, position: 'relative', overflow: 'hidden' }}>
-          {renderGrid()}
-          {renderVehicles()}
-          <View style={{
-            position: 'absolute',
-            left: frogPos.col * CR2_CELL,
-            top: frogPos.row * CR2_CELL,
-            width: CR2_CELL, height: CR2_CELL,
-            justifyContent: 'center', alignItems: 'center',
-            zIndex: 10,
-          }}>
-            <Text style={{ fontSize: CR2_CELL * 0.7 }}>🐸</Text>
-          </View>
-          {dead && (
-            <View style={{
-              position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.72)',
-              justifyContent: 'center', alignItems: 'center',
-            }}>
-              <Text style={{ fontSize: 36, marginBottom: 8 }}>💀</Text>
-              <Text style={{ color: '#fff', fontSize: 22, fontWeight: 'bold', marginBottom: 4 }}>¡Aplastado!</Text>
-              <Text style={{ color: '#FFD700', fontSize: 16, marginBottom: 16 }}>Puntos: {score}  |  Mejor: {best}</Text>
-              <Pressable onPress={restart} style={{ backgroundColor: '#4CAF50', paddingHorizontal: 32, paddingVertical: 12, borderRadius: 12 }}>
-                <Text style={{ color: '#fff', fontSize: 18, fontWeight: 'bold' }}>Reintentar</Text>
-              </Pressable>
-            </View>
-          )}
-        </View>
-      </View>
-
-      <View style={{ alignItems: 'center', marginTop: 12 }}>
-        <Pressable onPress={() => move(-1, 0)} style={{ backgroundColor: '#2196F3', width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center', marginBottom: 6 }}>
-          <Text style={{ color: '#fff', fontSize: 28 }}>▲</Text>
-        </Pressable>
-        <View style={{ flexDirection: 'row', gap: 12 }}>
-          <Pressable onPress={() => move(0, -1)} style={{ backgroundColor: '#2196F3', width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center' }}>
-            <Text style={{ color: '#fff', fontSize: 28 }}>◀</Text>
-          </Pressable>
-          <Pressable onPress={() => move(1, 0)} style={{ backgroundColor: '#2196F3', width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center' }}>
-            <Text style={{ color: '#fff', fontSize: 28 }}>▼</Text>
-          </Pressable>
-          <Pressable onPress={() => move(0, 1)} style={{ backgroundColor: '#2196F3', width: 64, height: 64, borderRadius: 32, justifyContent: 'center', alignItems: 'center' }}>
-            <Text style={{ color: '#fff', fontSize: 28 }}>▶</Text>
-          </Pressable>
-        </View>
-      </View>
-    </SafeAreaView>
+    <GameScreen title="CROSSY ROAD" emoji="🐸" accent={C.lime} onExit={onExit} score={s.score} best={best}
+      hud={<><Text style={{ color: C.dim, fontSize: 12 }}>Monedas <Text style={{ color: C.amber, fontWeight: '800' }}>{s.coins}</Text></Text><Text style={{ color: C.dim, fontSize: 12 }}>Toca: avanzar · Desliza: moverte</Text></>}>
+      <PlayArea fx={fx} bg="#0f3318" border={alpha(C.lime, 0.35)} {...pan}>
+        {rowEls}
+        {!s.dead && <Text style={{ position: 'absolute', left: pxv - CELL / 2, top: py - 2, width: CELL, textAlign: 'center', fontSize: CELL - 8, lineHeight: CELL, ...tglow('#000', 4) }}>🐸</Text>}
+        {phase === 'play' && s.started && s.row - s.cam < 1.6 && <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 28, backgroundColor: alpha(C.red, 0.35) }} />}
+        <Overlay show={phase !== 'play'} kind={phase} emoji="🐸" title={phase === 'over' ? (res.why === 'water' ? '¡AL AGUA!' : res.why === 'tren' ? '¡ARROLLADO POR UN TREN!' : res.why === 'cámara' ? '¡TE ALCANZARON!' : '¡ATROPELLADO!') : 'CROSSY ROAD'}
+          subtitle={phase === 'over' ? `Avanzaste ${s.maxRow - 1} filas` : 'Cruza calles, ríos y vías'}
+          score={s.score} best={best} isNew={res.isNew} accent={C.lime} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Toca para avanzar · desliza para moverte', 'Sube a los troncos para cruzar el río', 'Cuidado con los trenes (🚨) · la pantalla te empuja', '🪙 da +5 puntos'] : null} />
+      </PlayArea>
+    </GameScreen>
   );
 }
 
