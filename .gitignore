@@ -3,3 +3,6 @@ node_modules/
 .expo-shared/
 *.log
 .DS_Store
+
+# worktrees de agentes locales
+.claude/worktrees/
