@@ -1724,16 +1724,18 @@ function PingPong({ onExit }) {
   });
   const pan = usePan(fx, { down: x => { g.current.px = clamp(x, PW0 / 2, AREA_W - PW0 / 2); }, move: x => { g.current.px = clamp(x, PW0 / 2, AREA_W - PW0 / 2); } });
   const s = g.current;
+  const sprites = [
+    { x: 0, y: AREA_H / 2 - 1, w: AREA_W, h: 2, s: 't', c: C.blue, a: 0.35 },
+    ...s.trail.map(p => ({ x: p.x - BR * 0.7, y: p.y - BR * 0.7, w: BR * 1.4, h: BR * 1.4, d: 4, s: 'o', c: C.blue, a: Math.max(0, p.a * 0.6) })),
+    { x: s.ax - PW0 / 2, y: AY, w: PW0, h: PH, d: 14, s: 'b', c: C.pink, e: 0.5 },
+    { x: s.px - PW0 / 2, y: PY, w: PW0, h: PH, d: 14, s: 'b', c: C.cyan, e: 0.5 },
+    { x: s.ball.x - BR, y: s.ball.y - BR, w: BR * 2, h: BR * 2, d: BR * 2, s: 'o', c: '#ffffff', e: 0.8 },
+  ];
   return (
     <GameScreen title="PING PONG" emoji="🏓" accent={C.blue} onExit={onExit} score={s.total} best={best} scoreLabel="PUNTOS"
       hud={<><Text style={{ color: C.dim, fontSize: 12 }}>Nivel IA <Text style={{ color: C.blue, fontWeight: '800' }}>{s.level}</Text></Text><Text style={{ color: C.text, fontSize: 16, fontWeight: '900' }}><Text style={{ color: C.cyan }}>{s.me}</Text> - <Text style={{ color: C.pink }}>{s.ai}</Text></Text><Text style={{ color: C.dim, fontSize: 12 }}>Racha <Text style={{ color: C.amber, fontWeight: '800' }}>{s.rally}</Text></Text></>}>
       <PlayArea fx={fx} bg="#050a1c" border={alpha(C.blue, 0.4)} {...pan}>
-        <View style={{ position: 'absolute', left: 0, right: 0, top: AREA_H / 2 - 1, height: 2, backgroundColor: alpha(C.blue, 0.35) }} />
-        <View style={{ position: 'absolute', left: AREA_W / 2 - 40, top: AREA_H / 2 - 40, width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: alpha(C.blue, 0.25) }} />
-        {s.trail.map((p, i) => <View key={i} style={{ position: 'absolute', left: p.x - BR * 0.7, top: p.y - BR * 0.7, width: BR * 1.4, height: BR * 1.4, borderRadius: BR, backgroundColor: C.blue, opacity: Math.max(0, p.a * 0.6) }} />)}
-        <View style={{ position: 'absolute', left: s.ax - PW0 / 2, top: AY, width: PW0, height: PH, borderRadius: 6, backgroundColor: C.pink, ...glow(C.pink, 12, 0.9) }} />
-        <View style={{ position: 'absolute', left: s.px - PW0 / 2, top: PY, width: PW0, height: PH, borderRadius: 6, backgroundColor: C.cyan, ...glow(C.cyan, 12, 0.9) }} />
-        <View style={{ position: 'absolute', left: s.ball.x - BR, top: s.ball.y - BR, width: BR * 2, height: BR * 2, borderRadius: BR, backgroundColor: '#fff', ...glow('#fff', 12, 1) }} />
+        <Arena3D fx={fx} bg="#050a1c" sprites={sprites} />
         {s.banner && <Text style={{ position: 'absolute', top: AREA_H * 0.3, width: AREA_W, textAlign: 'center', color: C.text, fontSize: 20, fontWeight: '900', letterSpacing: 2, opacity: Math.min(1, s.banner.t), ...tglow(C.blue, 12) }}>{s.banner.text}</Text>}
         <Overlay show={phase !== 'play'} kind={phase} emoji="🏓" title={phase === 'over' ? 'PARTIDO PERDIDO' : 'PING PONG'}
           subtitle={phase === 'over' ? `Llegaste al nivel ${s.level} de IA` : 'Gana partidos a 7 contra una IA cada vez mejor'}
@@ -1870,7 +1872,7 @@ function Breakout({ onExit }) {
     <GameScreen title="BREAKOUT" emoji="🧱" accent={C.orange} onExit={onExit} score={s.score} best={best}
       hud={<><Lives n={s.lives} max={Math.max(3, s.lives)} /><Text style={{ color: C.dim, fontSize: 12 }}>Nivel <Text style={{ color: C.orange, fontWeight: '800' }}>{s.level}</Text></Text><View style={{ minWidth: 60, alignItems: 'flex-end' }}>{s.combo > 1 ? <Combo n={s.combo} color={C.orange} /> : <Text style={{ color: C.cyan, fontSize: 12, fontWeight: '800' }}>{s.fire > 0 ? '🔥' : ''}{s.wide > 0 ? '↔' : ''}</Text>}</View></>}>
       <PlayArea fx={fx} bg="#0b0604" {...pan}>
-        <Arena3D bg="#0b0604" shake={fx.shakeT > 0 ? fx.shakeMag * (fx.shakeT / fx.shakeDur) : 0} sprites={sprites} />
+        <Arena3D fx={fx} bg="#0b0604" sprites={sprites} />
         {s.balls.some(b => b.stuck) && phase === 'play' && <Text pointerEvents="none" style={{ position: 'absolute', top: PY - 60, width: AREA_W, textAlign: 'center', color: C.dim, fontSize: 12, fontWeight: '800', letterSpacing: 2 }}>TOCA PARA LANZAR</Text>}
         {s.banner && <Text style={{ position: 'absolute', top: AREA_H * 0.55, width: AREA_W, textAlign: 'center', color: C.text, fontSize: 24, fontWeight: '900', letterSpacing: 3, opacity: Math.min(1, s.banner.t), ...tglow(C.orange, 12) }}>{s.banner.text}</Text>}
         <Overlay show={phase !== 'play'} kind={phase} emoji="🧱" title={phase === 'over' ? 'GAME OVER' : 'BREAKOUT'}
@@ -5774,9 +5776,9 @@ function HoldBtn({ testID, hold, k, label, color, style }) {
 
 // Motor 3D genérico: cada juego pasa su lista de objetos 2D y se dibujan en 3D
 const arenaCreate = o => createArena({ ...o, W: AREA_W, H: AREA_H });
-function Arena3D({ sprites, bg, shake }) {
+function Arena3D({ sprites, bg, fx }) {
   const store = useRef({}).current;
-  store.sprites = sprites; store.bg = bg; store.shake = shake;
+  store.sprites = sprites; store.bg = bg; store.shake = fx && fx.shakeT > 0 ? fx.shakeMag * (fx.shakeT / fx.shakeDur) : 0;
   const getState = useRef(() => store).current;
   const [fail, setFail] = useState(null);
   if (fail != null || !getGLView()) return <NoGL accent={C.cyan} err={fail || ''} onRetry={fail != null ? () => setFail(null) : null} />;
