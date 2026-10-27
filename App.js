@@ -5470,6 +5470,9 @@ function owShade(c, light, fog, fogC) {
   const r = Math.round(lerp(c[0] * light, fogC[0], f)), g = Math.round(lerp(c[1] * light, fogC[1], f)), b = Math.round(lerp(c[2] * light, fogC[2], f));
   return `rgb(${r},${g},${b})`;
 }
+// En iOS el framebuffer de expo-gl es multisample (MSAA) y readPixels siempre devuelve negro,
+// así que la prueba de "pantalla vacía" solo es fiable en web.
+const GL_PROBE = Platform.OS === 'web';
 function owStick(R) {
   const v = useRef({ x: 0, y: 0, on: false }).current;
   const pr = useRef(null);
@@ -5644,7 +5647,7 @@ function OpenWorld3D({ onExit }) {
       glRef.current = world; let n = 0;
       const tick = () => {
         if (stop.v) { world.dispose(); return; }
-        try { world.sync(g.current); world.render(); n += 1; if (n === 14 && !world.probe()) throw new Error('pantalla vacía'); } catch (e) { stop.v = true; glRef.current = null; setGlFail(true); return; }
+        try { world.sync(g.current); world.render(); n += 1; if (n === 14 && GL_PROBE && !world.probe()) throw new Error('pantalla vacía'); } catch (e) { stop.v = true; glRef.current = null; setGlFail(true); return; }
         requestAnimationFrame(tick);
       };
       tick();
@@ -5745,21 +5748,23 @@ function GL3D({ create, getState, onFail }) {
       let n = 0;
       const tick = () => {
         if (st.v) { scene.dispose(); return; }
-        try { scene.frame(); if (gl.endFrameEXP) gl.endFrameEXP(); n += 1; if (n === 14 && !scene.probe()) throw new Error('pantalla vacía'); } catch (e) { st.v = true; onFail(); return; }
+        try { scene.frame(); if (gl.endFrameEXP) gl.endFrameEXP(); n += 1; if (n === 14 && GL_PROBE && !scene.probe()) throw new Error('pantalla vacía'); } catch (e) { st.v = true; onFail(String((e && e.message) || e)); return; }
         requestAnimationFrame(tick);
       };
       tick();
-    } catch (e) { onFail(); }
+    } catch (e) { onFail(String((e && e.message) || e)); }
   };
   if (!GLV) return null;
   return <GLV style={StyleSheet.absoluteFill} onContextCreate={onCtx} />;
 }
-function NoGL({ accent }) {
+function NoGL({ accent, err, onRetry }) {
   return (
-    <View style={{ ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+    <View style={{ ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: 'rgba(10,10,20,0.9)' }}>
       <Text style={{ fontSize: 48 }}>🛠️</Text>
       <Text style={{ color: accent, fontWeight: '900', fontSize: 16, marginTop: 8, textAlign: 'center' }}>Este juego necesita gráficos 3D (OpenGL)</Text>
-      <Text style={{ color: C.dim, fontSize: 12, marginTop: 6, textAlign: 'center' }}>Tu dispositivo no pudo iniciar la GPU. Prueba cerrar y abrir la app.</Text>
+      <Text style={{ color: C.dim, fontSize: 12, marginTop: 6, textAlign: 'center' }}>No se pudo iniciar la GPU. Prueba reintentar o cerrar y abrir la app.</Text>
+      {!!err && <Text selectable style={{ color: C.red, fontSize: 10, marginTop: 8, textAlign: 'center' }}>{err.slice(0, 220)}</Text>}
+      {onRetry && <View style={{ marginTop: 12 }}><Btn testID="gl-retry" label="🔄 REINTENTAR" small ghost color={accent} onPress={onRetry} /></View>}
     </View>
   );
 }
@@ -5837,7 +5842,7 @@ function Moto3D({ onExit }) {
     <GameScreen title="MOTO 3D" emoji="🏍️" accent={C.orange} onExit={onExit} score={sc} best={best}
       hud={<><Text style={{ color: C.text, fontWeight: '900', fontSize: 12 }}>🛣️ {(s.dist / 1000).toFixed(2)} km</Text><Text style={{ color: C.amber, fontWeight: '900', fontSize: 12 }}>🔥 x{s.near}</Text><Bar value={s.nitro} max={100} color={C.cyan} w={70} /></>}>
       <PlayArea fx={fx} bg="#f3a77a">
-        {useGL ? <GL3D create={createMoto} getState={getState} onFail={() => setGlFail(true)} /> : <NoGL accent={C.orange} />}
+        {useGL ? <GL3D create={createMoto} getState={getState} onFail={m => setGlFail(m || 'error')} /> : <NoGL accent={C.orange} err={glFail || ''} onRetry={glFail ? () => setGlFail(false) : null} />}
         {s.turbo > 0 && <View pointerEvents="none" style={{ ...StyleSheet.absoluteFillObject, borderWidth: 10, borderColor: 'rgba(34,230,255,0.25)' }} />}
         {s.offroad && phase === 'play' && <Text pointerEvents="none" style={{ position: 'absolute', top: 54, width: AREA_W, textAlign: 'center', color: C.amber, fontWeight: '900', fontSize: 14, ...tglow('#000', 6) }}>⚠️ ¡FUERA DE LA PISTA!</Text>}
         {s.toast && <Text pointerEvents="none" style={{ position: 'absolute', top: AREA_H * 0.3, width: AREA_W, textAlign: 'center', color: '#fff', fontWeight: '900', fontSize: 24, ...tglow(C.amber, 10) }}>{s.toast.m}</Text>}
@@ -5938,7 +5943,7 @@ function Plane3D({ onExit }) {
     <GameScreen title="AVIÓN 3D" emoji="✈️" accent={C.blue} onExit={onExit} score={sc} best={best}
       hud={<><Text style={{ color: C.text, fontWeight: '900', fontSize: 12 }}>⭕ {s.rings}  🔥 x{s.combo}</Text><Text style={{ color: s.fuel < 25 ? C.red : C.amber, fontWeight: '900', fontSize: 12 }}>⛽</Text><Bar value={s.fuel} max={100} color={s.fuel < 25 ? C.red : C.amber} w={80} /></>}>
       <PlayArea fx={fx} bg="#bfe3ff">
-        {useGL ? <GL3D create={createPlane} getState={getState} onFail={() => setGlFail(true)} /> : <NoGL accent={C.blue} />}
+        {useGL ? <GL3D create={createPlane} getState={getState} onFail={m => setGlFail(m || 'error')} /> : <NoGL accent={C.blue} err={glFail || ''} onRetry={glFail ? () => setGlFail(false) : null} />}
         {s.toast && <Text pointerEvents="none" style={{ position: 'absolute', top: AREA_H * 0.22, width: AREA_W, textAlign: 'center', color: '#fff', fontWeight: '900', fontSize: 22, ...tglow('#000', 8) }}>{s.toast.m}</Text>}
         {s.fuel < 25 && phase === 'play' && <Text pointerEvents="none" style={{ position: 'absolute', top: 12, width: AREA_W, textAlign: 'center', color: C.red, fontWeight: '900', fontSize: 13, opacity: Math.sin(s.t * 10) > 0 ? 1 : 0.3, ...tglow('#000', 6) }}>⛽ ¡COMBUSTIBLE BAJO! Pasa por los anillos</Text>}
         {/* mira y flecha al próximo anillo */}
