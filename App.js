@@ -22,6 +22,7 @@ import {
 import { OW_COL, OW_H, OW_N, owGen } from './utils/ow';
 import { createGLWorld } from './utils/gl3d';
 import { createMoto, createPlane } from './utils/gl3dx';
+import { createArena } from './utils/arena3d';
 import { ACHIEVEMENTS, Profile, ToastHost, levelInfo, toast, useProfile, useSettings } from './utils/meta';
 
 const { width, height } = Dimensions.get('window');
@@ -1859,15 +1860,17 @@ function Breakout({ onExit }) {
   });
   const s = g.current;
   const ITEMC = { W: [C.cyan, '↔'], M: [C.pink, '✱'], F: [C.orange, '🔥'], L: [C.red, '❤'], S: [C.violet, '❄'] };
+  const sprites = [
+    ...s.bricks.map(k => ({ x: k.x, y: k.y, w: BW, h: BH, d: 10 + (k.hp / k.max) * 12, s: 'b', c: `hsl(${k.hue},90%,${40 + (k.hp / k.max) * 18}%)`, e: 0.12 })),
+    ...s.items.map(it => ({ x: it.x - 13, y: it.y - 13, w: 26, h: 26, d: 26, s: 'o', c: ITEMC[it.k][0], e: 0.5 })),
+    { x: s.px - s.pw / 2, y: PY, w: s.pw, h: 12, d: 10, s: 'b', c: s.wide > 0 ? C.cyan : '#ffffff', e: 0.4 },
+    ...s.balls.map(b => ({ x: b.x - BR, y: b.y - BR, w: BR * 2, h: BR * 2, d: BR * 2, s: 'o', c: s.fire > 0 ? C.orange : '#ffffff', e: 0.6 })),
+  ];
   return (
     <GameScreen title="BREAKOUT" emoji="🧱" accent={C.orange} onExit={onExit} score={s.score} best={best}
       hud={<><Lives n={s.lives} max={Math.max(3, s.lives)} /><Text style={{ color: C.dim, fontSize: 12 }}>Nivel <Text style={{ color: C.orange, fontWeight: '800' }}>{s.level}</Text></Text><View style={{ minWidth: 60, alignItems: 'flex-end' }}>{s.combo > 1 ? <Combo n={s.combo} color={C.orange} /> : <Text style={{ color: C.cyan, fontSize: 12, fontWeight: '800' }}>{s.fire > 0 ? '🔥' : ''}{s.wide > 0 ? '↔' : ''}</Text>}</View></>}>
       <PlayArea fx={fx} bg="#0b0604" {...pan}>
-        <GridBg color={C.orange} step={46} />
-        {s.bricks.map(k => <View key={k.id} style={{ position: 'absolute', left: k.x, top: k.y, width: BW, height: BH, borderRadius: 5, backgroundColor: `hsla(${k.hue},90%,${40 + (k.hp / k.max) * 18}%,${0.5 + 0.5 * (k.hp / k.max)})`, borderWidth: 1.5, borderColor: `hsl(${k.hue},95%,62%)`, ...glow(`hsl(${k.hue},95%,55%)`, 6, 0.5) }}>{k.max > 1 && <Text style={{ color: '#fff', fontSize: 10, fontWeight: '900', textAlign: 'center', lineHeight: BH - 3 }}>{k.hp}</Text>}</View>)}
-        {s.items.map(it => <View key={it.id} style={{ position: 'absolute', left: it.x - 13, top: it.y - 13, width: 26, height: 26, borderRadius: 13, backgroundColor: alpha(ITEMC[it.k][0], 0.25), borderWidth: 2, borderColor: ITEMC[it.k][0], alignItems: 'center', justifyContent: 'center', ...glow(ITEMC[it.k][0], 8, 0.8) }}><Text style={{ fontSize: 12, color: '#fff', fontWeight: '900' }}>{ITEMC[it.k][1]}</Text></View>)}
-        <View style={{ position: 'absolute', left: s.px - s.pw / 2, top: PY, width: s.pw, height: 12, borderRadius: 6, backgroundColor: s.wide > 0 ? C.cyan : '#fff', ...glow(s.wide > 0 ? C.cyan : C.orange, 12, 0.9) }} />
-        {s.balls.map((b, i) => <View key={i} style={{ position: 'absolute', left: b.x - BR, top: b.y - BR, width: BR * 2, height: BR * 2, borderRadius: BR, backgroundColor: s.fire > 0 ? C.orange : '#fff', ...glow(s.fire > 0 ? C.orange : '#fff', 12, 1) }} />)}
+        <Arena3D bg="#0b0604" shake={fx.shakeT > 0 ? fx.shakeMag * (fx.shakeT / fx.shakeDur) : 0} sprites={sprites} />
         {s.balls.some(b => b.stuck) && phase === 'play' && <Text pointerEvents="none" style={{ position: 'absolute', top: PY - 60, width: AREA_W, textAlign: 'center', color: C.dim, fontSize: 12, fontWeight: '800', letterSpacing: 2 }}>TOCA PARA LANZAR</Text>}
         {s.banner && <Text style={{ position: 'absolute', top: AREA_H * 0.55, width: AREA_W, textAlign: 'center', color: C.text, fontSize: 24, fontWeight: '900', letterSpacing: 3, opacity: Math.min(1, s.banner.t), ...tglow(C.orange, 12) }}>{s.banner.text}</Text>}
         <Overlay show={phase !== 'play'} kind={phase} emoji="🧱" title={phase === 'over' ? 'GAME OVER' : 'BREAKOUT'}
@@ -5767,6 +5770,17 @@ function HoldBtn({ testID, hold, k, label, color, style }) {
       </View>
     </TouchBtn>
   );
+}
+
+// Motor 3D genérico: cada juego pasa su lista de objetos 2D y se dibujan en 3D
+const arenaCreate = o => createArena({ ...o, W: AREA_W, H: AREA_H });
+function Arena3D({ sprites, bg, shake }) {
+  const store = useRef({}).current;
+  store.sprites = sprites; store.bg = bg; store.shake = shake;
+  const getState = useRef(() => store).current;
+  const [fail, setFail] = useState(null);
+  if (fail != null || !getGLView()) return <NoGL accent={C.cyan} err={fail || ''} onRetry={fail != null ? () => setFail(null) : null} />;
+  return <GL3D create={arenaCreate} getState={getState} onFail={m => setFail(m || 'error')} />;
 }
 
 // ═══════════════════════════════════════════════════════════════════
