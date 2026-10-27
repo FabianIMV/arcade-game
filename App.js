@@ -22,6 +22,7 @@ import {
 } from './utils/kit';
 import { OW_COL, OW_H, OW_N, owGen } from './utils/ow';
 import { createGLWorld } from './utils/gl3d';
+import { createMoto, createPlane } from './utils/gl3dx';
 import { ACHIEVEMENTS, Profile, ToastHost, levelInfo, toast, useProfile, useSettings } from './utils/meta';
 
 const { width, height } = Dimensions.get('window');
@@ -5728,6 +5729,257 @@ function OpenWorld3D({ onExit }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// HOST 3D COMPARTIDO (three.js sobre expo-gl) para MOTO 3D y AVIÓN 3D
+// ═══════════════════════════════════════════════════════════════════
+let _GLV;
+const getGLView = () => { if (_GLV === undefined) { try { _GLV = require('expo-gl').GLView; require('three'); } catch (e) { _GLV = null; } } return _GLV; };
+function GL3D({ create, getState, onFail }) {
+  const GLV = getGLView();
+  const stop = useRef(null);
+  useEffect(() => () => { if (stop.current) stop.current.v = true; }, []);
+  const onCtx = gl => {
+    const st = { v: false }; stop.current = st;
+    try {
+      const THREE = require('three');
+      const scene = create({ gl, THREE, getState, aspect: AREA_W / AREA_H });
+      let n = 0;
+      const tick = () => {
+        if (st.v) { scene.dispose(); return; }
+        try { scene.frame(); if (gl.endFrameEXP) gl.endFrameEXP(); n += 1; if (n === 14 && !scene.probe()) throw new Error('pantalla vacía'); } catch (e) { st.v = true; onFail(); return; }
+        requestAnimationFrame(tick);
+      };
+      tick();
+    } catch (e) { onFail(); }
+  };
+  if (!GLV) return null;
+  return <GLV style={StyleSheet.absoluteFill} onContextCreate={onCtx} />;
+}
+function NoGL({ accent }) {
+  return (
+    <View style={{ ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <Text style={{ fontSize: 48 }}>🛠️</Text>
+      <Text style={{ color: accent, fontWeight: '900', fontSize: 16, marginTop: 8, textAlign: 'center' }}>Este juego necesita gráficos 3D (OpenGL)</Text>
+      <Text style={{ color: C.dim, fontSize: 12, marginTop: 6, textAlign: 'center' }}>Tu dispositivo no pudo iniciar la GPU. Prueba cerrar y abrir la app.</Text>
+    </View>
+  );
+}
+// botón de mantener pulsado (multi-touch)
+function HoldBtn({ testID, hold, k, label, color, style }) {
+  const on = hold[k];
+  return (
+    <Pressable testID={testID} onPressIn={() => { hold[k] = true; }} onPressOut={() => { hold[k] = false; }} style={style}>
+      <View style={{ flex: 1, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: on ? alpha(color, 0.42) : 'rgba(0,0,0,0.28)', borderWidth: 2, borderColor: alpha(color, on ? 1 : 0.6) }}>
+        <Text style={{ color: '#fff', fontSize: 22, fontWeight: '900', ...tglow(color, 6) }}>{label}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MOTO 3D – carretera infinita en primera persona
+// ═══════════════════════════════════════════════════════════════════
+const MT_LANES = [-5.4, -1.8, 1.8, 5.4];          // izq: sentido contrario · der: tu sentido
+const MT_COLORS = [0xe63946, 0x2a9df4, 0xffc233, 0x8ac926, 0xf5f5f5, 0x6a4c93, 0xff7f11, 0x222831];
+function Moto3D({ onExit }) {
+  const fx = useFX();
+  const [best, submitBest] = useBest('moto3d');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false });
+  const [glFail, setGlFail] = useState(false);
+  const hold = useRef({ l: false, r: false, brake: false, nitro: false }).current;
+  const init = () => ({ z: 0, x: 3.6, speed: 0, lean: 0, cars: [], turbo: 0, nitro: 40, offroad: false, t: 0, dist: 0, bonus: 0, near: 0, spawnT: 0, toast: null, final: null });
+  const g = useRef(null);
+  if (!g.current) g.current = init();
+  const getState = useRef(() => g.current).current;
+  const start = () => { fx.clear(); g.current = init(); g.current.speed = 14; setPhase('play'); hx.tap(); };
+  const crash = s => { s.speed = 0; s.final = Math.floor(s.dist / 2) + s.bonus; hx.die(); fx.shake(14, 0.5); fx.flash(C.red, 0.5); setRes({ isNew: submitBest(s.final) }); setPhase('over'); };
+  useLoop(phase === 'play', dt => {
+    const s = g.current; s.t += dt;
+    if (s.toast) { s.toast.t -= dt; if (s.toast.t <= 0) s.toast = null; }
+    const maxSp = Math.min(62, 36 + s.t * 0.35);
+    const useNitro = hold.nitro && s.nitro > 0;
+    if (useNitro) { s.nitro = Math.max(0, s.nitro - 30 * dt); s.turbo = 0.3; } else s.turbo = Math.max(0, s.turbo - dt);
+    const target = hold.brake ? 12 : s.offroad ? 16 : useNitro ? maxSp * 1.35 : maxSp;
+    s.speed += clamp(target - s.speed, -32 * dt, (useNitro ? 22 : 8) * dt);
+    const dir = (hold.r ? 1 : 0) - (hold.l ? 1 : 0);
+    s.lean = lerp(s.lean, dir, Math.min(1, dt * 6));
+    s.x = clamp(s.x + s.lean * (7 + s.speed * 0.16) * dt, -9.5, 9.5);
+    s.offroad = Math.abs(s.x) > 7.2;
+    const dz = s.speed * dt; s.z += dz; s.dist += dz;
+    // tráfico
+    s.spawnT -= dt;
+    if (s.spawnT <= 0) {
+      s.spawnT = Math.max(0.35, 1.1 - s.t * 0.012) * rand(0.6, 1.3);
+      const lane = pick(MT_LANES); const onc = lane < 0;
+      const far = s.z + (onc ? rand(240, 290) : rand(200, 250));
+      if (!s.cars.some(c => c.x === lane && Math.abs(c.z - far) < 22)) s.cars.push({ id: uid(), x: lane, z: far, v: onc ? -rand(16, 26) : rand(9, 18), color: pick(MT_COLORS), passed: false });
+    }
+    for (const c of s.cars) {
+      const prevRel = c.z - (s.z - dz); c.z += c.v * dt;
+      // los autos de tu carril frenan si alcanzan a otro
+      if (c.v > 0) for (const o of s.cars) if (o !== c && o.x === c.x && o.z > c.z && o.z - c.z < 9) c.v = Math.min(c.v, o.v);
+      const rel = c.z - s.z, dx = Math.abs(c.x - s.x);
+      if (dx < 1.3 && (Math.abs(rel) < 2.3 || (prevRel > 0) !== (rel > 0))) { crash(s); return; }
+      if (!c.passed && rel < -2.3) {
+        c.passed = true;
+        if (dx < 2.7) { s.near += 1; const b = 50 * s.near; s.bonus += b; s.nitro = Math.min(100, s.nitro + 12); s.toast = { m: `¡ROCE! +${b}`, t: 1 }; hx.good(); fx.flash(C.amber, 0.12); }
+      }
+    }
+    s.cars = s.cars.filter(c => { const rel = c.z - s.z; return rel > -30 && rel < 320; });
+    if (s.offroad) { if (Math.random() < dt * 4) hx.tap(); s.near = 0; }
+  });
+  const s = g.current;
+  const kmh = Math.round(s.speed * 3.6);
+  const sc = s.final != null ? s.final : Math.floor(s.dist / 2) + s.bonus;
+  const useGL = !!getGLView() && !glFail;
+  const BW = AREA_W * 0.7;
+  return (
+    <GameScreen title="MOTO 3D" emoji="🏍️" accent={C.orange} onExit={onExit} score={sc} best={best}
+      hud={<><Text style={{ color: C.text, fontWeight: '900', fontSize: 12 }}>🛣️ {(s.dist / 1000).toFixed(2)} km</Text><Text style={{ color: C.amber, fontWeight: '900', fontSize: 12 }}>🔥 x{s.near}</Text><Bar value={s.nitro} max={100} color={C.cyan} w={70} /></>}>
+      <PlayArea fx={fx} bg="#f3a77a">
+        {useGL ? <GL3D create={createMoto} getState={getState} onFail={() => setGlFail(true)} /> : <NoGL accent={C.orange} />}
+        {s.turbo > 0 && <View pointerEvents="none" style={{ ...StyleSheet.absoluteFillObject, borderWidth: 10, borderColor: 'rgba(34,230,255,0.25)' }} />}
+        {s.offroad && phase === 'play' && <Text pointerEvents="none" style={{ position: 'absolute', top: 54, width: AREA_W, textAlign: 'center', color: C.amber, fontWeight: '900', fontSize: 14, ...tglow('#000', 6) }}>⚠️ ¡FUERA DE LA PISTA!</Text>}
+        {s.toast && <Text pointerEvents="none" style={{ position: 'absolute', top: AREA_H * 0.3, width: AREA_W, textAlign: 'center', color: '#fff', fontWeight: '900', fontSize: 24, ...tglow(C.amber, 10) }}>{s.toast.m}</Text>}
+        {/* manubrio y tablero */}
+        <View pointerEvents="none" style={{ position: 'absolute', left: (AREA_W - BW) / 2, bottom: -26, width: BW, height: 120, alignItems: 'center', transform: [{ rotate: `${s.lean * 0.12}rad` }] }}>
+          <View style={{ position: 'absolute', top: 30, left: 0, right: 0, height: 12, borderRadius: 6, backgroundColor: '#1d1d24', borderWidth: 2, borderColor: '#444' }} />
+          <View style={{ position: 'absolute', top: 22, left: -4, width: 46, height: 28, borderRadius: 10, backgroundColor: '#111' }} />
+          <View style={{ position: 'absolute', top: 22, right: -4, width: 46, height: 28, borderRadius: 10, backgroundColor: '#111' }} />
+          <View style={{ position: 'absolute', top: 6, width: 120, height: 92, borderTopLeftRadius: 60, borderTopRightRadius: 60, backgroundColor: '#15151c', borderWidth: 2, borderColor: alpha(C.orange, 0.8), alignItems: 'center', paddingTop: 12 }}>
+            <Text style={{ color: s.turbo > 0 ? C.cyan : '#fff', fontSize: 30, fontWeight: '900', fontVariant: ['tabular-nums'], ...tglow(s.turbo > 0 ? C.cyan : C.orange, 8) }}>{kmh}</Text>
+            <Text style={{ color: C.dim, fontSize: 9, fontWeight: '900', letterSpacing: 2 }}>KM/H</Text>
+          </View>
+        </View>
+        {phase === 'play' && (
+          <>
+            <HoldBtn testID="mt-left" hold={hold} k="l" label="◀" color={C.orange} style={{ position: 'absolute', left: 8, bottom: 110, width: 74, height: 96 }} />
+            <HoldBtn testID="mt-right" hold={hold} k="r" label="▶" color={C.orange} style={{ position: 'absolute', right: 8, bottom: 110, width: 74, height: 96 }} />
+            <HoldBtn testID="mt-brake" hold={hold} k="brake" label="🛑" color={C.red} style={{ position: 'absolute', left: 8, bottom: 214, width: 74, height: 56 }} />
+            <HoldBtn testID="mt-nitro" hold={hold} k="nitro" label="🔥" color={C.cyan} style={{ position: 'absolute', right: 8, bottom: 214, width: 74, height: 56 }} />
+          </>
+        )}
+        <Overlay show={phase !== 'play'} kind={phase} emoji={phase === 'over' ? '💥' : '🏍️'} title={phase === 'over' ? '¡CHOQUE!' : 'MOTO 3D'}
+          subtitle={phase === 'ready' ? 'Autopista en primera persona' : `${(s.dist / 1000).toFixed(2)} km · roces +${s.bonus}`}
+          score={sc} best={best} isNew={res.isNew} accent={C.orange} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['◀ ▶ mantén pulsado para inclinarte', 'Carriles derechos: tu sentido · izquierdos: ¡contramano!', 'Pasa rozando autos: combo de puntos y nitro 🔥', '🛑 frena · 🔥 nitro (se recarga con roces)', 'Fuera del asfalto pierdes velocidad'] : null} />
+      </PlayArea>
+    </GameScreen>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// AVIÓN 3D – vuelo en primera persona por un cañón
+// ═══════════════════════════════════════════════════════════════════
+const AV_WALL = 27;
+function Plane3D({ onExit }) {
+  const fx = useFX();
+  const [best, submitBest] = useBest('plane3d');
+  const [phase, setPhase] = useState('ready');
+  const [res, setRes] = useState({ isNew: false, why: '' });
+  const [glFail, setGlFail] = useState(false);
+  const [stick, stickH] = owStick(60);
+  const init = () => ({ dist: 0, speed: 0, x: 0, y: 14, vx: 0, vy: 0, roll: 0, pitch: 0, fuel: 100, objs: [], t: 0, rings: 0, combo: 0, bonus: 0, nextZ: 70, toast: null, final: null });
+  const g = useRef(null);
+  if (!g.current) g.current = init();
+  const getState = useRef(() => g.current).current;
+  const spawn = s => {
+    while (s.nextZ < s.dist + 380) {
+      const z = s.nextZ;
+      const last = s.objs.filter(o => o.kind === 'ring').slice(-1)[0];
+      const bx = last ? clamp(last.x + rand(-11, 11), -18, 18) : 0, by = last ? clamp(last.y + rand(-7, 7), 6, 32) : 14;
+      s.objs.push({ id: uid(), kind: 'ring', x: bx, y: by, z, hit: false, done: false });
+      if (s.t > 4 || z > 200) for (let k = 0; k < (Math.random() < 0.5 ? 1 : 2); k++) {
+        const px = rand(-AV_WALL + 3, AV_WALL - 3);
+        if (Math.abs(px - bx) > 7) s.objs.push({ id: uid(), kind: 'rock', x: px, z: z + rand(15, 35), r: rand(2.2, 4), h: rand(12, 40), done: false });
+      }
+      s.nextZ += Math.max(42, 70 - s.dist / 300);
+    }
+  };
+  const start = () => { fx.clear(); const s = init(); s.speed = 32; spawn(s); g.current = s; setPhase('play'); hx.tap(); };
+  const end = (s, why) => { s.final = s.rings * 100 + s.bonus + Math.floor(s.dist / 10); hx.die(); fx.shake(14, 0.5); fx.flash(why === 'fuel' ? C.amber : C.red, 0.5); setRes({ isNew: submitBest(s.final), why }); setPhase('over'); };
+  useLoop(phase === 'play', dt => {
+    const s = g.current; s.t += dt;
+    if (s.toast) { s.toast.t -= dt; if (s.toast.t <= 0) s.toast = null; }
+    s.speed = Math.min(64, 32 + s.t * 0.4);
+    // stick: x = alabeo/giro · y = cabeceo (arrastrar arriba = subir)
+    s.roll = lerp(s.roll, stick.x, Math.min(1, dt * 4));
+    s.vx = lerp(s.vx, stick.x * 20, Math.min(1, dt * 2.5));
+    s.vy = lerp(s.vy, -stick.y * 15, Math.min(1, dt * 2.5));
+    s.pitch = Math.atan2(s.vy, s.speed);
+    s.x += s.vx * dt; s.y = clamp(s.y + s.vy * dt, 0, 42);
+    if (Math.abs(s.x) > AV_WALL) { s.x = Math.sign(s.x) * AV_WALL; s.vx *= -0.5; s.fuel -= 10; hx.bad(); fx.shake(8, 0.25); s.toast = { m: '⛰️ ¡Cuidado con el cañón!', t: 1 }; }
+    if (s.y < 1.2) { end(s, 'suelo'); return; }
+    const ddist = s.speed * dt; s.dist += ddist;
+    s.fuel -= dt * (3.2 + s.t * 0.01);
+    if (s.fuel <= 0) { s.fuel = 0; end(s, 'fuel'); return; }
+    for (const o of s.objs) {
+      if (o.done) continue;
+      const rel = o.z - s.dist;
+      if (o.kind === 'ring' && rel <= 0) {
+        o.done = true; const d = Math.hypot(o.x - s.x, o.y - s.y);
+        if (d < 3.4) { o.hit = true; s.rings += 1; s.combo += 1; const b = 20 * (s.combo - 1); s.bonus += b; s.fuel = Math.min(100, s.fuel + 11); hx.good(); fx.flash(C.lime, 0.12); s.toast = { m: s.combo > 1 ? `¡ANILLO! x${s.combo}` : '¡ANILLO!', t: 0.8 }; }
+        else { s.combo = 0; }
+      } else if (o.kind === 'rock' && Math.abs(rel) < o.r + 0.6) {
+        if (Math.hypot(o.x - s.x, rel) < o.r + 0.7 && s.y < o.h) { end(s, 'roca'); return; }
+      }
+      if (rel < -10) o.done = true;
+    }
+    s.objs = s.objs.filter(o => o.z - s.dist > -15);
+    spawn(s);
+  });
+  const s = g.current;
+  const sc = s.final != null ? s.final : s.rings * 100 + s.bonus + Math.floor(s.dist / 10);
+  const useGL = !!getGLView() && !glFail;
+  const next = s.objs.find(o => o.kind === 'ring' && !o.done);
+  const why = res.why === 'fuel' ? 'SIN COMBUSTIBLE' : res.why === 'roca' ? '¡CHOCASTE CON UNA ROCA!' : '¡TE ESTRELLASTE!';
+  const hz = AREA_H * 0.42 + s.pitch * AREA_H * 0.9;
+  return (
+    <GameScreen title="AVIÓN 3D" emoji="✈️" accent={C.blue} onExit={onExit} score={sc} best={best}
+      hud={<><Text style={{ color: C.text, fontWeight: '900', fontSize: 12 }}>⭕ {s.rings}  🔥 x{s.combo}</Text><Text style={{ color: s.fuel < 25 ? C.red : C.amber, fontWeight: '900', fontSize: 12 }}>⛽</Text><Bar value={s.fuel} max={100} color={s.fuel < 25 ? C.red : C.amber} w={80} /></>}>
+      <PlayArea fx={fx} bg="#bfe3ff">
+        {useGL ? <GL3D create={createPlane} getState={getState} onFail={() => setGlFail(true)} /> : <NoGL accent={C.blue} />}
+        {s.toast && <Text pointerEvents="none" style={{ position: 'absolute', top: AREA_H * 0.22, width: AREA_W, textAlign: 'center', color: '#fff', fontWeight: '900', fontSize: 22, ...tglow('#000', 8) }}>{s.toast.m}</Text>}
+        {s.fuel < 25 && phase === 'play' && <Text pointerEvents="none" style={{ position: 'absolute', top: 12, width: AREA_W, textAlign: 'center', color: C.red, fontWeight: '900', fontSize: 13, opacity: Math.sin(s.t * 10) > 0 ? 1 : 0.3, ...tglow('#000', 6) }}>⛽ ¡COMBUSTIBLE BAJO! Pasa por los anillos</Text>}
+        {/* mira y flecha al próximo anillo */}
+        <View pointerEvents="none" style={{ position: 'absolute', left: AREA_W / 2 - 18, top: AREA_H * 0.42 - 18, width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: 'rgba(125,255,107,0.8)' }} />
+        <View pointerEvents="none" style={{ position: 'absolute', left: AREA_W / 2 - 2, top: AREA_H * 0.42 - 2, width: 4, height: 4, borderRadius: 2, backgroundColor: C.lime }} />
+        {next && <Text pointerEvents="none" style={{ position: 'absolute', left: AREA_W / 2 - 60, top: AREA_H * 0.42 + 24, width: 120, textAlign: 'center', color: C.lime, fontWeight: '900', fontSize: 11, ...tglow('#000', 4) }}>{`${next.x - s.x > 3 ? '▶' : next.x - s.x < -3 ? '◀' : ''} ${next.y - s.y > 3 ? '▲' : next.y - s.y < -3 ? '▼' : ''} ${Math.round(next.z - s.dist)} m`}</Text>}
+        {/* cabina */}
+        <View pointerEvents="none" style={{ position: 'absolute', left: -20, right: -20, bottom: -10, height: 120, borderTopLeftRadius: 120, borderTopRightRadius: 120, backgroundColor: '#20242e', borderTopWidth: 3, borderColor: '#3a4150' }} />
+        <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 10, backgroundColor: '#20242e' }} />
+        <View pointerEvents="none" style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 10, backgroundColor: '#20242e' }} />
+        <View pointerEvents="none" style={{ position: 'absolute', left: AREA_W / 2 - 46, bottom: 14, width: 92, height: 72, borderRadius: 10, overflow: 'hidden', backgroundColor: '#6b4a2b', borderWidth: 2, borderColor: '#555' }}>
+          {/* horizonte artificial */}
+          <View style={{ position: 'absolute', left: -60, width: 212, top: -150 + 36 + s.pitch * 60, height: 150, backgroundColor: '#3b8fe0', transform: [{ rotate: `${-s.roll * 0.8}rad` }] }} />
+          <View style={{ position: 'absolute', left: 30, top: 35, width: 32, height: 3, backgroundColor: C.amber }} />
+        </View>
+        <View pointerEvents="none" style={{ position: 'absolute', left: 18, bottom: 22, alignItems: 'center' }}>
+          <Text style={{ color: C.dim, fontSize: 9, fontWeight: '900' }}>ALT</Text>
+          <Text style={{ color: s.y < 5 ? C.red : '#fff', fontSize: 18, fontWeight: '900', fontVariant: ['tabular-nums'] }}>{Math.round(s.y * 10)}</Text>
+        </View>
+        <View pointerEvents="none" style={{ position: 'absolute', right: 18, bottom: 22, alignItems: 'center' }}>
+          <Text style={{ color: C.dim, fontSize: 9, fontWeight: '900' }}>NUDOS</Text>
+          <Text style={{ color: '#fff', fontSize: 18, fontWeight: '900', fontVariant: ['tabular-nums'] }}>{Math.round(s.speed * 4.5)}</Text>
+        </View>
+        {phase === 'play' && (
+          <>
+            <View testID="av-stick" {...stickH} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />
+            <View pointerEvents="none" style={{ position: 'absolute', right: 16, bottom: 132, width: 100, height: 100, borderRadius: 50, borderWidth: 2, borderColor: 'rgba(255,255,255,0.22)', backgroundColor: 'rgba(0,0,0,0.12)' }}>
+              <View style={{ position: 'absolute', left: 50 - 16 + stick.x * 34, top: 50 - 16 + stick.y * 34, width: 32, height: 32, borderRadius: 16, backgroundColor: stick.on ? 'rgba(42,157,244,0.7)' : 'rgba(255,255,255,0.25)', borderWidth: 2, borderColor: '#fff8' }} />
+            </View>
+          </>
+        )}
+        <Overlay show={phase !== 'play'} kind={phase} emoji={phase === 'over' ? (res.why === 'fuel' ? '⛽' : '💥') : '✈️'} title={phase === 'over' ? why : 'AVIÓN 3D'}
+          subtitle={phase === 'ready' ? 'Vuela en primera persona por el cañón' : `⭕ ${s.rings} anillos · ${(s.dist / 1000).toFixed(2)} km`}
+          score={sc} best={best} isNew={res.isNew} accent={C.blue} onStart={start} onExit={onExit}
+          lines={phase === 'ready' ? ['Arrastra en cualquier parte de la pantalla para pilotar', 'Arriba: subir · abajo: bajar · lados: girar', 'Atraviesa los ⭕ anillos: puntos, combo y combustible', 'Esquiva las rocas y no toques el suelo', '⛽ el combustible se acaba: ¡no falles anillos!'] : null} />
+      </PlayArea>
+    </GameScreen>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // REGISTRO DE JUEGOS + MENÚ
 // Para añadir un juego: crea el componente y añade una entrada aquí.
 // ═══════════════════════════════════════════════════════════════════
@@ -5778,6 +6030,8 @@ const GAMES = [
   { id: 'fruittap', name: 'FRUIT TAP', emoji: '🍉', tag: 'Corta frutas, evita bombas', color: C.lime, cat: 'reflejos', Comp: FruitTap },
   { id: 'pixelrpg', name: 'PIXEL RPG', emoji: '🧙', tag: 'Explora, combate y sube de nivel', color: C.amber, cat: 'aventura', Comp: PixelRPG },
   { id: 'openworld', name: 'MUNDO 3D', emoji: '🌍', tag: 'Mundo abierto en primera persona', color: C.lime, cat: 'aventura', Comp: OpenWorld3D },
+  { id: 'moto3d', name: 'MOTO 3D', emoji: '🏍️', tag: 'Autopista 3D en primera persona', color: C.orange, cat: 'accion', Comp: Moto3D },
+  { id: 'plane3d', name: 'AVIÓN 3D', emoji: '✈️', tag: 'Vuela por un cañón en primera persona', color: C.blue, cat: 'accion', Comp: Plane3D },
   { id: 'invaders', name: 'INVASORES', emoji: '👽', tag: 'Defiende la Tierra con escudos', color: C.lime, cat: 'accion', Comp: Invaders },
   { id: 'skyhop', name: 'SKY HOP', emoji: '🦘', tag: 'Rebota hacia el cielo sin caer', color: C.cyan, cat: 'reflejos', Comp: SkyHop },
   { id: 'minesweeper', name: 'BUSCAMINAS', emoji: '💣', tag: 'Despeja el campo con lógica', color: C.red, cat: 'puzzle', Comp: Buscaminas },

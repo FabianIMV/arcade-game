@@ -25,13 +25,13 @@ Deployed over-the-air via **EAS Update** straight to your iPhone through **Expo 
 
 ---
 
-## 🎮 Los juegos (41)
+## 🎮 Los juegos (43)
 
 Todos los juegos comparten el mismo sistema de diseño (`utils/kit.js`): cabecera con récord, partículas, textos flotantes, *screen shake*, hápticos, pantallas de inicio y fin de partida, y récord persistente por juego. El menú tiene categorías, tarjetas con tu mejor puntuación y un botón **Sorpréndeme** 🎲.
 
 | Categoría | Juegos |
 |-----------|--------|
-| 🚀 **Acción** | **Neon Galaxy** (oleadas, jefes y power-ups) · **Cyber Run** (corredor de 3 carriles) · **Galactic Hunt** (galería de tiro con cargador) · **Neon Tunnel** (túnel 3D de anillos) · **Neon Warrior** (plataformas con jefes) · **Asteroid Dodge** (esquiva con bonus *cerca*) · **Invasores** (clásico con escudos y ovni) |
+| 🚀 **Acción** | **Neon Galaxy** (oleadas, jefes y power-ups) · **Cyber Run** (corredor de 3 carriles) · **Galactic Hunt** (galería de tiro con cargador) · **Neon Tunnel** (túnel 3D de anillos) · **Neon Warrior** (plataformas con jefes) · **Asteroid Dodge** (esquiva con bonus *cerca*) · **Invasores** (clásico con escudos y ovni) · **Moto 3D** (autopista en primera persona: tráfico, contramano, roces y nitro) · **Avión 3D** (vuelo en primera persona por un cañón: anillos, rocas y combustible) |
 | 🕹️ **Arcade** | **Snake Power** · **Ping Pong** (IA que mejora) · **Breakout** (mejoras y multibola) · **Pong Solo** (bumpers estilo pinball) · **Star Catcher** · **Coin Rush** · **Crossy Road** (calles, ríos y trenes) |
 | ⚡ **Reflejos** | **Gravity Flip** · **Wall Jumper** · **Whack-a-Mole** · **Fruit Slash** (corta frutas) · **Ritmo y Color** (Simon) · **Flappy Neon** · **Sky Hop** (rebota hacia el cielo) · **Tower Stack** · **Reflejos** · **Color Rush** (Stroop) · **Dino Run** |
 | 🧩 **Puzzle** | **Neon Tetris** (hold, fantasma, gestos) · **2048 Neon** (deshacer) · **15 Puzzle** (3×3, 4×4, 5×5) · **Bubble Shooter** (bombas y arcoíris) · **Memory Match** · **Math Rush** · **Palabras** · **Word Chain** · **Buscaminas** (3 dificultades) · **4 en línea** (IA minimax) |
