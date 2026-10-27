@@ -66,7 +66,7 @@ The app is deployed with **Expo EAS Update**. That means new game content, bug f
 | Technology | Purpose |
 |------------|---------|
 | **React Native** | Core mobile framework |
-| **Expo SDK 57** | Managed workflow, dev tooling |
+| **Expo SDK 58** | Managed workflow, dev tooling |
 | **expo-haptics** | Tactile feedback throughout all games |
 | **expo-updates** | OTA delivery via EAS Update |
 | **@react-native-async-storage/async-storage** | Récords y partidas guardadas |
