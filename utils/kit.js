@@ -63,27 +63,20 @@ export const overlap = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y
 const safe = fn => { try { const r = fn(); if (r && r.catch) r.catch(() => {}); } catch (_) {} };
 const later = (fn, ms) => setTimeout(() => safe(fn), ms);
 const imp = s => () => { if (getSettings().haptics) return Haptics.impactAsync(s); return null; };
-const note = t => () => { if (getSettings().haptics) return Haptics.notificationAsync(t); return null; };
+// Patrón de vibración: lista de [ms, estilo] (estilo: 'L' | 'M' | 'H' | 'X' = éxito | 'W' = aviso | 'E' = error)
+const STY = { L: Haptics.ImpactFeedbackStyle.Light, M: Haptics.ImpactFeedbackStyle.Medium, H: Haptics.ImpactFeedbackStyle.Heavy };
+const NOTE = { X: Haptics.NotificationFeedbackType.Success, W: Haptics.NotificationFeedbackType.Warning, E: Haptics.NotificationFeedbackType.Error };
+const buzz = steps => { if (!getSettings().haptics) return; let t = 0; for (const [ms, k] of steps) { t += ms; later(() => (NOTE[k] ? Haptics.notificationAsync(NOTE[k]) : Haptics.impactAsync(STY[k])), t); } };
 export const hx = {
-  tick: () => { playSfx('tick'); safe(() => (getSettings().haptics ? Haptics.selectionAsync() : null)); },
-  tap: () => { playSfx('tap'); safe(imp(Haptics.ImpactFeedbackStyle.Light)); },
-  hit: () => { playSfx('hit'); safe(imp(Haptics.ImpactFeedbackStyle.Medium)); },
-  heavy: () => { playSfx('heavy'); safe(imp(Haptics.ImpactFeedbackStyle.Heavy)); },
-  good: () => { playSfx('good'); safe(note(Haptics.NotificationFeedbackType.Success)); },
-  warn: () => { playSfx('warn'); safe(note(Haptics.NotificationFeedbackType.Warning)); },
-  bad: () => { playSfx('bad'); safe(note(Haptics.NotificationFeedbackType.Error)); },
-  die: () => {
-    playSfx('die');
-    safe(note(Haptics.NotificationFeedbackType.Error));
-    later(imp(Haptics.ImpactFeedbackStyle.Heavy), 110);
-    later(imp(Haptics.ImpactFeedbackStyle.Heavy), 240);
-  },
-  win: () => {
-    playSfx('win');
-    safe(note(Haptics.NotificationFeedbackType.Success));
-    later(imp(Haptics.ImpactFeedbackStyle.Medium), 140);
-    later(imp(Haptics.ImpactFeedbackStyle.Heavy), 290);
-  },
+  tick: () => { playSfx('tick'); safe(imp(STY.L)); },
+  tap: () => { playSfx('tap'); buzz([[0, 'M']]); },
+  hit: () => { playSfx('hit'); buzz([[0, 'H'], [60, 'M']]); },
+  heavy: () => { playSfx('heavy'); buzz([[0, 'H'], [50, 'H'], [50, 'M']]); },
+  good: () => { playSfx('good'); buzz([[0, 'X'], [40, 'M']]); },
+  warn: () => { playSfx('warn'); buzz([[0, 'W'], [90, 'M']]); },
+  bad: () => { playSfx('bad'); buzz([[0, 'E'], [70, 'H'], [70, 'H']]); },
+  die: () => { playSfx('die'); buzz([[0, 'E'], [90, 'H'], [90, 'H'], [90, 'H'], [120, 'H'], [160, 'M']]); },
+  win: () => { playSfx('win'); buzz([[0, 'X'], [120, 'M'], [120, 'H'], [120, 'M'], [120, 'H'], [160, 'X']]); },
 };
 
 // ─── Mejor puntuación persistente ─────────────────────────────────
