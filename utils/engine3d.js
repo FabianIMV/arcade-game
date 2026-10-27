@@ -10,7 +10,7 @@
  *     p  : posición (centro). s: tamaño (o n: escala uniforme). r: rotación en radianes.
  *     c  : color (hex o 'hsl(...)'). e: brillo propio 0..1 (neón). o: opacidad 0..1.
  *   cam: { p:[x,y,z], l:[x,y,z] (mira a), fov }   ó   { p, yaw, pitch, fov }
- *   bg: color de fondo. fog: { c, near, far }  (opcional)
+ *   bg: color de fondo. fog: { c, near, far }  (opcional). shake: temblor de cámara en unidades (opcional)
  */
 import { makeRenderer, probeGL } from './gl3dx';
 
@@ -35,7 +35,7 @@ export function createWorld({ gl, THREE, getState, aspect }) {
 
   const make = (o) => {
     const k = GEO_KEYS.includes(o.k) ? o.k : 'box';
-    const m = new THREE.Mesh(GEO[k], new THREE.MeshLambertMaterial({ flatShading: true, transparent: true }));
+    const m = new THREE.Mesh(GEO[k], new THREE.MeshLambertMaterial({ flatShading: true, transparent: true, side: THREE.DoubleSide }));
     scene.add(m);
     return { m, k };
   };
@@ -57,16 +57,18 @@ export function createWorld({ gl, THREE, getState, aspect }) {
         if (typeof o.n === 'number') m.scale.set(o.n, o.n, o.n);
         else if (o.s) m.scale.set(o.s[0], o.s[1], o.s[2]);
         else m.scale.set(1, 1, 1);
+        // brillo propio del color del objeto (no luz blanca): neón sin lavar los colores
         m.material.color.set(o.c || 0xffffff);
-        m.material.emissive.setRGB(o.e || 0, o.e || 0, o.e || 0);
+        m.material.emissive.copy(m.material.color).multiplyScalar(o.e || 0);
         m.material.opacity = o.o != null ? o.o : 1;
       }
       meshes.forEach((rec, key) => { if (!seen.has(key)) { scene.remove(rec.m); rec.m.material.dispose(); meshes.delete(key); } });
       if (st.fog) { if (!scene.fog) scene.fog = new THREE.Fog(st.fog.c, st.fog.near, st.fog.far); else { scene.fog.color.set(st.fog.c); scene.fog.near = st.fog.near; scene.fog.far = st.fog.far; } }
       else scene.fog = null;
       const cam = st.cam || { p: [0, 5, 10], l: [0, 0, 0] };
+      const sh = (st.shake || 0) * (Math.random() - 0.5);   // temblor de cámara (fx.shakeT)
       camera.fov = cam.fov || 60; camera.aspect = aspect; camera.updateProjectionMatrix();
-      camera.position.set(cam.p[0], cam.p[1], cam.p[2]);
+      camera.position.set(cam.p[0] + sh, cam.p[1] + sh * 0.5, cam.p[2]);
       if (cam.l) camera.lookAt(cam.l[0], cam.l[1], cam.l[2]);
       else { camera.rotation.order = 'YXZ'; camera.rotation.set(cam.pitch || 0, cam.yaw || 0, 0); }
       if (st.bg != null) renderer.setClearColor(st.bg, 1);

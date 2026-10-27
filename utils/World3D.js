@@ -31,10 +31,9 @@ export function World3D({ scene }) {
     try {
       const THREE = require('three');
       const world = worldCreate({ gl, THREE, getState, aspect: AREA_W / AREA_H });
-      let n = 0;
       const tick = () => {
         if (st.v) { world.dispose(); return; }
-        try { world.frame(); if (gl.endFrameEXP) gl.endFrameEXP(); n += 1; if (n === 14 && !world.probe()) throw new Error('pantalla vacía'); } catch (e) { st.v = true; setFail(String((e && e.message) || e)); return; }
+        try { world.frame(); if (gl.endFrameEXP) gl.endFrameEXP(); } catch (e) { st.v = true; setFail(String((e && e.message) || e)); return; }
         requestAnimationFrame(tick);
       };
       tick();
