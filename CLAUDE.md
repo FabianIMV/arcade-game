@@ -50,7 +50,8 @@ function MyGame({ onExit }) {
 Kit rules of thumb:
 - Haptics via `hx.tap/hit/good/bad/die/win`; effects via `fx.burst/pop/ring/shake/flash`.
 - Never define a component inside another component's render (it remounts every frame and breaks presses). Hoist it to module level.
-- For multi-touch controls (hold left + jump) use `Pressable` buttons (see `NwBtn`) in the `footer` of `GameScreen`, not `usePan`.
+- For multi-touch controls (hold left + jump, two joysticks) use `TouchBtn` / `TouchStick` from `utils/kit.js` (raw touch events). Never `Pressable`/`PanResponder` for held controls: React Native's responder system allows only ONE active control at a time.
+- 3D games: create the three.js renderer with `makeRenderer(gl, THREE)` from `utils/gl3dx.js` (works around expo-gl's WebGL2 context failing three.js's WebGL 1 check).
 - Use `text` glow with `tglow(color)`, not `glow()` (which is for Views).
 
 ## Testing (no device needed)

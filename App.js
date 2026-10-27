@@ -3,7 +3,6 @@ import {
   Animated,
   Dimensions,
   Easing,
-  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -18,7 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   AREA_H, AREA_HF, AREA_W, SCREEN_W, Bar, Btn, C, Combo, GameScreen, GridBg, Lives, Overlay, Pill, PlayArea, Starfield,
   alpha, clamp, glow, tglow, hx, lerp, makeStars, overlap, pick, rand, randInt, shuffle,
-  GameCtx, uid, useBest, useFX, useForce, useLoop, usePan, useTimeouts,
+  GameCtx, TouchBtn, TouchStick, uid, useBest, useFX, useForce, useLoop, usePan, useTimeouts,
 } from './utils/kit';
 import { OW_COL, OW_H, OW_N, owGen } from './utils/ow';
 import { createGLWorld } from './utils/gl3d';
@@ -3082,9 +3081,9 @@ const NW_THEMES = [
 function NwBtn({ label, color, id, on, off, big, size }) {
   const d = (size || 66) + (big ? 8 : 0);
   return (
-    <Pressable testID={id} onPressIn={on} onPressOut={off} style={{ width: d, height: d, borderRadius: 40, backgroundColor: alpha(color, 0.14), borderWidth: 2, borderColor: alpha(color, 0.7), alignItems: 'center', justifyContent: 'center', ...glow(color, 8, 0.4) }}>
+    <TouchBtn testID={id} onDown={on} onUp={off} style={{ width: d, height: d, borderRadius: 40, backgroundColor: alpha(color, 0.14), borderWidth: 2, borderColor: alpha(color, 0.7), alignItems: 'center', justifyContent: 'center', ...glow(color, 8, 0.4) }}>
       <Text style={{ color, fontSize: 26, fontWeight: '900' }}>{label}</Text>
-    </Pressable>
+    </TouchBtn>
   );
 }
 
@@ -5473,24 +5472,14 @@ function owShade(c, light, fog, fogC) {
 // En iOS el framebuffer de expo-gl es multisample (MSAA) y readPixels siempre devuelve negro,
 // así que la prueba de "pantalla vacía" solo es fiable en web.
 const GL_PROBE = Platform.OS === 'web';
-function owStick(R) {
-  const v = useRef({ x: 0, y: 0, on: false }).current;
-  const pr = useRef(null);
-  if (!pr.current) {
-    const set = g => { let dx = g.dx, dy = g.dy; const m = Math.hypot(dx, dy); if (m > R) { dx *= R / m; dy *= R / m; } v.x = dx / R; v.y = dy / R; v.on = true; };
-    const end = () => { v.x = 0; v.y = 0; v.on = false; };
-    pr.current = PanResponder.create({ onStartShouldSetPanResponder: () => true, onMoveShouldSetPanResponder: () => true, onPanResponderGrant: () => { v.on = true; }, onPanResponderMove: (e, g) => set(g), onPanResponderRelease: end, onPanResponderTerminate: end });
-  }
-  return [v, pr.current.panHandlers];
-}
 
 function OpenWorld3D({ onExit }) {
   const fx = useFX();
   const [best, submitBest] = useBest('openworld');
   const [phase, setPhase] = useState('ready');
   const [res, setRes] = useState({ isNew: false, won: false });
-  const [move, moveH] = owStick(46);
-  const [look, lookH] = owStick(46);
+  const move = useRef({ x: 0, y: 0, on: false }).current;
+  const look = useRef({ x: 0, y: 0, on: false }).current;
   const sprint = useRef({ on: false }).current;
   // GPU (three.js sobre expo-gl) si está disponible; si falla, modo compatible (raycaster con Views)
   const GLViewC = useRef(undefined);
@@ -5647,11 +5636,11 @@ function OpenWorld3D({ onExit }) {
       glRef.current = world; let n = 0;
       const tick = () => {
         if (stop.v) { world.dispose(); return; }
-        try { world.sync(g.current); world.render(); n += 1; if (n === 14 && GL_PROBE && !world.probe()) throw new Error('pantalla vacía'); } catch (e) { stop.v = true; glRef.current = null; setGlFail(true); return; }
+        try { world.sync(g.current); world.render(); n += 1; if (n === 14 && GL_PROBE && !world.probe()) throw new Error('pantalla vacía'); } catch (e) { stop.v = true; glRef.current = null; setGlFail(String((e && e.message) || e)); return; }
         requestAnimationFrame(tick);
       };
       tick();
-    } catch (e) { glRef.current = null; setGlFail(true); }
+    } catch (e) { glRef.current = null; setGlFail(String((e && e.message) || e)); }
   };
   const GLV = GLViewC.current;
   const s = g.current;
@@ -5708,13 +5697,13 @@ function OpenWorld3D({ onExit }) {
         {/* controles */}
         {phase === 'play' && (
           <>
-            <View testID="ow-move" {...moveH} style={{ position: 'absolute', left: 0, bottom: 0, width: AREA_W * 0.42, height: 150 }} />
-            <View testID="ow-look" {...lookH} style={{ position: 'absolute', right: 0, bottom: 0, width: AREA_W * 0.42, height: 150 }} />
+            <TouchStick testID="ow-move" v={move} R={46} style={{ position: 'absolute', left: 0, bottom: 0, width: AREA_W * 0.42, height: 170 }} />
+            <TouchStick testID="ow-look" v={look} R={46} style={{ position: 'absolute', right: 0, bottom: 0, width: AREA_W * 0.42, height: 170 }} />
             {pad(move, 62 + 0, 'MOVER')}
             {pad(look, AREA_W - 62, 'GIRAR')}
-            <Pressable testID="ow-sprint" onPressIn={() => { sprint.on = true; }} onPressOut={() => { sprint.on = false; }} style={{ position: 'absolute', left: AREA_W / 2 - 30, bottom: 16, width: 60, height: 60 }}>
-              <View style={{ flex: 1, borderRadius: 30, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,194,51,0.2)', borderWidth: 2, borderColor: alpha(C.amber, 0.8) }}><Text style={{ fontSize: 26 }}>🏃</Text></View>
-            </Pressable>
+            <TouchBtn testID="ow-sprint" onDown={() => { sprint.on = true; }} onUp={() => { sprint.on = false; }} style={{ position: 'absolute', left: AREA_W / 2 - 30, bottom: 16, width: 60, height: 60 }}>
+              <View style={{ flex: 1, borderRadius: 30, alignItems: 'center', justifyContent: 'center', backgroundColor: sprint.on ? 'rgba(255,194,51,0.5)' : 'rgba(255,194,51,0.2)', borderWidth: 2, borderColor: alpha(C.amber, 0.8) }}><Text style={{ fontSize: 26 }}>🏃</Text></View>
+            </TouchBtn>
             <Pressable testID="ow-end" onPress={() => finish(s, false, 'fin')} style={{ position: 'absolute', right: 8, top: 8 }} hitSlop={8}>
               <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, backgroundColor: 'rgba(0,0,0,0.5)', borderWidth: 1, borderColor: C.line }}><Text style={{ color: C.dim, fontSize: 11, fontWeight: '800' }}>🏁 TERMINAR</Text></View>
             </Pressable>
@@ -5724,7 +5713,7 @@ function OpenWorld3D({ onExit }) {
           title={phase === 'win' ? '¡TODOS LOS CRISTALES!' : phase === 'over' ? (res.why === 'lobos' ? 'DEVORADO POR LOBOS' : 'EXPEDICIÓN TERMINADA') : 'MUNDO ABIERTO 3D'}
           subtitle={phase === 'ready' ? 'Explora un mundo en primera persona' : `💎 ${s.gems}/${TOTAL_GEMS} · 🪙 ${s.coins} · ${Math.round(s.dist)} m recorridos`}
           score={s.final != null && phase !== 'ready' ? s.final : sc} best={best} isNew={res.isNew} accent={C.lime} onStart={start} onExit={onExit}
-          extra={GLViewC.current ? <View style={{ marginTop: 12 }}><Btn testID="ow-gfx" label={useGL ? '🎮 GRÁFICOS 3D (GPU)' : '🧱 MODO COMPATIBLE'} small ghost color={C.lime} onPress={() => setGlFail(f => !f)} /></View> : null}
+          extra={GLViewC.current ? <View style={{ marginTop: 12 }}><Btn testID="ow-gfx" label={useGL ? '🎮 GRÁFICOS 3D (GPU)' : '🧱 MODO COMPATIBLE'} small ghost color={C.lime} onPress={() => setGlFail(f => !f)} />{typeof glFail === 'string' && <Text selectable style={{ color: C.red, fontSize: 10, marginTop: 6, textAlign: 'center' }}>{glFail.slice(0, 200)}</Text>}</View> : null}
           lines={phase === 'ready' ? ['Joystick izquierdo: moverte · derecho: girar la cámara', '🏃 mantén pulsado para correr', 'Encuentra 20 💎 (la brújula te guía) y junta 🪙', 'De noche salen 🐺: corre o escóndete tras las casas', 'Aldeas, bosques, torres y montañas por descubrir'] : null} />
       </PlayArea>
     </GameScreen>
@@ -5772,11 +5761,11 @@ function NoGL({ accent, err, onRetry }) {
 function HoldBtn({ testID, hold, k, label, color, style }) {
   const on = hold[k];
   return (
-    <Pressable testID={testID} onPressIn={() => { hold[k] = true; }} onPressOut={() => { hold[k] = false; }} style={style}>
+    <TouchBtn testID={testID} onDown={() => { hold[k] = true; }} onUp={() => { hold[k] = false; }} style={style}>
       <View style={{ flex: 1, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: on ? alpha(color, 0.42) : 'rgba(0,0,0,0.28)', borderWidth: 2, borderColor: alpha(color, on ? 1 : 0.6) }}>
         <Text style={{ color: '#fff', fontSize: 22, fontWeight: '900', ...tglow(color, 6) }}>{label}</Text>
       </View>
-    </Pressable>
+    </TouchBtn>
   );
 }
 
@@ -5883,7 +5872,7 @@ function Plane3D({ onExit }) {
   const [phase, setPhase] = useState('ready');
   const [res, setRes] = useState({ isNew: false, why: '' });
   const [glFail, setGlFail] = useState(false);
-  const [stick, stickH] = owStick(60);
+  const stick = useRef({ x: 0, y: 0, on: false }).current;
   const init = () => ({ dist: 0, speed: 0, x: 0, y: 14, vx: 0, vy: 0, roll: 0, pitch: 0, fuel: 100, objs: [], t: 0, rings: 0, combo: 0, bonus: 0, nextZ: 70, toast: null, final: null });
   const g = useRef(null);
   if (!g.current) g.current = init();
@@ -5969,7 +5958,7 @@ function Plane3D({ onExit }) {
         </View>
         {phase === 'play' && (
           <>
-            <View testID="av-stick" {...stickH} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />
+            <TouchStick testID="av-stick" v={stick} R={60} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />
             <View pointerEvents="none" style={{ position: 'absolute', right: 16, bottom: 132, width: 100, height: 100, borderRadius: 50, borderWidth: 2, borderColor: 'rgba(255,255,255,0.22)', backgroundColor: 'rgba(0,0,0,0.12)' }}>
               <View style={{ position: 'absolute', left: 50 - 16 + stick.x * 34, top: 50 - 16 + stick.y * 34, width: 32, height: 32, borderRadius: 16, backgroundColor: stick.on ? 'rgba(42,157,244,0.7)' : 'rgba(255,255,255,0.25)', borderWidth: 2, borderColor: '#fff8' }} />
             </View>

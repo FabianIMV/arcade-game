@@ -5,16 +5,14 @@
  * cristales, monedas, animales y lobos, ciclo día/noche con niebla.
  */
 import { OW_N, owHeight } from './ow';
+import { makeRenderer } from './gl3dx';
 
 const ANIMAL_COL = { '🐄': 0xeeeeee, '🐑': 0xf4f4ee, '🦌': 0x996038, '🐇': 0xd2c8be, '🐖': 0xf0aaaa };
 const lerp = (a, b, t) => a + (b - a) * t;
 
 export function createGLWorld({ gl, THREE, world, aspectRatio }) {
   const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
-  const canvas = { width: w, height: h, style: {}, clientWidth: w, clientHeight: h, addEventListener() {}, removeEventListener() {}, getContext: () => gl };
-  const renderer = new THREE.WebGLRenderer({ canvas, context: gl, antialias: false });
-  renderer.setPixelRatio(1);
-  renderer.setSize(w, h, false);
+  const renderer = makeRenderer(gl, THREE);
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(72, aspectRatio || w / h, 0.08, 70);

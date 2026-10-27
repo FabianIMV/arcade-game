@@ -7,7 +7,19 @@
 export function makeRenderer(gl, THREE) {
   const w = gl.drawingBufferWidth, h = gl.drawingBufferHeight;
   const canvas = { width: w, height: h, style: {}, clientWidth: w, clientHeight: h, addEventListener() {}, removeEventListener() {}, getContext: () => gl };
-  const renderer = new THREE.WebGLRenderer({ canvas, context: gl, antialias: false });
+  // expo-gl (SDK 58) hace que su WebGL2RenderingContext herede de WebGLRenderingContext, y three.js
+  // (r163+) rechaza todo `instanceof WebGLRenderingContext` creyendo que es WebGL 1. Si el contexto
+  // es realmente WebGL 2, ocultamos ese global solo mientras se crea el renderer.
+  const G = globalThis, W1 = G.WebGLRenderingContext;
+  const isGL2 = gl.supportsWebGL2 === true || (typeof G.WebGL2RenderingContext === 'function' && gl instanceof G.WebGL2RenderingContext);
+  const hide = isGL2 && typeof W1 !== 'undefined';
+  let renderer;
+  try {
+    if (hide) G.WebGLRenderingContext = undefined;
+    renderer = new THREE.WebGLRenderer({ canvas, context: gl, antialias: false });
+  } finally {
+    if (hide) G.WebGLRenderingContext = W1;
+  }
   renderer.setPixelRatio(1);
   renderer.setSize(w, h, false);
   return renderer;

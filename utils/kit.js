@@ -440,3 +440,38 @@ export function Starfield({ stars, offset = 0, h = AREA_H }) {
 }
 export const makeStars = (n = 36, w = AREA_W, h = AREA_H) =>
   Array.from({ length: n }, () => ({ x: Math.random() * w, y: Math.random() * h, s: 1 + Math.random() * 1.8, z: 0.3 + Math.random() * 0.7 }));
+
+// ─── Multi-touch real ─────────────────────────────────────────────
+// Pressable y PanResponder usan el "responder" de React Native, que solo deja UN control activo
+// a la vez (no puedes correr y saltar juntos). Los eventos de toque crudos (onTouchStart/Move/End)
+// llegan a cada vista por separado, así que estos controles funcionan con varios dedos a la vez.
+const touchesOf = ne => (ne.identifier != null ? [ne] : Array.from(ne.changedTouches || []));
+const activeIds = ne => new Set(Array.from(ne.touches || []).map(t => t.identifier));
+
+// Botón de mantener pulsado: onDown al primer dedo, onUp cuando se levanta el último.
+export function TouchBtn({ testID, onDown, onUp, style, children }) {
+  const ids = useRef(new Set()).current;
+  const down = e => { const had = ids.size > 0; touchesOf(e.nativeEvent).forEach(t => ids.add(t.identifier)); if (!had && ids.size && onDown) onDown(); };
+  const up = e => {
+    if (!ids.size) return;
+    const ne = e.nativeEvent; touchesOf(ne).forEach(t => ids.delete(t.identifier));
+    const act = activeIds(ne); for (const i of [...ids]) if (!act.has(i)) ids.delete(i);
+    if (!ids.size && onUp) onUp();
+  };
+  return <View testID={testID} style={style} onTouchStart={down} onTouchEnd={up} onTouchCancel={up}>{children}</View>;
+}
+
+// Joystick relativo: v = { x, y ∈ [-1, 1], on } según cuánto arrastra el dedo desde donde tocó.
+export function TouchStick({ testID, v, R = 50, style, children }) {
+  const o = useRef({ id: null, ox: 0, oy: 0 }).current;
+  const reset = () => { o.id = null; v.x = 0; v.y = 0; v.on = false; };
+  const start = e => { if (o.id != null) return; const t = touchesOf(e.nativeEvent)[0]; if (!t) return; o.id = t.identifier; o.ox = t.pageX; o.oy = t.pageY; v.x = 0; v.y = 0; v.on = true; };
+  const move = e => {
+    if (o.id == null) return; const ne = e.nativeEvent;
+    const t = touchesOf(ne).find(k => k.identifier === o.id) || Array.from(ne.touches || []).find(k => k.identifier === o.id); if (!t) return;
+    let dx = t.pageX - o.ox, dy = t.pageY - o.oy; const m = Math.hypot(dx, dy); if (m > R) { dx *= R / m; dy *= R / m; }
+    v.x = dx / R; v.y = dy / R;
+  };
+  const end = e => { if (o.id == null) return; const ne = e.nativeEvent; if (touchesOf(ne).some(t => t.identifier === o.id) || !activeIds(ne).has(o.id)) reset(); };
+  return <View testID={testID} style={style} onTouchStart={start} onTouchMove={move} onTouchEnd={end} onTouchCancel={end}>{children}</View>;
+}
