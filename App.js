@@ -23,6 +23,7 @@ import { OW_COL, OW_H, OW_N, owGen } from './utils/ow';
 import { createGLWorld } from './utils/gl3d';
 import { createMoto, createPlane } from './utils/gl3dx';
 import { Breakout3D } from './games3d/breakout';
+import { IslaTesoro3D } from './games3d/islatesoro';
 import { NeonGalaxy3D } from './games3d/neon';
 import { CyberRun3D } from './games3d/cyber';
 import { GalacticHunt3D } from './games3d/galactic';
@@ -847,6 +848,7 @@ const GAMES = [
   { id: 'openworld', name: 'MUNDO 3D', emoji: '🌍', tag: 'Mundo abierto en primera persona', color: C.lime, cat: 'aventura', Comp: OpenWorld3D },
   { id: 'moto3d', name: 'MOTO 3D', emoji: '🏍️', tag: 'Autopista 3D en primera persona', color: C.orange, cat: 'accion', Comp: Moto3D },
   { id: 'plane3d', name: 'AVIÓN 3D', emoji: '✈️', tag: 'Vuela por un cañón en primera persona', color: C.blue, cat: 'accion', Comp: Plane3D },
+  { id: 'islatesoro', name: 'ISLA DEL TESORO', emoji: '🏝️', tag: 'Mundo abierto: cofres, palmeras y cangrejos', color: C.amber, cat: 'aventura', Comp: IslaTesoro3D },
   { id: 'invaders', name: 'INVASORES', emoji: '👽', tag: 'Defiende la Tierra con escudos', color: C.lime, cat: 'accion', Comp: Invaders3D },
   { id: 'skyhop', name: 'SKY HOP', emoji: '🦘', tag: 'Rebota hacia el cielo sin caer', color: C.cyan, cat: 'reflejos', Comp: SkyHop3D },
   { id: 'minesweeper', name: 'BUSCAMINAS', emoji: '💣', tag: 'Despeja el campo con lógica', color: C.red, cat: 'puzzle', Comp: Buscaminas3D },
