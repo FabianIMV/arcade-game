@@ -24,6 +24,16 @@ import { createGLWorld } from './utils/gl3d';
 import { createMoto, createPlane } from './utils/gl3dx';
 import { Breakout3D } from './games3d/breakout';
 import { IslaTesoro3D } from './games3d/islatesoro';
+import { Safari3D } from './games3d/safari';
+import { Granja3D } from './games3d/granja';
+import { Rally3D } from './games3d/kart';
+import { Reparto3D } from './games3d/reparto';
+import { Dragon3D } from './games3d/dragon';
+import { Planeta3D } from './games3d/planeta';
+import { Cazafantasmas3D } from './games3d/fantasmas';
+import { Zombis3D } from './games3d/zombis';
+import { Parkour3D } from './games3d/parkour';
+import { Pesca3D } from './games3d/pesca';
 import { NeonGalaxy3D } from './games3d/neon';
 import { CyberRun3D } from './games3d/cyber';
 import { GalacticHunt3D } from './games3d/galactic';
@@ -849,6 +859,16 @@ const GAMES = [
   { id: 'moto3d', name: 'MOTO 3D', emoji: '🏍️', tag: 'Autopista 3D en primera persona', color: C.orange, cat: 'accion', Comp: Moto3D },
   { id: 'plane3d', name: 'AVIÓN 3D', emoji: '✈️', tag: 'Vuela por un cañón en primera persona', color: C.blue, cat: 'accion', Comp: Plane3D },
   { id: 'islatesoro', name: 'ISLA DEL TESORO', emoji: '🏝️', tag: 'Mundo abierto: cofres, palmeras y cangrejos', color: C.amber, cat: 'aventura', Comp: IslaTesoro3D },
+  { id: 'safari', name: 'SAFARI FOTO', emoji: '🦒', tag: 'Recorre la sabana en jeep y fotografía animales', color: C.amber, cat: 'aventura', Comp: Safari3D },
+  { id: 'granja', name: 'GRANJA LIBRE', emoji: '🌾', tag: 'Planta, riega, cosecha y vende en tu granja', color: C.lime, cat: 'aventura', Comp: Granja3D },
+  { id: 'kart', name: 'RALLY ABIERTO', emoji: '🏎️', tag: 'Contrarreloj por colinas, aros y rampas', color: C.orange, cat: 'accion', Comp: Rally3D },
+  { id: 'reparto', name: 'REPARTO EN MOTO', emoji: '🛵', tag: 'Entrega pedidos por la ciudad en primera persona', color: C.cyan, cat: 'accion', Comp: Reparto3D },
+  { id: 'dragon', name: 'JINETE DE DRAGÓN', emoji: '🐉', tag: 'Vuela entre montañas y quema torres', color: C.red, cat: 'accion', Comp: Dragon3D },
+  { id: 'planeta', name: 'PLANETA ALIEN', emoji: '👽', tag: 'Baja gravedad, cristales y oxígeno', color: C.violet, cat: 'aventura', Comp: Planeta3D },
+  { id: 'fantasmas', name: 'CAZAFANTASMAS', emoji: '👻', tag: 'Pueblo de noche: atrapa fantasmas con la linterna', color: C.violet, cat: 'accion', Comp: Cazafantasmas3D },
+  { id: 'zombis', name: 'SUPERVIVENCIA ZOMBI', emoji: '🧟', tag: 'Tala, levanta vallas y sobrevive 4 noches', color: C.lime, cat: 'accion', Comp: Zombis3D },
+  { id: 'parkour', name: 'PARKOUR URBANO', emoji: '🏙️', tag: 'Salta de azotea en azotea', color: C.pink, cat: 'arcade', Comp: Parkour3D },
+  { id: 'pesca', name: 'LAGO DE PESCA', emoji: '🎣', tag: 'Lanza, recoge y tensa el sedal', color: C.lime, cat: 'arcade', Comp: Pesca3D },
   { id: 'invaders', name: 'INVASORES', emoji: '👽', tag: 'Defiende la Tierra con escudos', color: C.lime, cat: 'accion', Comp: Invaders3D },
   { id: 'skyhop', name: 'SKY HOP', emoji: '🦘', tag: 'Rebota hacia el cielo sin caer', color: C.cyan, cat: 'reflejos', Comp: SkyHop3D },
   { id: 'minesweeper', name: 'BUSCAMINAS', emoji: '💣', tag: 'Despeja el campo con lógica', color: C.red, cat: 'puzzle', Comp: Buscaminas3D },
