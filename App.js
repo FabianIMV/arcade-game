@@ -73,7 +73,9 @@ import { ReactionTime3D } from './games3d/reactiontime';
 import { WhackAMole3D } from './games3d/whackamole';
 import { FruitTap3D } from './games3d/fruittap';
 import { RhythmTap3D } from './games3d/rhythm';
-import { ACHIEVEMENTS, Profile, ToastHost, levelInfo, toast, useProfile, useSettings } from './utils/meta';
+import { ToastHost } from './utils/meta';
+import { Menu3D } from './ui/Menu3D';
+import { useApplyQuality } from './ui/Panels3D';
 
 const { width, height } = Dimensions.get('window');
 
@@ -875,220 +877,32 @@ const GAMES = [
   { id: 'connect4', name: '4 EN LÍNEA', emoji: '🔴', tag: 'Conecta cuatro contra la IA', color: C.red, cat: 'puzzle', Comp: Connect4_3D },
 ];
 
-function GameCard({ g, index, best, fav, daily, onPress, onFav, cardW }) {
+// Transición entre pantallas: velo de color que se desvanece (entrar a un juego = color del juego · volver = oscuro)
+function ScreenVeil({ screen, color }) {
   const a = useRef(new Animated.Value(0)).current;
-  const s = useRef(new Animated.Value(1)).current;
+  const first = useRef(true);
   useEffect(() => {
-    Animated.timing(a, { toValue: 1, duration: 320, delay: Math.min(index, 14) * 35, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const to = v => Animated.spring(s, { toValue: v, useNativeDriver: true, speed: 40, bounciness: 5 }).start();
-  return (
-    <Pressable testID={`menu-${g.id}`} onPress={onPress} onPressIn={() => to(0.95)} onPressOut={() => to(1)}>
-      <Animated.View style={{
-        width: cardW, height: 128, borderRadius: 20, padding: 12, marginBottom: 12, overflow: 'hidden',
-        backgroundColor: alpha(g.color, 0.09), borderWidth: 1.5, borderColor: daily ? C.amber : alpha(g.color, 0.5),
-        opacity: a, transform: [{ scale: s }, { translateY: a.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
-        ...glow(daily ? C.amber : g.color, 10, 0.35),
-      }}>
-        <View style={{ position: 'absolute', right: -16, top: -16, width: 84, height: 84, borderRadius: 42, backgroundColor: alpha(g.color, 0.12) }} />
-        <Text style={{ fontSize: 34 }}>{g.emoji}</Text>
-        <Text numberOfLines={1} style={{ color: g.color, fontSize: 14, fontWeight: '900', letterSpacing: 1, marginTop: 6 }}>{g.name}</Text>
-        <Text numberOfLines={2} style={{ color: C.dim, fontSize: 11, lineHeight: 15, marginTop: 2, paddingRight: 18 }}>{g.tag}</Text>
-        {best > 0 && (
-          <View style={{ position: 'absolute', right: 8, top: 8, backgroundColor: alpha('#000000', 0.45), borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 }}>
-            <Text style={{ color: C.amber, fontSize: 11, fontWeight: '800' }}>🏆 {best}</Text>
-          </View>
-        )}
-        {daily && <View style={{ position: 'absolute', left: 8, top: 8, backgroundColor: C.amber, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1 }}><Text style={{ color: '#04040c', fontSize: 9, fontWeight: '900' }}>🎯 RETO</Text></View>}
-        <Pressable testID={`fav-${g.id}`} onPress={onFav} hitSlop={10} style={{ position: 'absolute', right: 8, bottom: 6 }}>
-          <Text style={{ fontSize: 18, opacity: fav ? 1 : 0.35 }}>{fav ? '⭐' : '☆'}</Text>
-        </Pressable>
-      </Animated.View>
-    </Pressable>
-  );
-}
-
-const dayHash = () => { const d = new Date(); let h = d.getFullYear() * 372 + (d.getMonth() + 1) * 31 + d.getDate(); h = (h * 2654435761) >>> 0; return h; };
-
-function Panel({ title, onClose, children }) {
-  return (
-    <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: C.bg, zIndex: 50, alignItems: 'center' }}>
-      <View style={{ width: Math.min(width, 520), flex: 1, paddingHorizontal: 18, paddingTop: 50 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
-          <Text style={{ color: C.text, fontSize: 22, fontWeight: '900', letterSpacing: 2, flex: 1 }}>{title}</Text>
-          <Btn testID="panel-close" label="CERRAR" small ghost color={C.dim} onPress={onClose} />
-        </View>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>{children}</ScrollView>
-      </View>
-    </View>
-  );
-}
-
-function Toggle({ label, sub, on, onPress, testID }) {
-  return (
-    <Pressable testID={testID} onPress={onPress}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14, borderRadius: 16, marginBottom: 10, backgroundColor: C.panel2, borderWidth: 1, borderColor: C.line }}>
-        <View style={{ flex: 1 }}><Text style={{ color: C.text, fontWeight: '800', fontSize: 15 }}>{label}</Text><Text style={{ color: C.dim, fontSize: 12 }}>{sub}</Text></View>
-        <View style={{ width: 52, height: 30, borderRadius: 15, backgroundColor: on ? C.lime : '#2a2e52', justifyContent: 'center', padding: 3 }}>
-          <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: '#fff', alignSelf: on ? 'flex-end' : 'flex-start' }} />
-        </View>
-      </View>
-    </Pressable>
-  );
-}
-
-function Menu({ onPick }) {
-  const [cat, setCat] = useState('all');
-  const [bests, setBests] = useState({});
-  const [panel, setPanel] = useState(null);       // null | settings | ach
-  const [confirm, setConfirm] = useState(false);
-  const prof = useProfile();
-  const [settings, setSetting] = useSettings();
-  const daily = GAMES[dayHash() % GAMES.length];
-  useEffect(() => { Profile.setTotal(GAMES.length); Profile.setDaily(daily.id); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const loadBests = () => {
-    AsyncStorage.multiGet(GAMES.map(g => `@best:${g.id}`)).then(rows => {
-      const o = {};
-      rows.forEach(([k, v]) => { if (v) o[k.slice(6)] = parseFloat(v) || 0; });
-      setBests(o);
-    }).catch(() => {});
-  };
-  useEffect(loadBests, []);
-  const list = GAMES.filter(g => cat === 'all' || (cat === 'fav' ? prof.favs[g.id] : g.cat === cat));
-  const cardW = (Math.min(width, 520) - 16 * 2 - 12) / 2;
-  const played = Object.keys(bests).length;
-  const lv = levelInfo(prof.xp);
-  const achN = Object.keys(prof.ach).length;
-  const dailyDone = prof.daily.done && prof.daily.date !== '';
-  const surprise = () => { hx.tap(); onPick(GAMES[Math.floor(Math.random() * GAMES.length)].id); };
-  const cats = [...CATEGORIES.slice(0, 1), { id: 'fav', label: '⭐ FAVORITOS' }, ...CATEGORIES.slice(1)];
-  return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}>
-      <ScrollView contentContainerStyle={{ alignItems: 'center', paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-        <View style={{ width: Math.min(width, 520), paddingHorizontal: 16, paddingTop: 22 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: C.text, fontSize: 30, fontWeight: '900', letterSpacing: 2, ...tglow(C.cyan, 16) }}>ARCADE<Text style={{ color: C.cyan }}> HUB</Text></Text>
-              <Text style={{ color: C.dim, fontSize: 13, marginTop: 2 }}>{GAMES.length} juegos · {played} con récord</Text>
-            </View>
-            <Pressable testID="open-ach" onPress={() => { hx.tick(); setPanel('ach'); }} style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: C.panel2, borderWidth: 1, borderColor: C.line, alignItems: 'center', justifyContent: 'center', marginRight: 8 }}><Text style={{ fontSize: 20 }}>🏆</Text></Pressable>
-            <Pressable testID="open-settings" onPress={() => { hx.tick(); setPanel('settings'); }} style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: C.panel2, borderWidth: 1, borderColor: C.line, alignItems: 'center', justifyContent: 'center' }}><Text style={{ fontSize: 20 }}>⚙️</Text></Pressable>
-          </View>
-
-          <View style={{ marginTop: 14, padding: 12, borderRadius: 18, backgroundColor: C.panel2, borderWidth: 1, borderColor: C.line }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-              <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: alpha(C.cyan, 0.15), borderWidth: 2, borderColor: C.cyan, alignItems: 'center', justifyContent: 'center', ...glow(C.cyan, 8, 0.5) }}><Text style={{ color: C.cyan, fontSize: 18, fontWeight: '900' }}>{lv.level}</Text></View>
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <Text style={{ color: C.text, fontWeight: '900', fontSize: 14 }}>Nivel {lv.level} <Text style={{ color: C.dim, fontWeight: '700', fontSize: 12 }}>· {lv.into}/{lv.need} XP</Text></Text>
-                <Bar value={lv.into} max={lv.need} color={C.cyan} h={8} style={{ marginTop: 6 }} />
-              </View>
-              <View style={{ alignItems: 'flex-end', marginLeft: 10 }}>
-                <Text style={{ color: C.amber, fontWeight: '900', fontSize: 13 }}>🔥 {prof.streak}</Text>
-                <Text style={{ color: C.dim, fontSize: 11 }}>🏅 {achN}/{ACHIEVEMENTS.length}</Text>
-              </View>
-            </View>
-          </View>
-
-          <Pressable testID="daily" onPress={() => { hx.tap(); onPick(daily.id); }} style={{ borderRadius: 18, padding: 14, marginTop: 12, backgroundColor: alpha(C.amber, dailyDone ? 0.05 : 0.12), borderWidth: 1.5, borderColor: alpha(C.amber, dailyDone ? 0.35 : 0.8), flexDirection: 'row', alignItems: 'center', ...glow(C.amber, 12, dailyDone ? 0.15 : 0.45) }}>
-            <Text style={{ fontSize: 30, marginRight: 12 }}>{daily.emoji}</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: C.amber, fontSize: 12, fontWeight: '900', letterSpacing: 2 }}>🎯 RETO DEL DÍA {dailyDone ? '· ¡CUMPLIDO!' : '· +50 XP'}</Text>
-              <Text style={{ color: C.text, fontSize: 15, fontWeight: '800' }}>{daily.name}</Text>
-              <Text style={{ color: C.dim, fontSize: 11 }}>{dailyDone ? 'Vuelve mañana para mantener tu racha' : 'Termina una partida hoy para sumar racha'}</Text>
-            </View>
-            <Text style={{ color: C.amber, fontSize: 22 }}>{dailyDone ? '✓' : '›'}</Text>
-          </Pressable>
-
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 14, marginBottom: 14 }}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ gap: 8 }}>
-              {cats.map(c => {
-                const on = cat === c.id;
-                return (
-                  <Pressable key={c.id} testID={`cat-${c.id}`} onPress={() => { hx.tick(); setCat(c.id); }}
-                    style={{ paddingHorizontal: 13, paddingVertical: 7, borderRadius: 16, backgroundColor: on ? C.cyan : C.panel2, borderWidth: 1, borderColor: on ? C.cyan : C.line }}>
-                    <Text style={{ color: on ? '#04040c' : C.dim, fontSize: 12, fontWeight: '900', letterSpacing: 1 }}>{c.label}</Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          </View>
-
-          <Pressable testID="surprise" onPress={surprise} style={{ borderRadius: 18, padding: 14, marginBottom: 14, backgroundColor: alpha(C.pink, 0.12), borderWidth: 1.5, borderColor: alpha(C.pink, 0.6), flexDirection: 'row', alignItems: 'center', ...glow(C.pink, 12, 0.4) }}>
-            <Text style={{ fontSize: 26, marginRight: 12 }}>🎲</Text>
-            <View style={{ flex: 1 }}>
-              <Text style={{ color: C.pink, fontSize: 15, fontWeight: '900', letterSpacing: 1 }}>SORPRÉNDEME</Text>
-              <Text style={{ color: C.dim, fontSize: 12 }}>Un juego al azar</Text>
-            </View>
-            <Text style={{ color: C.pink, fontSize: 22 }}>›</Text>
-          </Pressable>
-
-          {cat === 'fav' && list.length === 0 && <Text style={{ color: C.dim, textAlign: 'center', marginVertical: 24 }}>Marca juegos con ☆ para verlos aquí.</Text>}
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-            {list.map((g, i) => (
-              <GameCard key={g.id + cat} g={g} index={i} cardW={cardW} best={bests[g.id] || 0} fav={!!prof.favs[g.id]} daily={g.id === daily.id && !dailyDone}
-                onPress={() => { hx.tap(); onPick(g.id); }} onFav={() => { hx.tick(); Profile.toggleFav(g.id); }} />
-            ))}
-          </View>
-        </View>
-      </ScrollView>
-
-      {panel === 'settings' && (
-        <Panel title="⚙️ AJUSTES" onClose={() => { setPanel(null); setConfirm(false); }}>
-          <Toggle testID="tg-sound" label="🔊 Sonido" sub="Efectos de sonido en los juegos" on={settings.sound} onPress={() => setSetting('sound', !settings.sound)} />
-          <Toggle testID="tg-haptics" label="📳 Vibración" sub="Respuesta háptica al jugar" on={settings.haptics} onPress={() => setSetting('haptics', !settings.haptics)} />
-          <View style={{ marginTop: 16, padding: 14, borderRadius: 16, borderWidth: 1, borderColor: alpha(C.red, 0.5), backgroundColor: alpha(C.red, 0.06) }}>
-            <Text style={{ color: C.text, fontWeight: '800', fontSize: 15 }}>Borrar progreso</Text>
-            <Text style={{ color: C.dim, fontSize: 12, marginVertical: 6 }}>Elimina récords, nivel, logros y favoritos (no borra las partidas guardadas de los juegos de aventura).</Text>
-            <Btn testID="reset" label={confirm ? 'TOCA DE NUEVO PARA CONFIRMAR' : 'BORRAR TODO'} small ghost color={C.red} onPress={() => { if (!confirm) { setConfirm(true); hx.warn(); } else { Profile.reset().then(() => { setBests({}); setConfirm(false); toast('Progreso borrado', '🗑️'); }); } }} />
-          </View>
-          <Text style={{ color: alpha(C.dim, 0.7), fontSize: 11, textAlign: 'center', marginTop: 24 }}>Arcade Hub · {GAMES.length} juegos</Text>
-        </Panel>
-      )}
-      {panel === 'ach' && (
-        <Panel title="🏆 LOGROS" onClose={() => setPanel(null)}>
-          <Text style={{ color: C.dim, fontSize: 12, marginBottom: 12 }}>{achN} de {ACHIEVEMENTS.length} desbloqueados · cada logro da +30 XP</Text>
-          {ACHIEVEMENTS.map(a => {
-            const ok = !!prof.ach[a.id];
-            return (
-              <View key={a.id} style={{ flexDirection: 'row', alignItems: 'center', padding: 12, borderRadius: 16, marginBottom: 8, backgroundColor: ok ? alpha(C.amber, 0.1) : C.panel2, borderWidth: 1, borderColor: ok ? alpha(C.amber, 0.7) : C.line, opacity: ok ? 1 : 0.6 }}>
-                <Text style={{ fontSize: 28, marginRight: 12 }}>{ok ? a.emoji : '🔒'}</Text>
-                <View style={{ flex: 1 }}><Text style={{ color: ok ? C.amber : C.text, fontWeight: '900' }}>{a.name}</Text><Text style={{ color: C.dim, fontSize: 12 }}>{a.desc}</Text></View>
-                {ok && <Text style={{ color: C.lime, fontWeight: '900' }}>✓</Text>}
-              </View>
-            );
-          })}
-        </Panel>
-      )}
-    </SafeAreaView>
-  );
+    if (first.current) { first.current = false; return undefined; }
+    a.setValue(1);
+    const anim = Animated.timing(a, { toValue: 0, duration: 520, delay: 60, easing: Easing.out(Easing.cubic), useNativeDriver: true });
+    anim.start();
+    return () => anim.stop();
+  }, [screen]); // eslint-disable-line react-hooks/exhaustive-deps
+  return <Animated.View pointerEvents="none" style={{ ...StyleSheet.absoluteFillObject, backgroundColor: color, opacity: a, zIndex: 900 }} />;
 }
 
 export default function App() {
   const [screen, setScreen] = useState('menu');
+  useApplyQuality();   // «Calidad gráfica» (ajustes) → gfx.shadows, al arrancar y al cambiarla
   const g = GAMES.find(x => x.id === screen);
   const G = g ? g.Comp : null;
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
       {g ? (
         <GameCtx.Provider value={g.id}><G key={g.id} onExit={() => setScreen('menu')} /></GameCtx.Provider>
-      ) : <Menu onPick={setScreen} />}
+      ) : <Menu3D games={GAMES} categories={CATEGORIES} onPick={setScreen} />}
+      <ScreenVeil screen={screen} color={g ? g.color : '#06060f'} />
       <ToastHost />
     </View>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
