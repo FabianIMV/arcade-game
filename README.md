@@ -27,7 +27,7 @@ Deployed over-the-air via **EAS Update** straight to your iPhone through **Expo 
 
 ## 🎮 Los juegos (54)
 
-Todos los juegos comparten el mismo sistema de diseño (`utils/kit.js`): cabecera con récord, partículas, textos flotantes, *screen shake*, hápticos, pantallas de inicio y fin de partida, y récord persistente por juego. El menú tiene categorías, tarjetas con tu mejor puntuación y un botón **Sorpréndeme** 🎲.
+Todo está hecho en **3D de verdad** (three.js sobre `expo-gl`): cada juego es un mundo con cámara en primera o tercera persona, sombras, cielo, partículas y modelos animados, construido sobre un motor común (`utils/engine3d.js`, `utils/prefabs.js`, `utils/ui3d.js`). El **menú** es una sala arcade 3D de neón con una máquina recreativa por juego (`ui/Menu3D.js`): desliza para recorrerla, toca una máquina para verla y JUGAR. Incluye categorías, favoritos, reto del día y **Sorpréndeme** 🎲. Los récords y el perfil se conservan entre versiones.
 
 | Categoría | Juegos |
 |-----------|--------|
@@ -35,14 +35,14 @@ Todos los juegos comparten el mismo sistema de diseño (`utils/kit.js`): cabecer
 | 🕹️ **Arcade** | **Snake Power** · **Ping Pong** (IA que mejora) · **Breakout** (mejoras y multibola) · **Pong Solo** (bumpers estilo pinball) · **Star Catcher** · **Coin Rush** · **Crossy Road** (calles, ríos y trenes) |
 | ⚡ **Reflejos** | **Gravity Flip** · **Wall Jumper** · **Whack-a-Mole** · **Fruit Slash** (corta frutas) · **Ritmo y Color** (Simon) · **Flappy Neon** · **Sky Hop** (rebota hacia el cielo) · **Tower Stack** · **Reflejos** · **Color Rush** (Stroop) · **Dino Run** |
 | 🧩 **Puzzle** | **Neon Tetris** (hold, fantasma, gestos) · **2048 Neon** (deshacer) · **15 Puzzle** (3×3, 4×4, 5×5) · **Bubble Shooter** (bombas y arcoíris) · **Memory Match** · **Math Rush** · **Palabras** · **Word Chain** · **Buscaminas** (3 dificultades) · **4 en línea** (IA minimax) |
-| 🧙 **Aventura** | **Pixel Quest** (30 mundos) · **Void Crawler** (roguelike con niebla y jefe) · **Monster Duel** (captura, evoluciona, líderes) · **Pixel Craft** (mina, fabrica, zombis y noche) · **Pixel RPG** (mundo procedural, tiendas, hechizos, dragón) · **Mundo 3D** (mundo abierto en primera persona con three.js/GPU: terreno, bosques, aldeas, torres, ciclo día/noche, niebla y lobos; si la GPU falla cambia solo a un modo compatible) |
+| 🧙 **Aventura** | **Pixel Quest** (30 mundos) · **Void Crawler** (roguelike con niebla y jefe) · **Monster Duel** (captura, evoluciona, líderes) · **Pixel Craft** (mina, fabrica, zombis y noche) · **Pixel RPG** (mundo procedural, tiendas, hechizos, dragón) · **Mundo 3D** (mundo abierto en primera persona: montañas, lagos, aldeas, ciclo día/noche y lobos) |
 | 🌍 **Mundo abierto 3D** | **Isla del Tesoro** (cofres, palmeras y cangrejos) · **Safari Foto** (fotografía animales desde un jeep) · **Granja Libre** (planta, riega, cosecha y vende) · **Rally Abierto** (contrarreloj con aros y rampas) · **Reparto en Moto** (entregas en primera persona por la ciudad) · **Jinete de Dragón** (vuelo libre y torres enemigas) · **Planeta Alien** (baja gravedad, cristales y oxígeno) · **Cazafantasmas** (pueblo de noche, linterna) · **Supervivencia Zombi** (tala, vallas y 4 noches) · **Parkour Urbano** (saltos entre azoteas) · **Lago de Pesca** (lanza, espera y recoge) |
 
 ### 🧬 Progreso y extras
 - **Sonido** sintetizado para todos los juegos (activable en ⚙️ Ajustes; requiere `expo-audio`, ya incluido en `package.json`).
 - **Perfil**: nivel y XP, **12 logros** y **reto del día** con racha 🔥 (un juego distinto cada día).
 - **Favoritos** ⭐ con su propia pestaña en el menú.
-- **Ajustes**: sonido, vibración y borrado de progreso.
+- **Ajustes**: sonido, vibración, **calidad gráfica** (Alta con sombras / Rápida) y borrado de progreso.
 
 ---
 

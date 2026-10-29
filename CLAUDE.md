@@ -11,52 +11,35 @@
 
 ## Project Overview
 
-React Native / Expo arcade game app. All games live in `App.js` as separate function components.
-Shared UI/juice (theme, haptics, FX, overlays, best score, game loop) lives in `utils/kit.js`.
-Settings, sound effects (`expo-audio`, optional), profile/XP/achievements/daily challenge and toasts live in `utils/meta.js`; `hx.*` already plays sound + haptics, and `useBest().submit` already feeds the profile — games need no extra code.
+React Native / Expo arcade app where **everything is real 3D** (three.js 0.166 on `expo-gl`).
+
+- `App.js`: only the `GAMES` registry, `CATEGORIES` and navigation (menu ↔ game). No game code lives here.
+- `games3d/<id>.js`: one file per game, exporting its component (e.g. `SnakePower3D`).
+- `ui/Menu3D.js` (3D arcade-hall menu) and `ui/Panels3D.js` (settings, profile/achievements, graphics quality).
+- `utils/engine3d.js` (scene format, shadows, sky, terrain, water, instancing, particles), `utils/World3D.js` (GL view), `utils/prefabs.js` (person, car, tree, chest, dragon…), `utils/ui3d.js` (`Game3D` shell, `Btn3D`, `Panel3D`, `HudPill`, `Stick3D`, `ActionBtn`, `ScreenLayer`), `utils/openworld.js` (heightmap, movement, cameras, `project`/`rayGround`), `utils/gl3dx.js` (`makeRenderer`, required expo-gl fix).
+- `utils/kit.js`: theme, haptics (`hx`), FX, `useBest`, `useLoop`, `usePan`, `TouchBtn`/`TouchStick`. `utils/meta.js`: settings, sound, profile/XP/achievements/daily challenge, toasts (`useBest().submit` already feeds the profile).
+
+**Read `docs/ENGINE3D.md` before touching any game.** Reference game: `games3d/islatesoro.js`.
 
 ## Adding a New Game
 
-1. Add game constants at the top of the game's section in `App.js` (prefixed, e.g. `MG_`)
-2. Add the game component function `function MyGame({ onExit }) { ... }`
-3. Register it in the `GAMES` array (just above `function Menu`) — the menu, categories and routing are generated from it:
+1. Create `games3d/<id>.js` exporting `function MyGame3D({ onExit })`, built on `Game3D` (see `docs/ENGINE3D.md` §1).
+2. Import it in `App.js` and register it in `GAMES`:
    ```js
-   { id: 'mygame', name: 'MY GAME', emoji: '🎮', tag: 'Una línea de descripción', color: C.cyan, cat: 'arcade', Comp: MyGame },
+   { id: 'mygame', name: 'MY GAME', emoji: '🎮', tag: 'Una línea de descripción', color: C.cyan, cat: 'arcade', Comp: MyGame3D },
    ```
-   (`cat` is one of `accion | arcade | reflejos | puzzle | aventura`)
+   (`cat` is one of `accion | arcade | reflejos | puzzle | aventura`). The 3D menu and categories are generated from it.
+3. Keep the `useBest('<key>')` key stable forever: changing it wipes the player's record.
 
-## Game structure (follow this pattern)
+## Rules of thumb
 
-```js
-function MyGame({ onExit }) {
-  const fx = useFX();                                  // partículas / textos flotantes / shake
-  const [best, submitBest] = useBest('mygame');        // récord persistente (AsyncStorage `@best:mygame`)
-  const [phase, setPhase] = useState('ready');         // ready | play | over
-  const g = useRef(null);                              // estado mutable del juego (refs, no useState)
-  if (!g.current) g.current = initState();
-  useLoop(phase === 'play', dt => { /* dt en segundos, re-renderiza cada frame */ });
-  const pan = usePan(fx, { down(x, y) {}, move(x, y, gs) {}, up() {} });  // coords locales del PlayArea
-  return (
-    <GameScreen title="MY GAME" emoji="🎮" accent={C.cyan} onExit={onExit} score={...} best={best} hud={...}>
-      <PlayArea fx={fx} {...pan}>
-        {/* dibuja en coordenadas 0..AREA_W × 0..AREA_H */}
-        <Overlay show={phase !== 'play'} kind={phase} title="..." score={...} best={best} onStart={start} onExit={onExit} />
-      </PlayArea>
-    </GameScreen>
-  );
-}
-```
-
-Kit rules of thumb:
-- Haptics via `hx.tap/hit/good/bad/die/win`; effects via `fx.burst/pop/ring/shake/flash`.
-- Never define a component inside another component's render (it remounts every frame and breaks presses). Hoist it to module level.
-- For multi-touch controls (hold left + jump, two joysticks) use `TouchBtn` / `TouchStick` from `utils/kit.js` (raw touch events). Never `Pressable`/`PanResponder` for held controls: React Native's responder system allows only ONE active control at a time.
-- 3D games: create the three.js renderer with `makeRenderer(gl, THREE)` from `utils/gl3dx.js` (works around expo-gl's WebGL2 context failing three.js's WebGL 1 check).
-- Use `text` glow with `tglow(color)`, not `glow()` (which is for Views).
-
-## 3D games (engine v2)
-
-New/rewritten 3D games use `utils/engine3d.js` (scene format, shadows, sky, instancing, particles), `utils/prefabs.js` (person, car, tree, chest, dragon…) and `Game3D` from `utils/ui3d.js` (start/over screens, HUD, joysticks). Read `docs/ENGINE3D.md`; the reference game is `games3d/islatesoro.js`.
+- Game state in `useRef`; `useLoop` re-renders every frame. Never define a component inside another component's render.
+- Text is always 2D (`Text`) over the 3D view. Labels placed with `project()` go inside `<ScreenLayer>` (children of `Game3D` start below the header).
+- Held / simultaneous controls: `TouchBtn` / `TouchStick` (or `Stick3D` / `ActionBtn`). Never `Pressable`/`PanResponder` for held controls (RN allows only one responder at a time).
+- Stable object ids; < ~300 id meshes per frame; repeated scenery with `inst` / `statics`. Shadows only on what matters (`sh:true`); users can turn shadows off (graphics quality).
+- No `readPixels` "black screen" probes on device (iOS MSAA framebuffer always reads black). No camera roll. Don't touch `makeRenderer`.
+- Haptics via `hx.tap/hit/good/bad/die/win` on every event (players love strong vibration); effects via `burst3d`/`ring3d` + `fx.shake`.
+- User-facing text in neutral Spanish (tú, never voseo).
 
 ## Testing (no device needed)
 
