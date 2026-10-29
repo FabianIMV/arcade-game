@@ -1,18 +1,21 @@
 import React, { useRef, useState } from 'react';
 import { Text, View } from 'react-native';
-import { AREA_H, AREA_W, C, GameScreen, Overlay, PlayArea, TouchBtn, TouchStick, alpha, clamp, hx, tglow, useBest, useFX, useLoop } from '../utils/kit';
-import { World3D } from '../utils/World3D';
-import { compassAngle, followCam, forward, makeHeightmap, near, right, seeded, terrainObjs } from '../utils/openworld';
+import { C, clamp, hx, tglow, useBest, useFX, useLoop } from '../utils/kit';
+import { burst3d, clear3d, ring3d } from '../utils/engine3d';
+import { ActionBtn, Game3D, HudPill, Stick3D } from '../utils/ui3d';
+import { car, hash01, rock, shade, tree } from '../utils/prefabs';
+import { compassAngle, followCam, forward, makeHeightmap, seeded } from '../utils/openworld';
 
-// RALLY ABIERTO – contrarreloj en tercera persona por un paisaje con colinas, árboles y rocas.
-// Joystick izquierdo: girar el auto · FRENO: frenar (el auto acelera solo).
-// Pasa los 10 aros en orden antes de que acabe el tiempo; cada aro suma tiempo.
+// RALLY ABIERTO – contrarreloj en 3D por un paisaje con colinas, árboles, rocas y rampas.
+// Joystick izquierdo: girar el auto · FRENO: frenar (el auto acelera solo). Pasa los 10 aros en orden antes de que
+// acabe el tiempo; cada aro suma 7 s. Árboles y rocas frenan el auto · las rampas lo lanzan por el aire.
 const KT_SIZE = 240, KT_HALF = KT_SIZE / 2, KT_RINGS = 10, KT_TIME = 25, KT_BONUS = 7;
 const KT_TREES = 150, KT_ROCKS = 90, KT_RAMPS = 4;
 const KT_MAXV = 26, KT_ACC = 12, KT_BRK = 34, KT_VTOP = 34, KT_TURN = 2.4, KT_GRAV = 26, KT_CAR_R = 1.1;
 const KT_RL = 9, KT_RW = 6, KT_RH = 3.2;            // rampa: largo, ancho y altura
-const KT_TREE_COLS = ['#2f8f3a', '#2c7d46', '#3e9b3a'];
-const ktColor = y => (y < 0 ? '#b8a46a' : y < 2.5 ? '#7cb857' : y < 5 ? '#5f9f45' : '#8f8b74');
+const KT_TREE_COLS = ['#2f8f3a', '#2c7d46', '#3e9b3a', '#5aa83c'];
+const KT_SKY = '#8fd0ff';
+const ktColor = (y, x, z) => shade(y < 0 ? '#c2ad74' : y < 2.5 ? '#7cb857' : y < 6 ? '#5f9f45' : '#8f8b74', 0.92 + hash01(`${x.toFixed(0)},${z.toFixed(0)}`) * 0.16);
 const ktWrap = a => Math.atan2(Math.sin(a), Math.cos(a));
 
 // Altura de una rampa bajo (x, z); -1e9 si el punto no está sobre ella.
@@ -43,7 +46,7 @@ const initState = () => {
     const n = pts[(i + 1) % KT_RINGS];
     return { id: `aro${i}`, x: q.x, z: q.z, y: hm.h(q.x, q.z) + 2.4, ry: Math.atan2(n.x - q.x, n.z - q.z) };
   });
-  // inicio: 14 m detrás del primer aro, mirando hacia él
+  // salida: 14 m detrás del primer aro, mirando hacia él
   const p0 = pts[0], p1 = pts[1];
   const ddx = p1.x - p0.x, ddz = p1.z - p0.z, dl = Math.hypot(ddx, ddz) || 1;
   const sx = p0.x - (ddx / dl) * 14, sz = p0.z - (ddz / dl) * 14;
@@ -67,19 +70,51 @@ const initState = () => {
     }
     return out;
   };
-  const trees = place(KT_TREES, 9, (i, x, z) => ({ id: `arbol${i}`, x, z, y: hm.h(x, z), h: 2.2 + r() * 1.2, r: 1.3, cd: 0, col: KT_TREE_COLS[Math.floor(r() * KT_TREE_COLS.length)] }));
+  const trees = place(KT_TREES, 9, (i, x, z) => ({ id: `arbol${i}`, x, z, y: hm.h(x, z), h: 2.2 + r() * 1.2, r: 1.3, cd: 0, kind: r() < 0.6 ? 'pine' : 'oak', col: KT_TREE_COLS[Math.floor(r() * KT_TREE_COLS.length)] }));
   const rocks = place(KT_ROCKS, 6, (i, x, z) => {
-    const sx2 = 1.4 + r() * 1.6, sy = 0.9 + r() * 0.9, sz2 = 1.2 + r() * 1.2;
-    return { id: `roca${i}`, x, z, y: hm.h(x, z), s: [sx2, sy, sz2], rot: [r() * 3, r() * 3, 0], r: (sx2 + sz2) / 4, cd: 0 };
+    const sc = 0.8 + r() * 0.9, rr = 1.1 * sc;
+    return { id: `roca${i}`, x, z, y: hm.h(x, z), h: sc, rot: r() * 3, r: rr, cd: 0 };
   });
+  // decorado ESTÁTICO (una vez, con instancing): árboles y rocas
+  const statics = [];
+  for (const t of trees) statics.push(...tree(t.id, [t.x, t.y, t.z], { kind: t.kind, h: t.h, leaf: t.col, inst: 'arbol' }));
+  for (const o of rocks) statics.push(...rock(o.id, [o.x, o.y, o.z], { kind: 'boulder', h: o.h, c: '#8d8a86', inst: 'roca' }));
   const s = {
-    hm, rings, ramps, trees, rocks, obs: [...trees, ...rocks], next: 0, prevSd: null, time: KT_TIME, t: 0, toast: null, final: null,
-    yaw, camYaw: yaw,
-    car: { x: sx, z: sz, y: hm.h(sx, sz), v: 0, vy: 0, air: false, g: hm.h(sx, sz), grade: 0 },
+    hm, rings, ramps, obs: [...trees, ...rocks], statics, next: 0, prevSd: null, time: KT_TIME, t: 0, toast: null, final: null, vmax: 0,
+    terrain: { id: `rally${seed}`, h: hm.h, size: KT_SIZE, step: 3, color: ktColor },
+    yaw, camYaw: yaw, spin: 0, steer: 0,
+    car: { x: sx, z: sz, y: 0, v: 0, vy: 0, air: false, g: 0, grade: 0 },
   };
   s.car.y = groundAt(s, sx, sz); s.car.g = s.car.y;
+  const cam0 = followCam(s.car, yaw, { hm, dist: 9, height: 4.2, look: 3 });
+  s.cp = cam0.p.slice(); s.cl = cam0.l.slice();
   return s;
 };
+
+// Escena completa (juego y fondo de los menús): cielo, terreno, decorado estático, aros, rampas y el auto.
+function buildScene(s, t) {
+  const c = s.car, objs = [];
+  s.ramps.forEach(rp => {
+    const Lr = Math.hypot(KT_RL, KT_RH), th = Math.atan2(KT_RH, KT_RL), cy = rp.base + KT_RH / 2 - 0.25;
+    objs.push(rp.axis === 'z'
+      ? { id: rp.id, k: 'box', p: [rp.x, cy, rp.z], s: [KT_RW, 0.5, Lr], r: [-rp.dir * th, 0, 0], c: '#ff8a3d', e: 0.15 }
+      : { id: rp.id, k: 'box', p: [rp.x, cy, rp.z], s: [Lr, 0.5, KT_RW], r: [0, 0, rp.dir * th], c: '#ff8a3d', e: 0.15 });
+  });
+  s.rings.slice(s.next).forEach((rr, j) => {
+    objs.push({ id: rr.id, k: 'tor', p: [rr.x, rr.y, rr.z], n: 4.2, r: [0, rr.ry, 0], c: j === 0 ? C.lime : C.amber, e: j === 0 ? 0.8 : 0.35 });
+    if (j === 0) objs.push({ id: 'haz', k: 'cyl', p: [rr.x, rr.y + 10, rr.z], s: [0.5, 20, 0.5], c: C.lime, e: 0.9, o: 0.22 + Math.sin(t * 4) * 0.05 });
+  });
+  objs.push(...car('kart', [c.x, c.y, c.z], { kind: 'sport', c: '#ff3d5a', yaw: s.yaw, pitch: s.pitch || 0, roll: s.roll || 0, steer: s.steer, spin: s.spin }));
+  return {
+    sky: { top: '#3a8fe8', bottom: KT_SKY, sun: true, clouds: 7 },
+    fog: { c: KT_SKY, near: 80, far: 210 },
+    shadowR: 30,
+    terrain: s.terrain,
+    statics: s.statics,
+    objs,
+    cam: { p: s.cp, l: s.cl, fov: 62 },
+  };
+}
 
 export function Rally3D({ onExit }) {
   const fx = useFX();
@@ -91,9 +126,9 @@ export function Rally3D({ onExit }) {
   const g = useRef(null);
   if (!g.current) g.current = initState();
 
-  const start = () => { fx.clear(); g.current = initState(); move.x = 0; move.y = 0; brake.on = false; setPhase('play'); hx.tap(); };
+  const start = () => { fx.clear(); clear3d(); g.current = initState(); move.x = 0; move.y = 0; brake.on = false; setPhase('play'); hx.tap(); };
   const finish = (s, won) => {
-    brake.on = false;
+    brake.on = false; move.x = 0;
     s.final = s.next * 100 + (won ? Math.ceil(s.time) * 10 : 0);
     if (won) hx.win(); else hx.die();
     setRes({ isNew: submitBest(s.final), won }); setPhase('over');
@@ -107,11 +142,13 @@ export function Rally3D({ onExit }) {
 
     // giro: el auto gira con su velocidad; nunca se desliza de lado
     s.yaw -= (move.x || 0) * KT_TURN * Math.min(1, c.v / 6) * dt;
+    s.steer += ((move.x || 0) * 0.45 - s.steer) * Math.min(1, dt * 8);
 
     // velocidad: acelera solo, FRENO frena; las cuestas frenan o empujan
     const d = (brake.on ? 0 : KT_MAXV) - c.v;
     c.v += clamp(d, -KT_BRK * dt, KT_ACC * dt);
     c.v = clamp(c.v - c.grade * 9.8 * dt, 0, KT_VTOP);
+    s.vmax = Math.max(s.vmax, c.v);
 
     // movimiento hacia donde mira el auto
     const f = forward(s.yaw);
@@ -119,7 +156,7 @@ export function Rally3D({ onExit }) {
     const lim = KT_HALF - 6;
     if (Math.abs(c.x) > lim || Math.abs(c.z) > lim) { c.x = clamp(c.x, -lim, lim); c.z = clamp(c.z, -lim, lim); c.v *= 0.5; }
 
-    // árboles y rocas: frenan el auto y vibran
+    // árboles y rocas: frenan el auto, saltan chispas
     for (const o of s.obs) {
       if (o.cd > 0) o.cd -= dt;
       if (c.y > o.y + 1.6) continue;
@@ -131,6 +168,7 @@ export function Rally3D({ onExit }) {
       if (into > 0.2 && c.v > 5 && o.cd <= 0) {
         o.cd = 0.6; c.v *= 0.2;
         hx.heavy(); fx.shake(14, 0.4); fx.flash(C.red, 0.22);
+        burst3d([c.x - nx * 1.2, c.y + 1.0, c.z - nz * 1.2], ['#ffd54a', '#ffffff', '#ff8a3d'], 22, { speed: 7, up: 3, g: 14, size: 0.14, life: 0.6 });
         s.toast = { m: '💥 ¡Choque!', t: 0.9 };
       }
     }
@@ -139,14 +177,28 @@ export function Rally3D({ onExit }) {
     const gPrev = c.g, gNow = groundAt(s, c.x, c.z);
     c.g = gNow;
     if (c.air || c.y > gNow + 0.6) {
+      if (!c.air && c.vy > 3) burst3d([c.x, c.y, c.z], '#d8c39a', 14, { speed: 4, up: 2, g: 6, size: 0.3, life: 0.8 });
       c.air = true; c.vy -= KT_GRAV * dt; c.y += c.vy * dt; c.grade = 0;
       if (c.y <= gNow) {
-        if (c.vy < -14) { hx.hit(); fx.shake(7, 0.25); }
+        if (c.vy < -14) { hx.hit(); fx.shake(7, 0.25); ring3d([c.x, c.y + 0.1, c.z], '#d8c39a', 16, { speed: 5, life: 0.5, size: 0.2 }); }
         c.y = gNow; c.vy = 0; c.air = false;
       }
     } else {
       c.y = gNow; c.vy = (gNow - gPrev) / Math.max(dt, 1e-4);
       c.grade = clamp((gNow - gPrev) / Math.max(c.v * dt, 0.01), -1, 1);
+    }
+    s.pitch = c.air ? clamp(c.vy * 0.025, -0.4, 0.4) : clamp(c.grade * 0.5, -0.4, 0.4);
+    s.roll = clamp(-(move.x || 0) * Math.min(1, c.v / 20) * 0.08, -0.1, 0.1);
+    s.spin += c.v * dt / 0.36;
+
+    // polvo al correr por tierra
+    if (!c.air && c.v > 6) {
+      s.dustT = (s.dustT || 0) - dt;
+      if (s.dustT <= 0) {
+        s.dustT = 0.09;
+        const bx = c.x - f[0] * 1.8, bz = c.z - f[1] * 1.8;
+        burst3d([bx, c.y + 0.25, bz], ['#d8c39a', '#b9a57a'], 2, { speed: 2.4, up: 1.2, g: 3, size: 0.32, life: 0.8, drag: 2 });
+      }
     }
 
     // aros en orden: cuenta si el auto cruza el plano del aro por dentro (cada uno suma tiempo)
@@ -159,90 +211,51 @@ export function Rally3D({ onExit }) {
       if (crossed && lat < 2.8 && Math.abs(rg.y - c.y) < 4.5) {
         s.next += 1; s.time += KT_BONUS; s.prevSd = null;
         hx.good(); fx.flash(C.amber, 0.2);
+        ring3d([rg.x, rg.y, rg.z], C.lime, 26, { speed: 7, life: 0.7, size: 0.2 });
+        burst3d([rg.x, rg.y, rg.z], [C.lime, C.amber, '#ffffff'], 30, { speed: 7, up: 3, g: 10, size: 0.2, life: 1.0 });
         s.toast = { m: `🏁 Aro ${s.next}/${KT_RINGS} · +${KT_BONUS} s`, t: 1.4 };
         if (s.next >= KT_RINGS) { finish(s, true); return; }
       }
     }
 
-    // cámara: sigue el yaw del auto con suavizado
+    // cámara suave: sigue el yaw del auto y se acerca a su objetivo con retardo
     s.camYaw += ktWrap(s.yaw - s.camYaw) * Math.min(1, dt * 5);
+    const cam = followCam(c, s.camYaw, { hm: s.hm, dist: 9, height: 4.2, look: 3 }), k = 1 - Math.exp(-dt * 10);
+    for (let i = 0; i < 3; i++) { s.cp[i] += (cam.p[i] - s.cp[i]) * k; s.cl[i] += (cam.l[i] - s.cl[i]) * k; }
   });
 
   const s = g.current; const c = s.car;
-  const f = forward(s.yaw), rt = right(s.yaw);
-  const at = (dd, ll, hh) => [c.x + f[0] * dd + rt[0] * ll, c.y + hh, c.z + f[1] * dd + rt[1] * ll];
-  const yaw = s.yaw;
   const sc = s.final != null ? s.final : s.next * 100;
   const rg = s.rings[s.next];
   const ang = rg ? compassAngle(c, s.yaw, rg) : 0;
   const dist = rg ? Math.hypot(rg.x - c.x, rg.z - c.z) : 0;
-
-  const carObjs = [
-    { id: 'sombra', k: 'box', p: [c.x, c.y + 0.05, c.z], s: [2.2, 0.06, 4.0], r: [0, yaw, 0], c: '#000000', o: 0.35 },
-    { id: 'coche', k: 'box', p: [c.x, c.y + 0.6, c.z], s: [1.9, 0.6, 3.8], r: [0, yaw, 0], c: '#ff3d5a' },
-    { id: 'cabina', k: 'box', p: at(-0.4, 0, 1.15), s: [1.5, 0.55, 1.8], r: [0, yaw, 0], c: '#15161f' },
-    { id: 'aleron', k: 'box', p: at(-1.85, 0, 1.25), s: [2.0, 0.14, 0.4], r: [0, yaw, 0], c: '#ffc233' },
-    { id: 'faroI', k: 'box', p: at(1.92, 0.6, 0.45), s: [0.3, 0.2, 0.1], r: [0, yaw, 0], c: '#fff7c2', e: 0.5 },
-    { id: 'faroD', k: 'box', p: at(1.92, -0.6, 0.45), s: [0.3, 0.2, 0.1], r: [0, yaw, 0], c: '#fff7c2', e: 0.5 },
-    { id: 'rueda1', k: 'cyl', p: at(1.25, 1.0, 0.4), s: [0.8, 0.5, 0.8], r: [0, yaw, Math.PI / 2], c: '#111111' },
-    { id: 'rueda2', k: 'cyl', p: at(1.25, -1.0, 0.4), s: [0.8, 0.5, 0.8], r: [0, yaw, Math.PI / 2], c: '#111111' },
-    { id: 'rueda3', k: 'cyl', p: at(-1.25, 1.0, 0.4), s: [0.8, 0.5, 0.8], r: [0, yaw, Math.PI / 2], c: '#111111' },
-    { id: 'rueda4', k: 'cyl', p: at(-1.25, -1.0, 0.4), s: [0.8, 0.5, 0.8], r: [0, yaw, Math.PI / 2], c: '#111111' },
-  ];
-  const rampObj = rp => {
-    const Lr = Math.hypot(KT_RL, KT_RH), th = Math.atan2(KT_RH, KT_RL), cy = rp.base + KT_RH / 2 - 0.25;
-    return rp.axis === 'z'
-      ? { id: rp.id, k: 'box', p: [rp.x, cy, rp.z], s: [KT_RW, 0.5, Lr], r: [-rp.dir * th, 0, 0], c: '#ff8a3d', e: 0.15 }
-      : { id: rp.id, k: 'box', p: [rp.x, cy, rp.z], s: [Lr, 0.5, KT_RW], r: [0, 0, rp.dir * th], c: '#ff8a3d', e: 0.15 };
-  };
-  const ringObj = (rr, next) => ({ id: rr.id, k: 'tor', p: [rr.x, rr.y, rr.z], n: 4.2, r: [0, rr.ry, 0], c: next ? C.lime : C.amber, e: next ? 0.6 : 0.3 });
-  const objs = [
-    ...terrainObjs(s.hm, c, 35, 5, ktColor, -5),
-    ...near(s.trees, c, 45).flatMap(t => [
-      { id: `${t.id}a`, k: 'cyl', p: [t.x, t.y + t.h / 2, t.z], s: [0.5, t.h, 0.5], c: '#7a4f2a' },
-      { id: `${t.id}b`, k: 'cone', p: [t.x, t.y + t.h + 1.8, t.z], s: [3.0, 3.6, 3.0], c: t.col },
-    ]),
-    ...near(s.rocks, c, 45).map(o => ({ id: o.id, k: 'sph', p: [o.x, o.y + o.s[1] * 0.3, o.z], s: o.s, r: o.rot, c: '#8d8a86' })),
-    ...near(s.ramps, c, 60).map(rampObj),
-    ...s.rings.slice(s.next).map((rr, j) => ringObj(rr, j === 0)),
-    ...carObjs,
-  ];
-  const shake = fx.shakeT > 0 ? fx.shakeMag * (fx.shakeT / fx.shakeDur) * 0.03 : 0;
-  const scene = { bg: '#9fd8ff', fog: { c: '#9fd8ff', near: 20, far: 52 }, shake, objs, cam: followCam(c, s.camYaw, { hm: s.hm, dist: 9, height: 4.2, look: 3 }) };
-  const pad = (v, cx) => (
-    <View pointerEvents="none" style={{ position: 'absolute', left: cx - 50, bottom: 14, width: 100, height: 100, borderRadius: 50, borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)', backgroundColor: 'rgba(0,0,0,0.15)' }}>
-      <View style={{ position: 'absolute', left: 34 + v.x * 32, top: 34 + v.y * 32, width: 32, height: 32, borderRadius: 16, backgroundColor: v.on ? alpha(C.orange, 0.7) : 'rgba(255,255,255,0.35)' }} />
-    </View>
-  );
+  const scene = buildScene(s, s.t);
+  const kmh = Math.round(c.v * 3.6);
   return (
-    <GameScreen title="RALLY ABIERTO" emoji="🏎️" accent={C.orange} onExit={onExit} score={sc} best={best}
-      hud={<><Text style={{ color: C.text, fontWeight: '900', fontSize: 12 }}>🏁 {s.next}/{KT_RINGS}</Text><Text style={{ color: s.time < 10 ? C.red : C.amber, fontWeight: '900', fontSize: 12 }}>⏱ {Math.ceil(s.time)}s</Text><Text style={{ color: C.cyan, fontWeight: '900', fontSize: 12 }}>{Math.round(c.v * 3.6)} km/h</Text></>}>
-      <PlayArea fx={fx} bg="#9fd8ff">
-        <World3D scene={scene} />
-        {phase === 'play' && rg && (
-          <View pointerEvents="none" style={{ position: 'absolute', top: 10, left: 0, right: 0, alignItems: 'center' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 }}>
-              <Text style={{ color: C.lime, fontSize: 18, fontWeight: '900', transform: [{ rotate: `${ang}rad` }] }}>▲</Text>
-              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12, marginLeft: 8 }}>Aro {s.next + 1} a {Math.round(dist)} m</Text>
-            </View>
-          </View>
-        )}
-        {s.toast && <Text pointerEvents="none" style={{ position: 'absolute', top: AREA_H * 0.25, width: AREA_W, textAlign: 'center', color: '#fff', fontSize: 22, fontWeight: '900', ...tglow('#000', 8) }}>{s.toast.m}</Text>}
-        {phase === 'play' && (
-          <>
-            <TouchStick testID="kt-steer" v={move} R={44} style={{ position: 'absolute', left: 0, bottom: 0, width: AREA_W * 0.5, height: 170 }} />
-            {pad(move, 62)}
-            <TouchBtn testID="kt-brake" onDown={() => { brake.on = true; }} onUp={() => { brake.on = false; }} style={{ position: 'absolute', right: 14, bottom: 26, width: 96, height: 96, borderRadius: 48, borderWidth: 2, borderColor: C.red, backgroundColor: alpha(C.red, 0.25), alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ color: '#fff', fontWeight: '900', fontSize: 14 }}>FRENO</Text>
-            </TouchBtn>
-          </>
-        )}
-        <Overlay show={phase !== 'play'} kind={phase} emoji={phase === 'over' ? (res.won ? '🏆' : '🏎️') : '🏎️'}
-          title={phase === 'over' ? (res.won ? '¡RALLY COMPLETADO!' : 'TIEMPO AGOTADO') : 'RALLY ABIERTO'}
-          subtitle={phase === 'ready' ? 'Contrarreloj por un paisaje abierto' : `🏁 ${s.next}/${KT_RINGS} aros`}
-          score={sc} best={best} isNew={res.isNew} accent={C.orange} onStart={start} onExit={onExit}
-          lines={phase === 'ready' ? ['Joystick izquierdo: girar el auto (no se desliza)', 'Acelera solo · 🛑 FRENO para frenar', `Pasa los ${KT_RINGS} aros en orden: cada uno suma ${KT_BONUS} s`, '🌳 Árboles y rocas frenan · 🟧 las rampas saltan'] : null} />
-      </PlayArea>
-    </GameScreen>
+    <Game3D title="RALLY ABIERTO" emoji="🏎️" accent={C.orange} onExit={onExit} score={sc} best={best} fx={fx}
+      phase={phase} onStart={start} scene={scene} menuScene={t => buildScene(s, t)} orbit={{ r: 14, h: 5.5, speed: 0.2, ly: 1.2 }}
+      hud={<><HudPill icon="🏁" value={`${s.next}/${KT_RINGS}`} color={C.lime} /><HudPill icon="⏱" value={`${Math.ceil(s.time)}s`} color={s.time < 10 ? C.red : C.amber} /><HudPill value={`${kmh} km/h`} color={C.cyan} /></>}
+      subtitle="Contrarreloj por un paisaje abierto"
+      lines={['Joystick izquierdo: girar el auto (no se desliza)', 'Acelera solo · FRENO para frenar', `Pasa los ${KT_RINGS} aros en orden: cada uno suma ${KT_BONUS} s`, '🌳 Árboles y rocas frenan · 🟧 las rampas saltan']}
+      result={{ won: res.won, isNew: res.isNew, title: res.won ? '¡RALLY COMPLETADO!' : 'TIEMPO AGOTADO', emoji: res.won ? '🏆' : '🏎️', subtitle: res.won ? 'Has pasado todos los aros' : `🏁 ${s.next}/${KT_RINGS} aros`, stats: [['AROS', `${s.next}/${KT_RINGS}`], ['TIEMPO', `${Math.ceil(s.time)}s`], ['VEL. MÁX', `${Math.round(s.vmax * 3.6)} km/h`]] }}>
+      {phase === 'play' && rg && (
+        <CompassPill>
+          <Text style={{ color: C.lime, fontSize: 18, fontWeight: '900', transform: [{ rotate: `${ang}rad` }] }}>▲</Text>
+          <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12, marginLeft: 8 }}>Aro {s.next + 1} a {Math.round(dist)} m</Text>
+        </CompassPill>
+      )}
+      {s.toast && <Text pointerEvents="none" style={{ position: 'absolute', top: '24%', left: 0, right: 0, textAlign: 'center', color: '#fff', fontSize: 22, fontWeight: '900', ...tglow('#000', 8) }}>{s.toast.m}</Text>}
+      <Stick3D testID="kt-steer" v={move} side="left" color={C.orange} />
+      <ActionBtn testID="kt-brake" label="FRENO" icon="🛑" color={C.red} onDown={() => { brake.on = true; }} onUp={() => { brake.on = false; }} style={{ right: 24, bottom: 40 }} />
+    </Game3D>
+  );
+}
+
+// Píldora centrada arriba con la flecha hacia el siguiente aro.
+function CompassPill({ children }) {
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', top: 10, left: 0, right: 0, alignItems: 'center' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 }}>{children}</View>
+    </View>
   );
 }
