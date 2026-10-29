@@ -202,7 +202,7 @@ export function useFX() {
  * Área de juego con bordes redondeados, capa de FX y screen shake.
  * Los hijos se posicionan en coordenadas locales (0..AREA_W, 0..AREA_H).
  */
-export function PlayArea({ fx, children, style, bg = C.panel, border = C.line, w = AREA_W, h = AREA_H, ...rest }) {
+export function PlayArea({ fx, children, style, bg = C.panel, border = C.line, w = AREA_W, h = AREA_H, noShake, ...rest }) {
   const [, force] = useReducer(x => (x + 1) % 1e9, 0);
   const box = useRef(null);
   useEffect(() => {
@@ -228,7 +228,7 @@ export function PlayArea({ fx, children, style, bg = C.panel, border = C.line, w
   useEffect(() => { const id = setTimeout(onLayout, 350); return () => clearTimeout(id); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   let sx = 0; let sy = 0;
-  if (fx && fx.shakeT > 0) {
+  if (fx && fx.shakeT > 0 && !noShake) {
     const k = fx.shakeT / fx.shakeDur;
     sx = (Math.random() - 0.5) * 2 * fx.shakeMag * k;
     sy = (Math.random() - 0.5) * 2 * fx.shakeMag * k;

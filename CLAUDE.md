@@ -54,6 +54,10 @@ Kit rules of thumb:
 - 3D games: create the three.js renderer with `makeRenderer(gl, THREE)` from `utils/gl3dx.js` (works around expo-gl's WebGL2 context failing three.js's WebGL 1 check).
 - Use `text` glow with `tglow(color)`, not `glow()` (which is for Views).
 
+## 3D games (engine v2)
+
+New/rewritten 3D games use `utils/engine3d.js` (scene format, shadows, sky, instancing, particles), `utils/prefabs.js` (person, car, tree, chest, dragon…) and `Game3D` from `utils/ui3d.js` (start/over screens, HUD, joysticks). Read `docs/ENGINE3D.md`; the reference game is `games3d/islatesoro.js`.
+
 ## Testing (no device needed)
 
 The app can be bundled for web with `react-native-web` + `esbuild` (aliasing `expo-haptics` and AsyncStorage to stubs) and driven with Playwright to smoke-test every game for runtime errors.

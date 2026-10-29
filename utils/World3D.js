@@ -1,8 +1,11 @@
 /**
- * World3D.js – componente React que muestra un mundo 3D (utils/world3d.js) dentro del PlayArea.
- * Uso: <World3D scene={scene} /> donde scene = { objs, cam, bg, fog } se reconstruye en cada render.
+ * World3D.js – componente React que muestra un mundo 3D (utils/engine3d.js) dentro del PlayArea.
+ * Uso: <World3D scene={scene} /> donde scene = { objs, cam, bg, fog, sky, terrain, … } se reconstruye en cada render.
+ * Alternativa: <World3D getScene={t => scene} /> (el motor la llama en cada frame con el reloj en segundos;
+ * Game3D la usa para animar la cámara de las pantallas de inicio/fin sin que el juego re-renderice).
+ * Ocupa todo su contenedor (absoluteFill): la relación de aspecto se toma del propio contexto GL.
  */
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { AREA_W, AREA_H, C } from './kit';
 import { createWorld } from './engine3d';
@@ -12,11 +15,12 @@ export const getGLView = () => { if (_GLV === undefined) { try { _GLV = require(
 
 const worldCreate = o => createWorld(o);
 
-export function World3D({ scene }) {
+export function World3D({ scene, getScene }) {
   const store = useRef({}).current;
-  store.scene = scene;
-  const getState = useRef(() => store.scene).current;
+  store.scene = scene; store.getScene = getScene;
+  const getState = useRef(t => (store.getScene ? store.getScene(t) : store.scene)).current;
   const [fail, setFail] = useState(null);
+  useEffect(() => { store.dead = false; return () => { store.dead = true; }; }, []);   // parar el bucle de render al desmontar
   const GLV = getGLView();
   if (!GLV || fail != null) return (
     <View style={{ ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: 'rgba(10,10,20,0.9)' }}>
@@ -32,7 +36,7 @@ export function World3D({ scene }) {
       const THREE = require('three');
       const world = worldCreate({ gl, THREE, getState, aspect: AREA_W / AREA_H });
       const tick = () => {
-        if (st.v) { world.dispose(); return; }
+        if (st.v || store.dead) { world.dispose(); return; }
         try { world.frame(); if (gl.endFrameEXP) gl.endFrameEXP(); } catch (e) { st.v = true; setFail(String((e && e.message) || e)); return; }
         requestAnimationFrame(tick);
       };
