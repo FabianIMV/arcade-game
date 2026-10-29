@@ -89,16 +89,16 @@ export function NeonTunnel3D({ onExit }) {
   const g = useRef(null);
   if (!g.current) g.current = initState();
 
-  const spawnRing = s => {
+  const spawnRing = (s, first) => {
     const nFree = s.passed > 40 ? 2 : 3;
-    const f0 = randInt(0, NT_N - 1);
+    const f0 = first ? (s.lane - 1 + NT_N) % NT_N : randInt(0, NT_N - 1);   // el primer anillo deja libre tu carril
     const free = [];
     for (let i = 0; i < nFree; i++) free.push((f0 + i) % NT_N);
     // matiz: de cian a rosa, variando por anillo (así cada tramo del túnel tiene un color de neón distinto)
   s.rings.push({ id: uid(), z: 0.02, free, hue: 180 + ((s.passed * 29) % 180), gem: Math.random() < 0.45 ? free[randInt(0, nFree - 1)] : -1, done: false });
   };
 
-  const start = () => { fx.clear(); clear3d(); g.current = initState(); spawnRing(g.current); setPhase('play'); hx.hit(); };
+  const start = () => { fx.clear(); clear3d(); g.current = initState(); spawnRing(g.current, true); setPhase('play'); hx.hit(); };
 
   const shift = d => {
     const s = g.current;
