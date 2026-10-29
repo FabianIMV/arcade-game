@@ -1,14 +1,20 @@
 /**
- * Pixel Quest 3D – mundo de bloques 3D con cámara detrás del personaje.
- * Las reglas (físicas, enemigos, bloques ❓, monedas, meta, 30 mundos) son las del juego 2D;
- * el nivel 2D (px) se dibuja en bloques 3D: 1 unidad = SC px, el suelo está en y = 0.
- * Ataque: con la ⭐ (invencible) disparas bolas de fuego.
+ * PIXEL QUEST 3D – plataformas de 30 mundos de bloques, ahora en tercera persona con cámara lateral inclinada.
+ * Reglas (físicas a 60 Hz, enemigos, bloques ❓, monedas, meta, 30 mundos) = las del juego original; el nivel 2D (px) se
+ * dibuja en 3D: 1 unidad = SC px, el suelo está en y = 0. Novedades: personaje (prefab person) con animaciones, slimes,
+ * JEFES en los mundos 10, 20 y 30 (3, 4 y 5 pisotones), decorado de bosque/colinas/nubes por tema, sombras y partículas 3D.
+ * Con la ⭐ (invencible) disparas bolas de fuego.
+ *
+ * Todo lo estático del nivel (bloques, césped, árboles…) se precalcula UNA vez por nivel (buildStatics → scene.statics).
  */
-import React, { useEffect, useReducer, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { AREA_H, AREA_W, C, Btn, GameScreen, Lives, Overlay, PlayArea, TouchBtn, alpha, hx, overlap, tglow, uid, useBest, useFX, useLoop, useTimeouts } from '../utils/kit';
-import { World3D } from '../utils/World3D';
+import { C, Lives, SCREEN_H, SCREEN_W, alpha, hx, overlap, tglow, uid, useBest, useFX, useLoop, useTimeouts } from '../utils/kit';
+import { burst3d, clear3d, ring3d } from '../utils/engine3d';
+import { ActionBtn, Btn3D, Game3D, HudPill, orbitCam } from '../utils/ui3d';
+import { bush, coin, enemy, gem, hash01, house, person, shade, tree } from '../utils/prefabs';
+import { project } from '../utils/openworld';
 
 // ─── Datos del nivel 2D (copiados sin cambios de App.js: pqBuildLevel y PQ_THEMES) ───
 // ==========================================
@@ -1035,51 +1041,160 @@ const PQ_THEMES = [
   { sky: '#2b3b5a', sky2: '#52688f', ground: '#20283a', top: '#6b84c4', plat: '#34415e', ptop: '#5b72a5' },
 ];
 
-// ─── Motor 3D: escala, proyección y cámara ───
+// ─── Motor 3D: escala, mundo y cámara ───
 const SC = 40;                 // 1 unidad 3D = 40 px del nivel 2D
 const AH = 540;                // alto de referencia del nivel (el suelo queda en AH-60)
 const GYP = AH - 60;
 const PZ = 2.6;                // profundidad de los bloques del camino (eje z)
-const FOV = 56;
+const FOV = 60;
 const wx = px => px / SC;
 const wy = py => (GYP - py) / SC;
 const rect = (x, y, w, h) => ({ cx: wx(x + w / 2), cy: wy(y + h / 2), sx: w / SC, sy: h / SC });
-const dot3 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-const cross3 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-const norm3 = a => { const m = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / m, a[1] / m, a[2] / m]; };
-// Cámara detrás del personaje (sigue la dirección en la que mira)
-const camOf = s => ({ p: [s.camX - 6.6 * s.cf, s.camY + 3.6, 8.2], l: [s.camX + 1.8 * s.cf, s.camY + 0.9, 0], fov: FOV });
-// Proyecta un punto del mundo a píxeles del PlayArea (para partículas y textos 2D)
-const toScr = (cam, x, y, z) => {
-  const d = [x - cam.p[0], y - cam.p[1], z - cam.p[2]];
-  const f = norm3([cam.l[0] - cam.p[0], cam.l[1] - cam.p[1], cam.l[2] - cam.p[2]]);
-  const r = norm3(cross3(f, [0, 1, 0])); const u = cross3(r, f);
-  const zc = dot3(d, f); if (zc < 0.2) return null;
-  const k = (AREA_H / 2) / Math.tan(FOV * Math.PI / 360) / zc;
-  return [AREA_W / 2 + dot3(d, r) * k, AREA_H / 2 - dot3(d, u) * k];
-};
+// cámara en tercera persona: detrás y arriba del personaje, hacia donde mira
+const camOf = s => ({ p: [s.camX - 5.0 * s.cf, s.camY + 3.6, 8.4], l: [s.camX + 2.4 * s.cf, s.camY + 1.0, 0], fov: FOV });
+// punto del nivel 2D (px) → píxeles de pantalla (para textos flotantes)
+const at = (s, px, py) => { const q = s.cam && project(s.cam, [wx(px), wy(py), 0], SCREEN_W, SCREEN_H); return q ? [q.x, q.y] : [SCREEN_W / 2, SCREEN_H * 0.45]; };
+const w3 = (px, py, z = 0.3) => [wx(px), wy(py), z];
 
-// ─── Estado ───
-const newPlayer = () => ({ x: 50, y: 100, vx: 0, vy: 0, w: PQ_PLAYER_SIZE, h: PQ_PLAYER_SIZE, face: 1, ground: false, jumped: false });
+// árbol y color de enemigo por tema
+const TREES = [{ kind: 'oak' }, { kind: 'pine' }, { kind: 'birch', leaf: '#b58cff' }, { kind: 'cactus' }, { kind: 'oak', leaf: '#ff8fb0' }, { kind: 'pine', snow: true }, { kind: 'dead' }, { kind: 'pine', leaf: '#3a5a8a' }];
+const SLIMES = ['#6fe05b', '#ff9ad0', '#8fd0ff', '#ffb347', '#c98bff', '#7fe0d0', '#ffd23f', '#9bd0ff'];
+
+const newPlayer = () => ({ x: 50, y: GYP - PQ_PLAYER_SIZE - 1, vx: 0, vy: 0, w: PQ_PLAYER_SIZE, h: PQ_PLAYER_SIZE, face: 1, ground: false, jumped: false });
 const buildLevel = lvl => {
   const ld = pqBuildLevel(lvl, AH);
   ld.coins = [];
   ld.platforms.forEach(pl => { if (pl.y < GYP - 5) { const n = Math.min(4, Math.floor(pl.w / 42)); for (let i = 0; i < n; i++) ld.coins.push({ id: uid(), x: pl.x + (pl.w - n * 36) / 2 + i * 36 + 9, y: pl.y - 30, w: 18, h: 18, got: false }); } });
+  // JEFE en los mundos 10, 20 y 30: un slime gigante que patrulla justo antes de la meta
+  if (lvl % 10 === 0 && ld.goal) {
+    const slab = ld.platforms.filter(pl => pl.h > 30 && pl.x <= ld.goal.x && pl.x + pl.w >= ld.goal.x + ld.goal.w).pop();
+    if (slab) {
+      const x0 = Math.max(slab.x + 30, ld.goal.x - 330), range = Math.max(60, Math.min(170, ld.goal.x - 100 - x0));
+      ld.enemies.push({ x: x0, y: GYP - 60, w: 60, h: 60, vx: 1.6 + lvl / 25, startX: x0, range, active: true, boss: true, hp: lvl / 10 + 2, hp0: lvl / 10 + 2, hurt: 0 });
+    }
+  }
   return ld;
 };
+
+// Decorado estático del nivel (se calcula una vez): bloques de tierra/césped, fondo de bosque, colinas y nubes
+function buildStatics(ld, TH, lvl) {
+  const st = [], th = (lvl - 1) % 8, len = wx(ld.length) + 8, TR = TREES[th];
+  const hh = (k, n = 1) => hash01(`pq${lvl}_${k}`, n);
+  // suelo lejano detrás del camino: los hoyos se ven como trincheras en vez de vacío
+  st.push({ k: 'box', inst: 'fondo', p: [len / 2 - 4, -1.3, -9.5], s: [len + 40, 2, 14], c: shade(TH.top, 0.82), recv: true });
+  ld.platforms.forEach((pl, i) => {
+    const r = rect(pl.x, pl.y, pl.w, pl.h), ground = pl.h > 30, dz = ground ? PZ : 1.8;
+    st.push({ k: 'box', inst: 'tierra', p: [r.cx, r.cy - 0.05, 0], s: [r.sx, r.sy - 0.1, dz], c: ground ? TH.ground : TH.plat, recv: true, sh: !ground });
+    const n = Math.max(1, Math.round(r.sx)), bw = r.sx / n;
+    for (let j = 0; j < n; j++) st.push({ k: 'box', inst: 'cesped', p: [r.cx - r.sx / 2 + bw * (j + 0.5), r.cy + r.sy / 2 - 0.09, 0], s: [bw * 0.985, 0.19, dz + 0.05], c: shade(ground ? TH.top : TH.ptop, j % 2 ? 0.93 : 1.05), recv: true });
+    if (ground) {   // hiladas de ladrillo en el frente del bloque de suelo
+      for (let k = 1; k < 3; k++) st.push({ k: 'box', inst: 'junta', p: [r.cx, r.cy + r.sy / 2 - k * 0.5 - 0.1, dz / 2 + 0.02], s: [r.sx, 0.05, 0.04], c: shade(TH.ground, 0.72) });
+      for (let k = 0; k < 3; k++) for (let x = r.cx - r.sx / 2 + 0.5 * (k % 2) + 1; x < r.cx + r.sx / 2 - 0.2; x += 1) st.push({ k: 'box', inst: 'junta', p: [x, r.cy + r.sy / 2 - k * 0.5 - 0.35, dz / 2 + 0.02], s: [0.05, 0.42, 0.04], c: shade(TH.ground, 0.72) });
+    }
+    // matas, flores y rocas sobre el césped
+    const top = r.cy + r.sy / 2 + 0.01;
+    for (let x = r.cx - r.sx / 2 + 0.6; x < r.cx + r.sx / 2 - 0.3; x += 1.1 + hh(`g${i}_${x.toFixed(1)}`) * 1.6) {
+      const q = hh(`gk${i}_${x.toFixed(1)}`), z = (hh(`gz${i}_${x.toFixed(1)}`) - 0.5) * (dz - 0.4);
+      if (q < 0.5) st.push({ k: 'cone', inst: 'hierba', p: [x, top + 0.13, z], s: [0.14, 0.34, 0.14], c: shade(TH.top, 0.9), sh: false });
+      else if (q < 0.8) st.push({ k: 'oct', inst: 'flor', p: [x, top + 0.3, z], s: [0.2, 0.2, 0.2], c: ['#ffd54a', '#ffffff', '#ff6fa8', '#b57bff'][Math.floor(q * 40) % 4] }, { k: 'box', inst: 'tallo', p: [x, top + 0.14, z], s: [0.04, 0.28, 0.04], c: '#3f8a3a' });
+      else if (ground) st.push(...bush(`bu${i}_${x.toFixed(1)}`, [x, top, -0.5 - Math.abs(z) * 0.5], { inst: 'mata', sh: false, c: shade(TH.top, 0.8), n: 0.55 }));
+    }
+  });
+  // fondo: árboles, colinas, nubes, montañas
+  for (let i = 0, x = -6; x < len + 6; i++, x += 2.4 + hh(`dx${i}`) * 1.6) {
+    const z = -3.2 - hh(`dz${i}`, 2) * 5;
+    st.push(...tree(`dt${i}`, [x, -0.3, z], { ...TR, h: 0.9 + hh(`dh${i}`) * 0.9, n: 0.55, inst: 'arbol', sh: false }));
+    if (i % 3 === 0) st.push(...bush(`db${i}`, [x + 1, -0.3, -2.6 - hh(`dbz${i}`) * 2], { inst: 'mata', sh: false, c: shade(TH.top, 0.85), n: 0.6 }));
+  }
+  for (let i = 0, x = -14; x < len + 14; i++, x += 12 + hh(`hx${i}`) * 8) {
+    const s = 9 + hh(`hs${i}`) * 8;
+    st.push({ k: 'ico', inst: 'colina', p: [x, -s * 0.28, -17 - hh(`hz${i}`) * 8], s: [s * 2, s, s * 1.6], c: shade(TH.top, 0.7 + hh(`hc${i}`) * 0.2) });
+    st.push({ k: 'cone', inst: 'monte', p: [x + 6, 5 + hh(`mh${i}`) * 5, -34 - hh(`mz${i}`) * 8], s: [30, 14 + hh(`mh${i}`) * 10, 22], c: shade(TH.sky, 0.82) });
+  }
+  for (let i = 0, x = -10; x < len + 10; i++, x += 7 + hh(`cx${i}`) * 5) {
+    const y = 8 + hh(`cy${i}`) * 5, z = -13 - hh(`cz${i}`) * 8, s = 2 + hh(`cs${i}`) * 2;
+    for (let k = 0; k < 3; k++) st.push({ k: 'ico', inst: 'nube', p: [x + (k - 1) * s * 0.9, y + (k === 1 ? s * 0.3 : 0), z], s: [s * 1.6, s * 0.8, s], c: '#ffffff' });
+  }
+  // meta: torre-castillo detrás de la bandera
+  if (ld.goal) { const g = ld.goal; st.push(...house('castillo', [wx(g.x + g.w / 2) + 2.6, 0, -2.4], { kind: 'tower', n: 0.45, lit: true, inst: 'castillo' })); }
+  return st;
+}
+
 const initState = (lvl, lives, score) => {
-  const s = { level: lvl, lives, score, p: newPlayer(), world: buildLevel(lvl), proj: [], inv: 0, gun: false, dj: 0, acc: 0, t: 0, safeX: 50, banner: { text: `MUNDO ${lvl}`, t: 1.6 }, coins: 0, stomps: 0, done: false, toast: null, camX: wx(50), camY: 0, cf: 1, cam: null };
+  const TH = PQ_THEMES[(lvl - 1) % PQ_THEMES.length], world = buildLevel(lvl);
+  const s = { level: lvl, lives, score, p: newPlayer(), world, theme: TH, statics: null, proj: [], inv: 0, gun: false, dj: 0, acc: 0, t: 0, safeX: 50, banner: { text: lvl % 10 === 0 ? `MUNDO ${lvl} · ¡JEFE!` : `MUNDO ${lvl}`, t: 1.8 }, coins: 0, stomps: 0, done: false, over: false, toast: null, camX: wx(50), camY: 0, cf: 1, cam: null, yawv: -Math.PI / 2, wasGround: false, walk: 0, hurtT: 0 };
+  s.statics = buildStatics(world, TH, lvl);
   s.cam = camOf(s);
   return s;
 };
 
-// Botón de control mantenido (multi-toque real), a nivel de módulo
-function PqPad({ testID, label, color, big, dim, onDown, onUp }) {
-  const d = big ? 84 : 66;
+// ─── Escena 3D ───
+function buildScene(s, t) {
+  const p = s.p, TH = s.theme, cam = s.cam, cx = cam.l[0], th = (s.level - 1) % 8, objs = [];
+  const near = (x0, x1) => x1 > cx - 24 && x0 < cx + 24;   // ¿visible? (en unidades)
+  const lava = th === 6, icy = th === 5;
+  objs.push({ id: 'abismo', k: 'pla', p: [cx, -9, -6], s: [120, 60, 1], c: lava ? '#ff5a1f' : icy ? '#2c6fa8' : shade(TH.ground, 0.5), e: lava ? 0.7 : 0.05 });
+  s.world.coins.forEach(c => { if (!c.got && near(wx(c.x), wx(c.x + c.w))) objs.push(...coin(`c${c.id}`, [wx(c.x + 9), wy(c.y + 9), 0], { t: s.t, bob: 0.08, n: 0.55, inst: 'moneda', sh: false })); });
+  s.world.blocks.forEach((b, i) => {
+    if (!b.active || !near(wx(b.x), wx(b.x + b.w))) return;
+    const x = wx(b.x + b.w / 2), y = wy(b.y + b.h / 2) + (b.bump ? Math.sin(b.bump * 14) * 0.15 : 0);
+    objs.push({ id: `bk${i}`, k: 'box', p: [x, y, 0], s: [0.92, 0.92, 0.92], c: b.hit ? '#8a5a2a' : '#ffc233', e: b.hit ? 0 : 0.3, sh: true, m: { r: 0.4, m: 0.3 } });
+    objs.push({ id: `bf${i}`, k: 'box', p: [x, y, 0], s: [1.0, 0.1, 1.0], c: b.hit ? '#6a4420' : '#d99a14', sh: false });
+  });
+  s.world.powerups.forEach((u, i) => {
+    if (!u.active || !near(wx(u.x), wx(u.x + u.w))) return;
+    const x = wx(u.x + 12.5), y = wy(u.y + 12.5) + Math.sin(s.t * 4 + i) * 0.1;
+    if (u.type === 'life') {
+      objs.push({ id: `pu${i}a`, k: 'sph', p: [x - 0.13, y + 0.08, 0], n: 0.36, c: '#ff4d6d', e: 0.5 }, { id: `pu${i}b`, k: 'sph', p: [x + 0.13, y + 0.08, 0], n: 0.36, c: '#ff4d6d', e: 0.5 }, { id: `pu${i}c`, k: 'cone', p: [x, y - 0.12, 0], s: [0.5, 0.4, 0.36], r: [0, 0, Math.PI], c: '#ff4d6d', e: 0.5 });
+    } else if (u.type === 'doublejump') {
+      objs.push({ id: `pu${i}a`, k: 'tor', p: [x, y, 0], n: 0.7, c: '#22e6ff', e: 0.8, r: [0, s.t * 2, 0] }, { id: `pu${i}b`, k: 'box', p: [x - 0.32, y + 0.1, 0], s: [0.3, 0.1, 0.16], c: '#ffffff', e: 0.5, r: [0, 0, 0.4] }, { id: `pu${i}c`, k: 'box', p: [x + 0.32, y + 0.1, 0], s: [0.3, 0.1, 0.16], c: '#ffffff', e: 0.5, r: [0, 0, -0.4] });
+    } else objs.push(...gem(`pu${i}`, [x, y - 0.4, 0], { c: '#ffc233', t: s.t, bob: 0, n: 0.85 }));
+  });
+  s.world.enemies.forEach((e, i) => {
+    if (!e.active || !near(wx(e.x), wx(e.x + e.w))) return;
+    const yaw = e.vx > 0 ? -Math.PI / 2 : Math.PI / 2, x = wx(e.x + e.w / 2), feet = wy(e.y + e.h);
+    if (e.boss) {
+      objs.push(...enemy('boss', 'slime', [x, feet, 0], { t: s.t * 0.8, c: '#b04bff', n: 1.25, yaw, flash: e.hurt > 0 }));
+      for (let k = 0; k < 3; k++) objs.push({ id: `bc${k}`, k: 'cone', p: [x + (k - 1) * 0.32, feet + 1.45 + (k === 1 ? 0.1 : 0), 0], s: [0.26, 0.4, 0.26], c: '#ffc233', e: 0.5 });
+      objs.push({ id: 'bcb', k: 'cyl', p: [x, feet + 1.3, 0], s: [1.0, 0.16, 0.5], c: '#ffc233', e: 0.4 });
+      for (let k = 0; k < e.hp; k++) objs.push({ id: `bh${k}`, k: 'sph', p: [x + (k - (e.hp - 1) / 2) * 0.3, feet + 2.1, 0], n: 0.22, c: '#ff3b5c', e: 0.9 });
+    } else objs.push(...enemy(`en${i}`, 'slime', [x, feet, 0], { t: s.t + i * 0.7, c: SLIMES[th], n: 0.72, yaw }));
+  });
+  if (s.world.goal && near(wx(s.world.goal.x), wx(s.world.goal.x + s.world.goal.w))) {
+    const gw = s.world.goal, gx = wx(gw.x + gw.w / 2), gh = gw.h / SC, wave = Math.sin(s.t * 4) * 0.12;
+    objs.push({ id: 'gpole', k: 'cyl', p: [gx, gh / 2, 0], s: [0.14, gh, 0.14], c: '#e8e8f0', m: { r: 0.3, m: 0.6 }, sh: true });
+    objs.push({ id: 'gball', k: 'sph', p: [gx, gh + 0.1, 0], n: 0.34, c: '#ffc233', e: 0.8 });
+    objs.push({ id: 'gflag', k: 'box', p: [gx + 0.55, gh - 0.4, 0], s: [1.0, 0.6, 0.06], r: [0, wave, 0], c: C.lime, e: 0.5 });
+    objs.push({ id: 'gring', k: 'tor', p: [gx, 0.12, 0], s: [2.0, 2.0, 2.0], r: [Math.PI / 2, 0, 0], c: C.lime, e: 0.8 });
+  }
+  s.proj.forEach(q => objs.push({ id: `q${q.id}`, k: 'sph', p: [wx(q.x + q.w / 2), wy(q.y + q.h / 2), 0.1], n: 0.42, c: '#ff8a3d', e: 1 }, { id: `qg${q.id}`, k: 'sph', p: [wx(q.x + q.w / 2), wy(q.y + q.h / 2), 0.1], n: 0.7, c: '#ffd23f', e: 1, o: 0.35 }));
+  // jugador: persona con gorra; con la estrella brilla en dorado, tras un golpe parpadea
+  const px = wx(p.x + p.w / 2), feet = wy(p.y + p.h);
+  const blink = s.hurtT > 0 && Math.floor(s.hurtT * 14) % 2 ? 0.3 : 1, star = s.inv > 0;
+  objs.push(...person('yo', [px, feet, 0], { n: 0.58, yaw: s.yawv, t: s.t, walk: p.ground ? s.walk : 0.2, arms: p.ground ? undefined : 2.5, hat: 'cap', shirt: star || s.gun ? '#ffb020' : '#3a7bff', pants: '#2c3a6a', o: blink, flash: star && Math.floor(s.t * 8) % 2 === 0 }));
+  return {
+    sky: { top: TH.sky, bottom: TH.sky2, clouds: 4, sun: true }, fog: { c: TH.sky2, near: 32, far: 95 },
+    light: { dir: [-0.45, 0.8, 0.55], i: 2.5, hi: 1.7 }, shadowR: 24,
+    statics: s.statics, objs, cam: { p: cam.p, l: cam.l, fov: FOV },
+  };
+}
+
+function WorldSelect({ maxLevel, level, onPick, onClose }) {
   return (
-    <TouchBtn testID={testID} onDown={onDown} onUp={onUp} style={{ width: d, height: d, borderRadius: d / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: alpha(color, dim ? 0.06 : 0.22), borderWidth: 2, borderColor: alpha(color, dim ? 0.3 : 1) }}>
-      <Text style={{ color: alpha(color, dim ? 0.35 : 1), fontSize: big ? 30 : 24, fontWeight: '900' }}>{label}</Text>
-    </TouchBtn>
+    <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(4,4,12,0.93)', zIndex: 90, alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <Text style={{ color: C.lime, fontSize: 22, fontWeight: '900', letterSpacing: 2, ...tglow(C.lime, 10) }}>🗺 ELEGIR MUNDO</Text>
+      <Text style={{ color: C.dim, fontSize: 12, marginVertical: 8 }}>Desbloqueados: 1 – {maxLevel}</Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center', width: Math.min(SCREEN_W - 32, 340) }}>
+        {Array.from({ length: 30 }, (_, i) => i + 1).map(wd => { const ok = wd <= maxLevel; return (
+          <Pressable key={wd} testID={`world-${wd}`} disabled={!ok} onPress={() => onPick(wd)} style={{ opacity: ok ? 1 : 0.35 }}>
+            <View style={{ width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: wd === level ? alpha(C.lime, 0.3) : alpha(C.cyan, 0.1), borderWidth: 2, borderColor: wd === level ? C.lime : alpha(wd % 10 === 0 ? C.red : C.cyan, 0.55) }}>
+              <Text style={{ color: C.text, fontWeight: '900' }}>{ok ? wd : '🔒'}</Text>
+              {ok && wd % 10 === 0 ? <Text style={{ position: 'absolute', top: -7, right: -4, fontSize: 13 }}>👑</Text> : null}
+            </View>
+          </Pressable>); })}
+      </View>
+      <View style={{ marginTop: 18 }}><Btn3D label="CERRAR" size="sm" ghost color="#aab3d8" onPress={onClose} /></View>
+    </View>
   );
 }
 
@@ -1087,11 +1202,10 @@ export function PixelQuest3D({ onExit }) {
   const fx = useFX();
   const later = useTimeouts();
   const [best, submitBest] = useBest('pixelquest');
-  const [phase, setPhase] = useState('ready');        // ready | play | over | win
-  const [res, setRes] = useState({ isNew: false });
+  const [phase, setPhase] = useState('ready');        // ready | play | over
+  const [res, setRes] = useState({ isNew: false, won: false });
   const [maxLevel, setMaxLevel] = useState(1);
   const [select, setSelect] = useState(false);
-  const [, force] = useReducer(x => x + 1, 0);
   const input = useRef({ left: false, right: false }).current;
   const g = useRef(null);
   if (!g.current) g.current = initState(1, 3, 0);
@@ -1100,20 +1214,31 @@ export function PixelQuest3D({ onExit }) {
   const unlock = lvl => { setMaxLevel(m => { if (lvl > m) { AsyncStorage.setItem('pixelQuestMaxLevel', String(lvl)).catch(() => {}); return lvl; } return m; }); };
   const save = () => { const s = g.current; AsyncStorage.setItem('pixelQuestSave', JSON.stringify({ level: s.level, lives: s.lives, score: s.score })).catch(() => {}); };
   const loadLevel = (lvl, lives, score) => {
-    fx.clear(); const bonusLife = ((lvl >= 11 && lvl <= 13) || (lvl >= 21 && lvl <= 23) || lvl === 26) ? 1 : 0;
+    fx.clear(); clear3d(); const bonusLife = ((lvl >= 11 && lvl <= 13) || (lvl >= 21 && lvl <= 23) || lvl === 26) ? 1 : 0;
     g.current = initState(lvl, Math.min(9, lives + bonusLife), score); input.left = false; input.right = false; unlock(lvl); setPhase('play'); setSelect(false);
   };
   const start = () => loadLevel(1, 3, 0);
   const cont = () => { AsyncStorage.getItem('pixelQuestSave').then(v => { if (v) { try { const d = JSON.parse(v); loadLevel(d.level, d.lives, d.score || 0); return; } catch (e) {} } loadLevel(maxLevel, 3, 0); }).catch(() => loadLevel(maxLevel, 3, 0)); };
 
-  // posición en píxeles de la pantalla de un punto del nivel 2D (para FX)
-  const at = (s, px, py) => (s.cam && toScr(s.cam, wx(px), wy(py), 0)) || [AREA_W / 2, AREA_H / 2];
-
   const handleDeath = s => {
     const p = s.p; const [ex, ey] = at(s, p.x + p.w / 2, p.y + p.h / 2);
-    fx.burst(ex, ey, C.red, 20, 260, 0.7, 5); fx.shake(9, 0.3); fx.flash(C.red, 0.3); hx.bad();
-    if (s.lives > 1) { s.lives -= 1; p.x = Math.max(0, s.safeX - 40); p.y = 0; p.vy = 0; p.vx = 0; s.inv = 2.5; }
-    else { s.lives = 0; hx.die(); setRes({ isNew: submitBest(s.score) }); setPhase('over'); }
+    burst3d(w3(p.x + p.w / 2, Math.min(p.y + p.h / 2, AH - 20)), ['#ff4d6d', '#ffffff', '#ffb0a0'], 26, { speed: 6, up: 3, size: 0.2, life: 0.8 });
+    fx.shake(9, 0.3); fx.flash(C.red, 0.3); hx.bad(); ex; ey;
+    if (s.lives > 1) { s.lives -= 1; p.x = Math.max(0, s.safeX - 40); p.y = 0; p.vy = 0; p.vx = 0; s.inv = 2.5; s.hurtT = 2.5; s.gun = false; }
+    else { s.lives = 0; s.over = true; hx.die(); setRes({ isNew: submitBest(s.score), won: false }); setPhase('over'); }
+  };
+  const hurtBoss = (s, e, stomp) => {
+    e.hp -= 1; e.hurt = 0.9; e.vx *= 1.18;
+    const c = w3(e.x + 30, e.y + 20);
+    if (e.hp <= 0) {
+      e.active = false; s.score += 500; hx.win(); fx.flash('#ffffff', 0.4); fx.shake(10, 0.4);
+      burst3d(c, ['#b04bff', '#ffc233', '#ffffff'], 60, { speed: 9, up: 4, g: 8, size: 0.35, life: 1.3 }); ring3d(c, '#ffc233', 28, { speed: 9, life: 0.8, size: 0.25 });
+      const [ex, ey] = at(s, e.x + 30, e.y); fx.pop(ex, ey - 20, '¡JEFE VENCIDO! +500', C.amber, 20);
+    } else {
+      hx.heavy(); fx.shake(6, 0.2); burst3d(c, ['#b04bff', '#ffffff'], 24, { speed: 7, up: 3, size: 0.25, life: 0.7 });
+      const [ex, ey] = at(s, e.x + 30, e.y); fx.pop(ex, ey - 20, `${e.hp} ♥`, C.red, 18);
+    }
+    return stomp;
   };
 
   const stepFrame = s => {
@@ -1125,64 +1250,92 @@ export function PixelQuest3D({ onExit }) {
     for (const pl of w.platforms) if (overlap(p, pl)) { if (p.vy > 0) { p.y = pl.y - p.h; p.vy = 0; p.ground = true; if (pl.h > 30 || pl.y > AH - 70) s.safeX = p.x; } else if (p.vy < 0) { p.y = pl.y + pl.h; p.vy = 0; } }
     if (p.y > AH + 20) { handleDeath(s); return; }
     if (s.inv > 0) s.inv -= 1 / 60;
+    if (s.hurtT > 0) s.hurtT -= 1 / 60;
     for (const e of w.enemies) {
       if (!e.active) continue;
+      if (e.hurt > 0) e.hurt -= 1 / 60;
       e.x += e.vx; if (e.x > e.startX + e.range || e.x < e.startX) e.vx *= -1;
       if (overlap(p, e)) {
+        if (e.boss) {
+          if (e.hurt > 0) continue;
+          if (s.inv > 0) { hurtBoss(s, e, false); continue; }
+          if (p.vy > 2 && p.y + p.h - e.y < 26) { hurtBoss(s, e, true); p.vy = -15; s.stomps += 1; s.score += 100; continue; }
+          handleDeath(s); return;
+        }
         if (s.inv > 0 || (p.vy > 2 && p.y + p.h - e.y < 20)) {
           e.active = false; const stomp = s.inv <= 0; if (stomp) { p.vy = -12; s.stomps += 1; } s.score += stomp ? 50 : 30;
-          const [ex, ey] = at(s, e.x + 15, e.y + 15); fx.burst(ex, ey, C.amber, 12, 220); fx.pop(ex, ey - 20, `+${stomp ? 50 : 30}`, C.text, 15); hx.hit();
+          const c = w3(e.x + 15, e.y + 18); burst3d(c, ['#6fe05b', '#ffffff', '#ffd23f'], 16, { speed: 5, up: 3, size: 0.2, life: 0.7 }); ring3d(c, '#ffffff', 12, { speed: 4, life: 0.4, size: 0.15 });
+          const [ex, ey] = at(s, e.x + 15, e.y + 15); fx.pop(ex, ey - 20, `+${stomp ? 50 : 30}`, C.text, 17); hx.hit();
         } else { handleDeath(s); return; }
       }
     }
-    for (const c of w.coins) if (!c.got && overlap(p, c)) { c.got = true; s.score += 10; s.coins += 1; const [ex, ey] = at(s, c.x + 9, c.y + 9); fx.burst(ex, ey, C.amber, 6, 130, 0.3, 3); hx.tick(); }
+    for (const c of w.coins) if (!c.got && overlap(p, c)) { c.got = true; s.score += 10; s.coins += 1; burst3d(w3(c.x + 9, c.y + 9), ['#ffd23f', '#fff3b0'], 8, { speed: 3.5, up: 2, g: 9, size: 0.12, life: 0.5 }); hx.tick(); }
     for (const pu of w.powerups) {
       if (!pu.active || !overlap(p, pu)) continue;
       pu.active = false; s.score += 25; hx.good();
-      const [ex, ey] = at(s, pu.x + 12, pu.y + 12); fx.ring(ex, ey, C.lime, 50);
-      if (pu.type === 'life') { s.lives = Math.min(9, s.lives + 1); fx.pop(ex, ey - 20, '+1 VIDA', C.red, 15); }
-      else if (pu.type === 'doublejump') { s.dj = Math.min(6, s.dj + 3); fx.pop(ex, ey - 20, '¡DOBLE SALTO!', C.cyan, 14); }
-      else { s.inv = 5; s.gun = true; fx.pop(ex, ey - 20, '¡ESTRELLA!', C.amber, 15); }
+      const c = w3(pu.x + 12, pu.y + 12); ring3d(c, C.lime, 20, { speed: 5, life: 0.6, size: 0.18 }); burst3d(c, ['#7dff6b', '#ffffff'], 14, { speed: 4, up: 2, size: 0.15, life: 0.6 });
+      const [ex, ey] = at(s, pu.x + 12, pu.y + 12);
+      if (pu.type === 'life') { s.lives = Math.min(9, s.lives + 1); fx.pop(ex, ey - 20, '+1 VIDA', C.red, 17); }
+      else if (pu.type === 'doublejump') { s.dj = Math.min(6, s.dj + 3); fx.pop(ex, ey - 20, '¡DOBLE SALTO!', C.cyan, 16); }
+      else { s.inv = 5; s.gun = true; fx.pop(ex, ey - 20, '¡ESTRELLA!', C.amber, 17); }
     }
     for (const blk of (w.blocks || [])) {
       if (!blk.active) continue;
+      if (blk.bump > 0) blk.bump = Math.max(0, blk.bump - 1 / 60);
       if (overlap(p, blk)) {
-        if (p.vy < 0 && !blk.hit) { blk.hit = true; p.y = blk.y + blk.h; p.vy = 0; w.powerups.push({ x: blk.x + blk.w / 2 - 12, y: blk.y - 30, w: 25, h: 25, active: true, type: blk.type }); hx.heavy(); const [ex, ey] = at(s, blk.x + 17, blk.y); fx.burst(ex, ey, C.amber, 8, 160, 0.4, 4); }
+        if (p.vy < 0 && !blk.hit) {
+          blk.hit = true; blk.bump = 0.25; p.y = blk.y + blk.h; p.vy = 0; w.powerups.push({ x: blk.x + blk.w / 2 - 12, y: blk.y - 30, w: 25, h: 25, active: true, type: blk.type }); hx.heavy();
+          burst3d(w3(blk.x + 17, blk.y + 30), ['#ffc233', '#ffe9a0', '#8a5a2a'], 14, { speed: 4, up: 2, g: 10, size: 0.16, life: 0.6 });
+        }
         else if (p.vy > 0) { p.y = blk.y - p.h; p.vy = 0; p.ground = true; }
         else if (p.vy < 0 && blk.hit) { p.y = blk.y + blk.h; p.vy = 0; }
       }
     }
     for (const pr of s.proj) {
       if (!pr.active) continue; pr.x += pr.vx;
-      if (Math.abs(pr.x - p.x) > AREA_W) { pr.active = false; continue; }
-      for (const e of w.enemies) if (e.active && overlap(pr, e)) { e.active = false; pr.active = false; s.score += 30; const [ex, ey] = at(s, e.x + 15, e.y + 15); fx.burst(ex, ey, C.orange, 10, 200); hx.hit(); break; }
+      burst3d(w3(pr.x + 5, pr.y + 5, 0.1), '#ffb23d', 1, { speed: 0.4, life: 0.3, size: 0.18, g: 0 });
+      if (Math.abs(pr.x - p.x) > 520) { pr.active = false; continue; }
+      for (const e of w.enemies) if (e.active && overlap(pr, e)) {
+        pr.active = false; hx.hit(); burst3d(w3(pr.x, pr.y), ['#ff8a3d', '#ffd23f'], 10, { speed: 5, size: 0.18, life: 0.5 });
+        if (e.boss) { if (e.hurt <= 0) hurtBoss(s, e, false); break; }
+        e.active = false; s.score += 30; burst3d(w3(e.x + 15, e.y + 15), ['#6fe05b', '#ffffff'], 14, { speed: 5, up: 2, size: 0.2, life: 0.6 }); break;
+      }
     }
     s.proj = s.proj.filter(q => q.active);
     if (w.goal && !s.done && overlap(p, w.goal)) {
       s.done = true; hx.win(); fx.flash('#fff', 0.35); const bonus = 100 + s.level * 10; s.score += bonus;
-      fx.pop(AREA_W / 2, AREA_H * 0.35, `¡MUNDO ${s.level} COMPLETO! +${bonus}`, C.lime, 22); submitBest(s.score);
-      if (s.level >= 30) { later(() => { setRes({ isNew: submitBest(s.score) }); setPhase('win'); }, 900); }
-      else later(() => { save(); loadLevel(s.level + 1, s.lives, s.score); save(); }, 1100);
+      const gc = w3(w.goal.x + w.goal.w / 2, w.goal.y, 0.5);
+      burst3d(gc, ['#7dff6b', '#ffc233', '#ff6fa8', '#4de1ff', '#ffffff'], 70, { speed: 9, up: 5, g: 9, size: 0.26, life: 1.4 }); ring3d(gc, '#7dff6b', 28, { speed: 8, life: 0.8, size: 0.2 });
+      fx.pop(SCREEN_W / 2, SCREEN_H * 0.35, `¡MUNDO ${s.level} COMPLETO! +${bonus}`, C.lime, 22); submitBest(s.score);
+      if (s.level >= 30) { later(() => { setRes({ isNew: submitBest(s.score), won: true }); s.over = true; setPhase('over'); }, 1100); }
+      else later(() => { save(); loadLevel(s.level + 1, s.lives, s.score); save(); }, 1200);
     }
   };
 
   useLoop(phase === 'play', dt => {
     const s = g.current; s.acc += dt; let n = 0;
-    while (s.acc >= 1 / 60 && n < 4) { s.acc -= 1 / 60; n += 1; if (!s.done) stepFrame(s); if (phase !== 'play') break; }
+    while (s.acc >= 1 / 60 && n < 4) { s.acc -= 1 / 60; n += 1; if (!s.done && !s.over) stepFrame(s); if (s.over) break; }
+    const p = s.p;
     if (s.banner) { s.banner.t -= dt; if (s.banner.t <= 0) s.banner = null; }
     if (s.toast) { s.toast.t -= dt; if (s.toast.t <= 0) s.toast = null; }
+    // animación del personaje: gira hacia donde mira, camina al moverse, polvo al aterrizar
+    s.yawv += ((p.face > 0 ? -Math.PI / 2 : Math.PI / 2) - s.yawv) * Math.min(1, dt * 14);
+    s.walk += ((p.vx !== 0 && p.ground ? 1 : 0) - s.walk) * Math.min(1, dt * 12);
+    if (p.ground && !s.wasGround) burst3d(w3(p.x + p.w / 2, p.y + p.h, 0.4), '#e8e0cc', 5, { speed: 2.2, up: 0.6, g: 5, size: 0.14, life: 0.45 });
+    if (p.ground && p.vx !== 0 && Math.random() < dt * 8) burst3d(w3(p.x + p.w / 2 - p.face * 10, p.y + p.h, 0.3), '#e8e0cc', 1, { speed: 1, up: 0.8, g: 4, size: 0.12, life: 0.4 });
+    s.wasGround = p.ground;
     // cámara suavizada, detrás del personaje según hacia dónde mira
     const k = Math.min(1, dt * 7);
-    s.camX += (wx(s.p.x + s.p.w / 2) - s.camX) * k;
-    s.camY += (wy(s.p.y + s.p.h) - s.camY) * k;
-    s.cf += (s.p.face - s.cf) * Math.min(1, dt * 5);
+    s.camX += (wx(p.x + p.w / 2) - s.camX) * k;
+    s.camY += (wy(p.y + p.h) - s.camY) * k;
+    s.cf += (p.face - s.cf) * Math.min(1, dt * 4);
     s.cam = camOf(s);
   });
 
   const jumpPress = () => {
-    const s = g.current; const p = s.p; if (phase !== 'play') return;
-    if (p.ground) { p.vy = PQ_JUMP; p.ground = false; hx.tap(); const [ex, ey] = at(s, p.x + 15, p.y + p.h); fx.burst(ex, ey, '#fff', 4, 80, 0.3, 3); }
-    else if (s.dj > 0) { s.dj -= 1; p.vy = PQ_JUMP; hx.hit(); const [ex, ey] = at(s, p.x + 15, p.y + p.h); fx.ring(ex, ey, C.cyan, 34); }
+    const s = g.current; const p = s.p; if (phase !== 'play' || s.over) return;
+    if (p.ground) { p.vy = PQ_JUMP; p.ground = false; hx.tap(); burst3d(w3(p.x + 15, p.y + p.h, 0.4), '#ffffff', 5, { speed: 2.5, up: 0.5, g: 5, size: 0.13, life: 0.4 }); }
+    else if (s.dj > 0) { s.dj -= 1; p.vy = PQ_JUMP; hx.hit(); ring3d(w3(p.x + 15, p.y + p.h, 0.3), C.cyan, 18, { speed: 4, life: 0.5, size: 0.15 }); }
   };
   const jumpRelease = () => { const p = g.current.p; if (p.vy < -7) p.vy *= 0.55; };
   const shoot = () => {
@@ -1190,117 +1343,46 @@ export function PixelQuest3D({ onExit }) {
     s.proj.push({ id: uid(), x: p.face > 0 ? p.x + p.w : p.x - 10, y: p.y + p.h / 2 - 5, vx: 10 * p.face, w: 10, h: 10, active: true }); hx.hit();
   };
 
-  // ─── Escena 3D ───
-  const s = g.current; const p = s.p; const TH = PQ_THEMES[(s.level - 1) % PQ_THEMES.length];
-  const cam = s.cam; const cx = cam.l[0];
-  const near = (x0, x1) => x1 > cx - 17 && x0 < cx + 17;   // ¿visible? (en unidades)
-  const objs = [];
-  objs.push({ id: 'abismo', k: 'pla', p: [cx, -7.5, 0], s: [70, 40, 1], c: TH.ground, e: 0.08 });
-  // decorado de fondo (fijo en el mundo, da profundidad al desplazarse)
-  for (let i = Math.max(0, Math.floor((cx - 18) / 9)); i <= Math.floor((cx + 18) / 9); i++) {
-    const x = 4.5 + i * 9 + ((i * 7) % 3) * 0.8; const kind = i % 3;
-    if (kind === 0) objs.push({ id: `dh${i}`, k: 'sph', p: [x, -1.6, -9], n: 7, c: TH.top, e: 0.05 });
-    else if (kind === 1) { objs.push({ id: `dt${i}`, k: 'box', p: [x, 1.2, -5], s: [0.5, 2.4, 0.5], c: '#7a4a2a' }); objs.push({ id: `dc${i}`, k: 'sph', p: [x, 3.1, -5], n: 2.4, c: TH.top, e: 0.05 }); }
-    else objs.push({ id: `dk${i}`, k: 'box', p: [x, 8 + (i % 2) * 1.6, -11], s: [3.6, 0.9, 1.2], c: '#ffffff', o: 0.85, e: 0.25 });
-  }
-  // plataformas: suelo (h > 30) con bloque grueso; plataformas flotantes como losas
-  s.world.platforms.forEach((pl, i) => {
-    if (!near(wx(pl.x), wx(pl.x + pl.w))) return;
-    const r = rect(pl.x, pl.y, pl.w, pl.h); const gnd = pl.h > 30; const dz = gnd ? PZ : 1.8;
-    objs.push({ id: `pl${i}`, k: 'box', p: [r.cx, r.cy, 0], s: [r.sx, r.sy, dz], c: gnd ? TH.ground : TH.plat, e: 0.03 });
-    objs.push({ id: `pt${i}`, k: 'box', p: [r.cx, r.cy + r.sy / 2 + 0.03, 0], s: [r.sx + 0.02, 0.12, dz + 0.02], c: gnd ? TH.top : TH.ptop, e: 0.12 });
-  });
-  // monedas (discos que miran a la cámara)
-  s.world.coins.forEach(c => {
-    if (c.got || !near(wx(c.x), wx(c.x + c.w))) return;
-    objs.push({ id: `c${c.id}`, k: 'cyl', p: [wx(c.x + 9), wy(c.y + 9) + Math.sin(s.t * 4 + c.id) * 0.08, 0.1], s: [0.5, 0.1, 0.5], r: [Math.PI / 2, 0, 0], c: '#ffc233', e: 0.5 });
-  });
-  // bloques ❓ y los ya golpeados
-  s.world.blocks.forEach((b, i) => {
-    if (!b.active || !near(wx(b.x), wx(b.x + b.w))) return;
-    objs.push({ id: `bk${i}`, k: 'box', p: [wx(b.x + b.w / 2), wy(b.y + b.h / 2), 0], s: [0.9, 0.9, 0.9], c: b.hit ? '#8a5a2a' : '#ffc233', e: b.hit ? 0 : 0.35 });
-  });
-  // power-ups: corazón = esfera roja, doble salto = aro cian, estrella = rombo dorado
-  s.world.powerups.forEach((u, i) => {
-    if (!u.active || !near(wx(u.x), wx(u.x + u.w))) return;
-    const x = wx(u.x + 12.5), y = wy(u.y + 12.5) + Math.sin(s.t * 4 + i) * 0.1;
-    if (u.type === 'life') objs.push({ id: `pu${i}`, k: 'sph', p: [x, y, 0], n: 0.6, c: '#ff4d6d', e: 0.5 });
-    else if (u.type === 'doublejump') objs.push({ id: `pu${i}`, k: 'tor', p: [x, y, 0], n: 0.7, c: '#22e6ff', e: 0.8 });
-    else objs.push({ id: `pu${i}`, k: 'box', p: [x, y, 0], s: [0.5, 0.5, 0.5], r: [Math.PI / 4, Math.PI / 4, 0], c: '#ffc233', e: 0.8 });
-  });
-  // enemigos: cubo morado con ojos
-  s.world.enemies.forEach((e, i) => {
-    if (!e.active || !near(wx(e.x), wx(e.x + e.w))) return;
-    const x = wx(e.x + 15), y = wy(e.y + 15);
-    objs.push({ id: `en${i}`, k: 'box', p: [x, y, 0], s: [0.8, 0.8, 0.8], c: '#c85cff', e: 0.25 });
-    objs.push({ id: `en${i}a`, k: 'sph', p: [x - 0.18, y + 0.12, 0.4], n: 0.2, c: '#ffffff', e: 1 });
-    objs.push({ id: `en${i}b`, k: 'sph', p: [x + 0.18, y + 0.12, 0.4], n: 0.2, c: '#ffffff', e: 1 });
-  });
-  // meta: poste con bandera lima y aro en el suelo
-  if (s.world.goal && near(wx(s.world.goal.x), wx(s.world.goal.x + s.world.goal.w))) {
-    const gw = s.world.goal, gx = wx(gw.x + gw.w / 2), gh = gw.h / SC;
-    objs.push({ id: 'gpole', k: 'box', p: [gx, gh / 2, 0], s: [0.14, gh, 0.14], c: '#dddddd', e: 0.2 });
-    objs.push({ id: 'gflag', k: 'box', p: [gx + 0.5, gh - 0.4, 0], s: [0.95, 0.55, 0.1], c: C.lime, e: 0.6 });
-    objs.push({ id: 'gring', k: 'tor', p: [gx, 0.1, 0], n: 1.6, c: C.lime, e: 0.8 });
-  }
-  s.proj.forEach(q => objs.push({ id: `q${q.id}`, k: 'sph', p: [wx(q.x + q.w / 2), wy(q.y + q.h / 2), 0.2], n: 0.4, c: C.orange, e: 0.9 }));
-  // jugador: cuerpo, cabeza, gorra y ojo (parpadea con la invencibilidad)
-  const px = wx(p.x + p.w / 2), feet = wy(p.y + p.h);
-  const blink = s.inv > 0 && Math.floor(s.inv * 10) % 2 ? 0.35 : 1;
-  objs.push({ id: 'pb', k: 'box', p: [px, feet + 0.42, 0], s: [0.8, 0.8, 0.8], c: s.gun ? '#ffb020' : '#3a7bff', e: s.inv > 0 ? 0.4 : 0.05, o: blink });
-  objs.push({ id: 'ph', k: 'sph', p: [px, feet + 1.02, 0], n: 0.62, c: '#ffd9b0', o: blink });
-  objs.push({ id: 'pc', k: 'box', p: [px, feet + 1.36, 0], s: [0.7, 0.16, 0.7], c: '#ff3b3b', o: blink });
-  objs.push({ id: 'pe', k: 'box', p: [px + 0.16 * p.face, feet + 1.02, 0.3], s: [0.12, 0.12, 0.08], c: '#222222', o: blink });
-  const scene = { bg: TH.sky, fog: { c: TH.sky, near: 18, far: 48 }, objs, cam: { p: cam.p, l: cam.l, fov: FOV } };
-
+  const s = g.current;
+  const scene = buildScene(s, phase === 'play' ? s.t : s.t);
+  const cam = scene.cam;
+  const qLabels = phase === 'play' ? s.world.blocks.filter(b => b.active && !b.hit && Math.abs(wx(b.x) - cam.l[0]) < 12).map(b => { const q = project(cam, [wx(b.x + b.w / 2), wy(b.y + b.h / 2), 0.55], SCREEN_W, SCREEN_H); return q ? { x: q.x, y: q.y, id: b.x } : null; }).filter(Boolean) : [];
   const hud = <>
     <Lives n={s.lives} max={Math.max(3, s.lives)} />
-    <Text style={{ color: C.dim, fontSize: 11 }}>{s.dj > 0 ? `🦅×${s.dj}  ` : ''}{s.gun ? '🔥 ' : ''}{s.inv > 0 ? `⭐${Math.ceil(s.inv)}s` : ''}</Text>
-    <View style={{ flexDirection: 'row', gap: 8 }}>
-      <Btn label="🗺" small ghost color={C.violet} onPress={() => setSelect(true)} />
-      <Btn label="💾" small ghost color={C.cyan} onPress={() => { save(); s.toast = { m: '💾 Partida guardada', t: 1.5 }; hx.good(); force(); }} />
+    <HudPill icon="🌍" value={`${s.level}/30`} color={s.level % 10 === 0 ? C.red : C.lime} />
+    {(s.dj > 0 || s.gun || s.inv > 0) ? <HudPill value={`${s.dj > 0 ? `🦅×${s.dj} ` : ''}${s.gun ? '🔥 ' : ''}${s.inv > 0 ? `⭐${Math.ceil(s.inv)}s` : ''}`} color={C.amber} /> : null}
+    <View style={{ flexDirection: 'row', gap: 6 }}>
+      <Btn3D label="🗺" size="sm" ghost color={C.violet} onPress={() => setSelect(true)} testID="pq-map" />
+      <Btn3D label="💾" size="sm" ghost color={C.cyan} testID="pq-save" onPress={() => { save(); s.toast = { m: '💾 Partida guardada', t: 1.5 }; hx.good(); }} />
     </View>
   </>;
 
   return (
-    <GameScreen title={`MUNDO ${s.level}/30`} emoji="🍄" accent={C.lime} onExit={onExit} score={s.score} best={best} hud={hud}>
-      <PlayArea fx={fx} bg={TH.sky} border={alpha(C.lime, 0.4)}>
-        <World3D scene={scene} />
-        {s.banner && <Text pointerEvents="none" style={{ position: 'absolute', top: AREA_H * 0.2, width: AREA_W, textAlign: 'center', color: '#fff', fontSize: 30, fontWeight: '900', letterSpacing: 3, opacity: Math.min(1, s.banner.t), ...tglow('#000', 8) }}>{s.banner.text}</Text>}
-        {s.toast && <Text pointerEvents="none" style={{ position: 'absolute', top: 12, width: AREA_W, textAlign: 'center', color: '#fff', fontWeight: '900', ...tglow('#000', 5) }}>{s.toast.m}</Text>}
-        {phase === 'play' && !select && (
-          <View pointerEvents="box-none" style={{ position: 'absolute', left: 12, right: 12, bottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-            <View style={{ flexDirection: 'row', gap: 12 }}>
-              <PqPad testID="pq-left" label="◀" color={C.lime} onDown={() => { input.left = true; }} onUp={() => { input.left = false; }} />
-              <PqPad testID="pq-right" label="▶" color={C.lime} onDown={() => { input.right = true; }} onUp={() => { input.right = false; }} />
-            </View>
-            <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-end' }}>
-              <PqPad testID="pq-shoot" label="🔥" color={C.orange} dim={!s.gun} onDown={shoot} onUp={() => {}} />
-              <PqPad testID="pq-jump" label="🅰" color={C.cyan} big onDown={jumpPress} onUp={jumpRelease} />
-            </View>
-          </View>
+    <View style={{ flex: 1 }}>
+      <Game3D title={`PIXEL QUEST · MUNDO ${s.level}`} emoji="🍄" accent={C.lime} onExit={onExit} score={s.score} best={best} fx={fx}
+        phase={phase} onStart={start} scene={scene} menuScene={() => buildScene(s, s.t)} orbit={t => orbitCam(scene, t, { c: [wx(s.p.x + 15), wy(s.p.y + 30) + 0.9, 0], r: 8, h: 2.6, speed: 0.2, ly: 0, drop: 1.4 })} hud={hud}
+        subtitle="Plataformas en 30 mundos de bloques 3D"
+        lines={['◀ ▶ mover · 🅰 saltar (mantén para saltar más alto)', 'Salta sobre los slimes para aplastarlos', '❓ golpea desde abajo · ⭐ invencible + 🔥 disparo · 🦅 doble salto', 'Llega a la bandera 🏁 de cada mundo · 👑 jefes en los mundos 10, 20 y 30']}
+        result={{ won: res.won, isNew: res.isNew, title: res.won ? '¡30 MUNDOS CONQUISTADOS!' : 'GAME OVER', emoji: res.won ? '🏆' : '💀', subtitle: res.won ? `Puntuación final ${s.score}` : `Caíste en el mundo ${s.level}`, stats: [['MUNDO', `${s.level}/30`], ['MONEDAS', s.coins], ['PISOTONES', s.stomps]] }}>
+        {qLabels.map(q => <Text key={q.id} pointerEvents="none" style={{ position: 'absolute', left: q.x - 20, top: q.y - 20, width: 40, textAlign: 'center', color: '#fff', fontSize: 26, fontWeight: '900', ...tglow('#b06a00', 6) }}>?</Text>)}
+        {s.banner && <Text pointerEvents="none" style={{ position: 'absolute', top: '22%', left: 0, right: 0, textAlign: 'center', color: '#fff', fontSize: 28, fontWeight: '900', letterSpacing: 3, opacity: Math.min(1, s.banner.t), ...tglow('#000', 8) }}>{s.banner.text}</Text>}
+        {s.toast && <Text pointerEvents="none" style={{ position: 'absolute', top: 6, left: 0, right: 0, textAlign: 'center', color: '#fff', fontWeight: '900', ...tglow('#000', 5) }}>{s.toast.m}</Text>}
+        {!select && (
+          <>
+            <ActionBtn testID="pq-left" label="◀" color={C.lime} size={70} onDown={() => { input.left = true; }} onUp={() => { input.left = false; }} style={{ left: 14, bottom: 28 }} />
+            <ActionBtn testID="pq-right" label="▶" color={C.lime} size={70} onDown={() => { input.right = true; }} onUp={() => { input.right = false; }} style={{ left: 96, bottom: 28 }} />
+            <ActionBtn testID="pq-shoot" label="🔥" color={C.orange} size={60} onDown={shoot} style={{ right: 100, bottom: 30, opacity: s.gun ? 1 : 0.35 }} />
+            <ActionBtn testID="pq-jump" label="🅰" color={C.cyan} size={84} onDown={jumpPress} onUp={jumpRelease} style={{ right: 14, bottom: 28 }} />
+          </>
         )}
-        {select && (
-          <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(4,4,12,0.95)', zIndex: 60, alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-            <Text style={{ color: C.lime, fontSize: 20, fontWeight: '900', letterSpacing: 2 }}>🗺 ELEGIR MUNDO</Text>
-            <Text style={{ color: C.dim, fontSize: 12, marginVertical: 8 }}>Desbloqueados: 1 – {maxLevel}</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center', width: Math.min(AREA_W - 32, 330) }}>
-              {Array.from({ length: 30 }, (_, i) => i + 1).map(wd => { const ok = wd <= maxLevel; return (
-                <Pressable key={wd} testID={`world-${wd}`} disabled={!ok} onPress={() => { hx.tap(); loadLevel(wd, 3, 0); }} style={{ opacity: ok ? 1 : 0.35 }}>
-                  <View style={{ width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: wd === s.level ? alpha(C.lime, 0.3) : alpha(C.cyan, 0.1), borderWidth: 2, borderColor: wd === s.level ? C.lime : alpha(C.cyan, 0.5) }}>
-                    <Text style={{ color: C.text, fontWeight: '900' }}>{ok ? wd : '🔒'}</Text>
-                  </View>
-                </Pressable>); })}
-            </View>
-            <View style={{ marginTop: 16 }}><Btn label="CERRAR" small ghost color={C.dim} onPress={() => setSelect(false)} /></View>
-          </View>
-        )}
-        <Overlay show={phase !== 'play' && !select} kind={phase} emoji={phase === 'win' ? '🏆' : phase === 'over' ? '💀' : '🍄'} title={phase === 'win' ? '¡30 MUNDOS CONQUISTADOS!' : phase === 'over' ? 'GAME OVER' : 'PIXEL QUEST 3D'}
-          subtitle={phase === 'win' ? `Puntuación final ${s.score}` : phase === 'over' ? `Caíste en el mundo ${s.level}` : 'Un plataformas de 30 mundos en bloques 3D'}
-          score={s.score} best={best} isNew={res.isNew} accent={C.lime} startLabel={phase === 'ready' ? 'JUGAR' : 'OTRA VEZ'} onStart={start} onExit={onExit}
-          extra={phase === 'ready' && maxLevel > 1 ? <View style={{ marginTop: 12, flexDirection: 'row', gap: 10 }}><Btn label={'CONTINUAR'} small ghost color={C.lime} onPress={cont} /><Btn label="🗺 MUNDOS" small ghost color={C.violet} onPress={() => setSelect(true)} /></View> : null}
-          lines={phase === 'ready' ? ['◀ ▶ mover · 🅰 saltar (mantén para saltar más alto)', 'Salta sobre los enemigos para aplastarlos', '❓ golpea desde abajo · ⭐ invencible + 🔥 disparo · 🦅 doble salto', 'Llega a la bandera 🏁 de cada mundo'] : null} />
-      </PlayArea>
-    </GameScreen>
+      </Game3D>
+      {phase === 'ready' && !select && (
+        <View pointerEvents="box-none" style={{ position: 'absolute', right: 12, top: 56, zIndex: 50, alignItems: 'flex-end', gap: 8 }}>
+          {maxLevel > 1 ? <Btn3D testID="pq-cont" label={`CONTINUAR`} size="sm" color={C.lime} onPress={cont} /> : null}
+          <Btn3D testID="pq-worlds" label="🗺 MUNDOS" size="sm" ghost color={C.violet} onPress={() => setSelect(true)} />
+        </View>
+      )}
+      {select && <WorldSelect maxLevel={maxLevel} level={s.level} onPick={wd => { hx.tap(); loadLevel(wd, 3, 0); }} onClose={() => setSelect(false)} />}
+    </View>
   );
 }
