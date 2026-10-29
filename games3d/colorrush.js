@@ -1,12 +1,15 @@
 import React, { useRef, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
-import { AREA_H, AREA_W, C, GameScreen, Lives, Combo, Overlay, PlayArea, clamp, hx, rand, randInt, uid, useBest, useFX, useLoop, alpha, glow, tglow } from '../utils/kit';
-import { World3D } from '../utils/World3D';
+import { C, SCREEN_H, SCREEN_W, Combo, Lives, alpha, clamp, glow, hx, rand, randInt, tglow, uid, useBest, useFX, useLoop } from '../utils/kit';
+import { Game3D, HudPill } from '../utils/ui3d';
+import { burst3d, clear3d } from '../utils/engine3d';
+import { project } from '../utils/openworld';
+import { shade } from '../utils/prefabs';
 
-// Corredor en PRIMERA PERSONA: las puertas de color vienen hacia ti. Antes de cruzarlas, elige tu color (botones).
-// La palabra va escrita sobre cada puerta (2D) con la tinta de color: la regla dice si cuenta la tinta o la palabra.
+// COLOR RUSH 3D – corredor en PRIMERA PERSONA con puertas de neón. La palabra escrita sobre cada puerta
+// va con la tinta de un color: la regla dice si cuenta la TINTA o la PALABRA. Elige tu color (botones) y cruza.
 const CR_FOV = 70, CAM_Z = 0.9, CAM_H = 1.5;
-const GATE_W = 4.7, GATE_H = 2.2, WALL_X = 2.35, LABEL_Y = 2.6;
+const GATE_W = 4.7, GATE_H = 2.2, WALL_X = 2.35, LABEL_Y = 2.75;
 const GATE_START = -45, GAP = 11, MAX_SPEED = 17;
 const STRIPES = 22, STRIPE_GAP = 3, STRIPE_LOOP = STRIPES * STRIPE_GAP;
 const BG = '#0a0612';
@@ -14,18 +17,6 @@ const COLS6 = [
   { n: 'ROJO', c: C.red }, { n: 'AZUL', c: C.blue }, { n: 'VERDE', c: C.lime },
   { n: 'AMARILLO', c: C.amber }, { n: 'MORADO', c: C.violet }, { n: 'NARANJA', c: C.orange },
 ];
-
-// Vectores y proyección 3D -> píxeles del PlayArea (misma cámara que la escena, FOV vertical)
-const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-const nrm = a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
-const toScreen = (cam, P) => {
-  const f = nrm(sub(cam.l, cam.p)); const r = nrm(cross(f, [0, 1, 0])); const u = cross(r, f);
-  const d = sub(P, cam.p); const z = dot(d, f);
-  const t = Math.tan((cam.fov * Math.PI) / 360) * z;
-  return { x: AREA_W / 2 + (dot(d, r) / (t * (AREA_W / AREA_H))) * (AREA_W / 2), y: AREA_H / 2 - (dot(d, u) / t) * (AREA_H / 2), z, px: (AREA_H / 2) / t };
-};
 
 const newGate = s => {
   const n = s.ok >= 14 ? 6 : 4;
@@ -39,6 +30,27 @@ const initState = () => ({
   gates: [], dist: 0, nextAt: 0, speed: 9, t: 0, sway: 0, flash: null, banner: null,
 });
 
+// Textos 2D sobre objetos 3D (proyección con la cámara del juego); compensa la cabecera de Game3D.
+function Labels3D({ cam, items }) {
+  const box = useRef(null);
+  const org = useRef({ x: 0, y: 0 }).current;
+  const measure = () => { if (box.current && box.current.measureInWindow) box.current.measureInWindow((x, y) => { org.x = x; org.y = y; }); };
+  const K = (SCREEN_H / 2) / Math.tan((cam.fov * Math.PI) / 360);
+  return (
+    <View ref={box} onLayout={measure} pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}>
+      {items.map(it => {
+        const q = project(cam, it.p, SCREEN_W, SCREEN_H);
+        if (!q) return null;
+        const fs = Math.round(clamp((K / q.z) * it.u, it.min, it.max));
+        const w = it.w || 300;
+        return (
+          <Text key={it.key} pointerEvents="none" numberOfLines={1} style={{ position: 'absolute', left: q.x - w / 2 - org.x, top: q.y - fs * 0.6 - org.y, width: w, textAlign: 'center', color: it.color, fontSize: fs, fontWeight: '900', letterSpacing: 2, ...tglow(it.color, 12) }}>{it.text}</Text>
+        );
+      })}
+    </View>
+  );
+}
+
 export function ColorRush3D({ onExit }) {
   const fx = useFX();
   const [best, submitBest] = useBest('colorrush');
@@ -47,12 +59,13 @@ export function ColorRush3D({ onExit }) {
   const g = useRef(null);
   if (!g.current) g.current = initState();
 
-  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
+  const start = () => { fx.clear(); clear3d(); g.current = initState(); setPhase('play'); hx.tap(); };
   const choose = i => { const s = g.current; if (phase !== 'play' || s.lives <= 0) return; if (s.mine !== i) { s.mine = i; hx.tick(); } };
 
   const wrong = s => {
     s.lives -= 1; s.combo = 0; s.flash = { c: C.red, t: 0.25 };
-    fx.shake(7, 0.25); fx.flash(C.red, 0.2); fx.pop(AREA_W / 2, AREA_H * 0.42, '✖', C.red, 26); hx.bad();
+    fx.shake(7, 0.25); fx.flash(C.red, 0.2); fx.pop(SCREEN_W / 2, SCREEN_H * 0.42, '✖', C.red, 26); hx.bad();
+    burst3d([0, 1.2, -1.2], C.red, 26, { speed: 5, up: 2, size: 0.2, life: 0.8 });
     if (s.lives <= 0) { hx.die(); setRes({ isNew: submitBest(s.score) }); setPhase('over'); }
   };
   // Se cruza la puerta: el color elegido debe coincidir con el que marca la regla
@@ -62,7 +75,9 @@ export function ColorRush3D({ onExit }) {
     s.combo += 1; s.maxCombo = Math.max(s.maxCombo, s.combo); s.ok += 1;
     const pts = 10 * (1 + Math.floor(s.combo / 8));
     s.score += pts; s.flash = { c: C.lime, t: 0.2 };
-    fx.pop(AREA_W / 2, AREA_H * 0.42, `+${pts}`, C.lime, 22); fx.burst(AREA_W / 2, AREA_H * 0.6, COLS6[k.ink].c, 16, 220); hx.hit();
+    fx.pop(SCREEN_W / 2, SCREEN_H * 0.42, `+${pts}`, C.lime, 22);
+    burst3d([0, 1.2, -1.2], [COLS6[k.ink].c, '#ffffff'], 30, { speed: 6, up: 2.5, size: 0.22, life: 0.9 });
+    hx.hit();
     s.ruleLeft -= 1;
     if (s.ruleLeft <= 0) { s.rule = s.rule === 'ink' ? 'word' : 'ink'; s.ruleLeft = randInt(5, 8); s.banner = { t: 1.4 }; fx.flash(C.violet, 0.25); hx.warn(); }
   };
@@ -93,58 +108,57 @@ export function ColorRush3D({ onExit }) {
     l: [s.sway * 0.4, 1.2, -12], fov: CR_FOV,
   };
   const mine = COLS6[s.mine].c;
+  const next = s.gates.filter(k => !k.done).sort((a, b) => b.z - a.z)[0];
   const objs = [
-    { id: 'suelo', k: 'pla', p: [0, 0, -30], s: [GATE_W + 1.6, 72, 1], c: '#120c24' },
-    { id: 'pared-i', k: 'box', p: [-WALL_X - 0.2, 1.1, -30], s: [0.4, 2.2, 72], c: mine, e: 0.18, o: 0.85 },
-    { id: 'pared-d', k: 'box', p: [WALL_X + 0.2, 1.1, -30], s: [0.4, 2.2, 72], c: mine, e: 0.18, o: 0.85 },
+    { id: 'suelo', k: 'pla', p: [0, 0, -30], s: [GATE_W + 1.6, 72, 1], c: '#120c24', recv: true },
+    { id: 'pared-i', k: 'box', p: [-WALL_X - 0.2, 1.1, -30], s: [0.4, 2.2, 72], c: shade(mine, 0.55), e: 0.3 },
+    { id: 'pared-d', k: 'box', p: [WALL_X + 0.2, 1.1, -30], s: [0.4, 2.2, 72], c: shade(mine, 0.55), e: 0.3 },
     ...Array.from({ length: STRIPES }, (_, i) => {
       const z = -((((i * STRIPE_GAP) - s.dist) % STRIPE_LOOP) + STRIPE_LOOP) % STRIPE_LOOP;
-      return { id: `st${i}`, k: 'pla', p: [0, 0.01, z], s: [GATE_W, 1, 1], c: i % 2 ? '#1c1436' : '#150f2c' };
+      return { id: `st${i}`, k: 'pla', p: [0, 0.01, z], s: [GATE_W, 1, 1], c: i % 2 ? '#1c1436' : '#150f2c', e: 0.08 };
     }),
-    ...s.gates.map(k => ({ id: `g${k.id}`, k: 'box', p: [0, GATE_H / 2, k.z], s: [GATE_W, GATE_H, 0.22], c: COLS6[k.ink].c, e: 0.4, o: k.done ? 0.12 : 0.5 })),
+    ...s.gates.flatMap(k => {
+      const ink = COLS6[k.ink].c, o = k.done ? 0.12 : 0.5;
+      return [
+        { id: `g${k.id}`, k: 'box', p: [0, GATE_H / 2, k.z], s: [GATE_W, GATE_H, 0.22], c: ink, e: 0.45, o },
+        { id: `gl${k.id}`, k: 'box', p: [-GATE_W / 2 - 0.12, GATE_H / 2, k.z], s: [0.22, GATE_H + 0.3, 0.4], c: '#1b1442', e: 0.3 },
+        { id: `gr${k.id}`, k: 'box', p: [GATE_W / 2 + 0.12, GATE_H / 2, k.z], s: [0.22, GATE_H + 0.3, 0.4], c: '#1b1442', e: 0.3 },
+        { id: `gt${k.id}`, k: 'box', p: [0, GATE_H + 0.1, k.z], s: [GATE_W + 0.6, 0.26, 0.4], c: ink, e: 1 },
+      ];
+    }),
   ];
-  const scene = { bg: BG, fog: { c: BG, near: 6, far: 48 }, objs, cam };
+  const lights = next ? [{ p: [0, 2.4, next.z - 1.5], c: COLS6[next.ink].c, i: 7, d: 12 }] : [];
+  const scene = { bg: BG, fog: { c: BG, near: 6, far: 48 }, objs, lights, cam };
 
-  const bw = n > 4 ? (AREA_W - 68) / 3 : (AREA_W - 78) / 4;
+  const labels = next ? [{ key: `next${next.id}`, p: [0, LABEL_Y, next.z], text: COLS6[next.w].n, color: COLS6[next.ink].c, u: 0.85, min: 16, max: 56, w: 320 }] : [];
+  const bw = n > 4 ? (SCREEN_W - 80) / 3 : (SCREEN_W - 92) / 4;
   const rule = s.rule === 'ink' ? 'PASA CON EL COLOR DE LA TINTA' : 'PASA CON EL COLOR DE LA PALABRA';
 
   return (
-    <GameScreen title="COLOR RUSH" emoji="🎨" accent={C.pink} onExit={onExit} score={s.score} best={best}
-      hud={<><Lives n={s.lives} max={3} /><Text style={{ color: C.dim, fontSize: 12 }}>Aciertos <Text style={{ color: C.pink, fontWeight: '800' }}>{s.ok}</Text></Text><View style={{ minWidth: 70, alignItems: 'flex-end' }}>{s.combo > 2 ? <Combo n={s.combo} color={C.pink} /> : null}</View></>}>
-      <PlayArea fx={fx} bg={BG} border={alpha(C.pink, 0.4)}>
-        <World3D scene={scene} />
-        {(() => {
-          // Solo la puerta que toca ahora (la más cercana sin cruzar): así las palabras no se solapan a lo lejos
-          const next = s.gates.filter(k => !k.done).sort((a, b) => b.z - a.z)[0];
-          if (!next) return null;
-          const sc = toScreen(cam, [0, LABEL_Y, next.z]);
-          const fs = Math.round(clamp(sc.px * 0.8, 14, 52));
-          return (
-            <Text key={next.id} pointerEvents="none" style={{ position: 'absolute', left: sc.x - 160, top: sc.y - fs, width: 320, textAlign: 'center', fontSize: fs, fontWeight: '900', letterSpacing: 2, color: COLS6[next.ink].c, ...tglow(COLS6[next.ink].c, 12) }}>{COLS6[next.w].n}</Text>
-          );
-        })()}
-        <View pointerEvents="none" style={{ position: 'absolute', top: 14, left: 18, right: 18, alignItems: 'center' }}>
-          <Text style={{ color: s.rule === 'ink' ? C.cyan : C.amber, fontSize: 13, fontWeight: '900', letterSpacing: 2 }}>{rule}</Text>
-          <Text style={{ color: C.dim, fontSize: 12, marginTop: 4 }}>Tu color: <Text style={{ color: mine, fontWeight: '900' }}>{COLS6[s.mine].n}</Text></Text>
+    <Game3D title="COLOR RUSH" emoji="🎨" accent={C.pink} onExit={onExit} score={s.score} best={best} fx={fx}
+      phase={phase} onStart={start} scene={scene}
+      hud={<><Lives n={s.lives} max={3} /><HudPill label="OK" value={s.ok} color={C.pink} />{s.combo > 2 ? <Combo n={s.combo} color={C.pink} /> : null}</>}
+      subtitle="Tu cerebro contra tus ojos"
+      lines={['Corre por el corredor: elige tu color con los botones', 'Cruza cada puerta con el color que pide la regla', 'La regla cambia cada pocos aciertos']}
+      result={{ isNew: res.isNew, title: 'TE CONFUNDISTE', emoji: '🎨', subtitle: `${s.ok} aciertos · mejor racha ${s.maxCombo}`, stats: [['ACIERTOS', s.ok], ['RACHA', s.maxCombo]] }}>
+      <Labels3D cam={cam} items={labels} />
+      <View pointerEvents="none" style={{ position: 'absolute', top: 6, left: 18, right: 18, alignItems: 'center' }}>
+        <Text style={{ color: s.rule === 'ink' ? C.cyan : C.amber, fontSize: 14, fontWeight: '900', letterSpacing: 2, ...tglow(s.rule === 'ink' ? C.cyan : C.amber, 8) }}>{rule}</Text>
+        <Text style={{ color: C.dim, fontSize: 13, marginTop: 4 }}>Tu color: <Text style={{ color: mine, fontWeight: '900' }}>{COLS6[s.mine].n}</Text></Text>
+      </View>
+      {s.banner && <View pointerEvents="none" style={{ position: 'absolute', top: SCREEN_H * 0.36, left: 0, right: 0, alignItems: 'center' }}><Text style={{ color: C.violet, fontSize: 20, fontWeight: '900', letterSpacing: 2, ...tglow(C.violet, 12) }}>¡CAMBIÓ LA REGLA!</Text></View>}
+      <View style={{ position: 'absolute', left: 0, right: 0, bottom: 26, alignItems: 'center' }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: SCREEN_W - 48, gap: 10, justifyContent: 'center' }}>
+          {COLS6.slice(0, n).map((c, i) => {
+            const on = s.mine === i;
+            return (
+              <Pressable key={i} testID={`cr-${i}`} onPressIn={() => choose(i)} style={{ width: bw, height: 48 }}>
+                <View style={{ flex: 1, borderRadius: 18, backgroundColor: alpha(c.c, on ? 1 : 0.5), borderWidth: 3, borderColor: on ? '#fff' : '#fff3', ...glow(c.c, on ? 18 : 6, on ? 1 : 0.4) }} />
+              </Pressable>
+            );
+          })}
         </View>
-        <View style={{ position: 'absolute', left: 0, right: 0, bottom: 14, alignItems: 'center' }}>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', width: AREA_W - 48, gap: 10, justifyContent: 'center' }}>
-            {COLS6.slice(0, n).map((c, i) => {
-              const on = s.mine === i;
-              return (
-                <Pressable key={i} testID={`cr-${i}`} onPressIn={() => choose(i)} style={{ width: bw, height: 44 }}>
-                  <View style={{ flex: 1, borderRadius: 18, backgroundColor: alpha(c.c, on ? 1 : 0.55), borderWidth: 3, borderColor: on ? '#fff' : '#fff3', ...glow(c.c, on ? 18 : 6, on ? 1 : 0.4) }} />
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-        {s.banner && <View pointerEvents="none" style={{ position: 'absolute', top: AREA_H * 0.45, left: 0, right: 0, alignItems: 'center' }}><Text style={{ color: C.violet, fontSize: 18, fontWeight: '900', letterSpacing: 2, ...tglow(C.violet, 12) }}>¡CAMBIÓ LA REGLA!</Text></View>}
-        <Overlay show={phase !== 'play'} kind={phase} emoji="🎨" title={phase === 'over' ? 'TE CONFUNDISTE' : 'COLOR RUSH 3D'}
-          subtitle={phase === 'over' ? `${s.ok} aciertos · mejor racha ${s.maxCombo}` : 'Tu cerebro contra tus ojos'}
-          score={s.score} best={best} isNew={res.isNew} accent={C.pink} onStart={start} onExit={onExit}
-          lines={phase === 'ready' ? ['Corre por el corredor: elige tu color con los botones', 'Cruza cada puerta con el color que pide la regla', 'La regla cambia cada pocos aciertos'] : null} />
-      </PlayArea>
-    </GameScreen>
+      </View>
+    </Game3D>
   );
 }

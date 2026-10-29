@@ -1,46 +1,29 @@
 import React, { useRef, useState } from 'react';
 import { Text, View } from 'react-native';
-import { AREA_H, AREA_W, C, GameScreen, Lives, Combo, Overlay, PlayArea, alpha, hx, rand, randInt, shuffle, tglow, uid, useBest, useFX, useLoop, usePan } from '../utils/kit';
-import { World3D } from '../utils/World3D';
+import { C, Lives, SCREEN_H, SCREEN_W, clamp, hx, rand, randInt, shuffle, tglow, uid, useBest, useFX, useLoop, usePan } from '../utils/kit';
+import { Game3D, HudPill } from '../utils/ui3d';
+import { burst3d, clear3d, ring3d } from '../utils/engine3d';
+import { project, rayGround } from '../utils/openworld';
+import { enemy, ship } from '../utils/prefabs';
 
-// Campo 3D: los enemigos (cada uno con su operación) avanzan desde el fondo hacia la base.
-// Tercera persona detrás de la base; los tres cañones son losetas en el suelo con las respuestas.
-const FOV = 60, FAR = -38, DZ = 1.4, BASE_Z = 2.8, PAD_Z = 4.6, PAD_X = 2.2;
-const CAM = { p: [0, 4.4, 13.2], l: [0, 0.5, -6], fov: FOV };
-const LANE = 3.4;
-
-// Proyección de la cámara fija: 3D → píxeles del área (para Text 2D) y picking sobre un plano.
-const camRig = cam => {
-  const th = Math.tan((cam.fov * Math.PI) / 360);
-  const [ex, ey, ez] = cam.p;
-  let fx = cam.l[0] - ex, fy = cam.l[1] - ey, fz = cam.l[2] - ez;
-  const fl = Math.hypot(fx, fy, fz); fx /= fl; fy /= fl; fz /= fl;
-  let rx = -fz, rz = fx; const rl = Math.hypot(rx, rz); rx /= rl; rz /= rl;
-  const ux = -rz * fy, uy = rz * fx - rx * fz, uz = rx * fy;
-  const K = (AREA_H / 2) / th;
-  const toScreen = (x, y, z) => {
-    const dx = x - ex, dy = y - ey, dz = z - ez;
-    const zc = dx * fx + dy * fy + dz * fz;
-    const xc = dx * rx + dz * rz, yc = dx * ux + dy * uy + dz * uz;
-    const k = K / zc;
-    return { x: AREA_W / 2 + xc * k, y: AREA_H / 2 - yc * k, s: k };
-  };
-  const ray = (sx, sy) => {
-    const a = ((sx - AREA_W / 2) / (AREA_H / 2)) * th, b = -((sy - AREA_H / 2) / (AREA_H / 2)) * th;
-    return [fx + rx * a + ux * b, fy + uy * b, fz + rz * a + uz * b];
-  };
-  const onY = (sx, sy, h) => { const d = ray(sx, sy); const t = (h - ey) / d[1]; return [ex + d[0] * t, h, ez + d[2] * t]; };
-  return { toScreen, onY };
-};
-const RIG = camRig(CAM);
-
-const BLOCK_KIND = { normal: C.pink, bomb: C.orange, freeze: C.cyan };
+// MATH RUSH 3D – defensa espacial en tercera persona. Las naves enemigas (cada una con su operación)
+// bajan desde el fondo hacia la base; la línea roja es el límite. Los tres cañones son cristales en el suelo
+// con las respuestas encima: toca el que tiene la correcta. Bombas (💣) destruyen todo · hielo (❄) frena el tiempo.
+const FAR = -40, DZ = 1.4, BASE_Z = 2.8, PAD_Z = 4.2, PAD_X = 1.85, PAD_Y = 0.9, LANE = 3.4;
+const CAM = { p: [0, 4.8, 13.6], l: [0, 0.4, -7], fov: 58 };
+const SKY = { top: '#070221', bottom: '#2b0c4f' };
+const KIND_C = { normal: C.pink, bomb: C.orange, freeze: C.cyan };
+const PAD_C = [C.cyan, C.lime, C.amber];
 const padPos = i => [(i - 1) * PAD_X, PAD_Z];
 
-const initState = () => ({
-  blocks: [], spawn: 0.5, t: 0, score: 0, lives: 3, combo: 0, maxCombo: 0, solved: 0, level: 1, freeze: 0, bad: 0, shakeAt: 0,
-  banner: { text: 'NIVEL 1 · SUMAS Y RESTAS', t: 1.5 },
-});
+// Suelo con rejilla y pilares de neón: se calculan UNA vez (statics + instancing), no cuestan nada por frame
+const STATIC = (() => {
+  const out = [{ id: 'suelo', k: 'pla', p: [0, 0, -14], s: [70, 80, 1], c: '#0a0420', recv: true }];
+  for (let z = -40; z <= 8; z += 2) out.push({ id: `rz${z}`, k: 'box', p: [0, 0.01, z], s: [70, 0.02, 0.05], c: C.violet, e: 0.6, inst: 'rejilla_z' });
+  for (let x = -22; x <= 22; x += 2) out.push({ id: `rx${x}`, k: 'box', p: [x, 0.01, -14], s: [0.05, 0.02, 80], c: C.violet, e: 0.6, inst: 'rejilla_x' });
+  for (let z = -36; z <= 0; z += 6) for (const sx of [-9, 9]) out.push({ id: `pi${z}_${sx}`, k: 'box', p: [sx, 2.2, z], s: [0.35, 4.4, 0.35], c: C.pink, e: 0.9, inst: 'pilar' });
+  return out;
+})();
 
 const makeProblem = lv => {
   let a, b, op;
@@ -55,6 +38,50 @@ const makeProblem = lv => {
   return { text: `${a} ${op} ${b}`, ans, opts: shuffle([...opts]) };
 };
 
+const initState = () => ({
+  blocks: [], spawn: 0.5, t: 0, score: 0, lives: 3, combo: 0, maxCombo: 0, solved: 0, level: 1, freeze: 0, bad: 0, shots: [],
+  banner: { text: 'NIVEL 1 · SUMAS Y RESTAS', t: 1.5 },
+});
+const targetOf = s => (s.blocks.length ? s.blocks.reduce((a, b) => (b.z > a.z ? b : a)) : null);
+
+// Nave enemiga según su tipo: platillo volador (normal), meteorito con púas (bomba), cristal girando (hielo)
+const foeObjs = (b, t) => {
+  const y = 1.8 + Math.sin(b.wob) * 0.14;
+  if (b.kind === 'bomb') return [
+    { id: `e${b.id}`, k: 'ico', p: [b.x, y, b.z], n: 1.3, r: [t * 1.4, t * 0.9, 0], c: C.orange, e: 0.85, sh: true },
+    { id: `e${b.id}h`, k: 'sph', p: [b.x, y, b.z], n: 2.2, c: C.orange, e: 0.7, o: 0.14 },
+  ];
+  if (b.kind === 'freeze') return [{ id: `e${b.id}`, k: 'oct', p: [b.x, y, b.z], s: [1.0, 1.8, 1.0], r: [0, t * 1.3, 0], c: C.cyan, e: 0.9, sh: true }];
+  return enemy(`e${b.id}`, 'ovni', [b.x, y, b.z], { t, c: C.pink, beam: true });
+};
+// rayo horizontal entre el cañón y el objetivo (dura lo que tarde en encogerse k)
+const beamObj = (id, a, b, c, k) => {
+  const dx = b[0] - a[0], dz = b[2] - a[2];
+  return { id, k: 'box', p: [(a[0] + b[0]) / 2, 1.2, (a[2] + b[2]) / 2], s: [0.16 * k, 0.16 * k, Math.hypot(dx, dz)], r: [0, Math.atan2(dx, dz), 0], c, e: 1 };
+};
+
+// Textos 2D encima de objetos 3D: cada etiqueta se proyecta con la cámara del juego.
+// Se mide el contenedor en pantalla (measureInWindow) para compensar la cabecera de Game3D.
+function Labels3D({ cam, items }) {
+  const box = useRef(null);
+  const org = useRef({ x: 0, y: 0 }).current;
+  const measure = () => { if (box.current && box.current.measureInWindow) box.current.measureInWindow((x, y) => { org.x = x; org.y = y; }); };
+  const K = (SCREEN_H / 2) / Math.tan((cam.fov * Math.PI) / 360);
+  return (
+    <View ref={box} onLayout={measure} pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}>
+      {items.map(it => {
+        const q = project(cam, it.p, SCREEN_W, SCREEN_H);
+        if (!q) return null;
+        const fs = Math.round(clamp((K / q.z) * it.u, it.min, it.max));
+        const w = it.w || 200;
+        return (
+          <Text key={it.key} pointerEvents="none" numberOfLines={1} style={{ position: 'absolute', left: q.x - w / 2 - org.x, top: q.y - fs * 0.6 - org.y, width: w, textAlign: 'center', color: it.color, fontSize: fs, fontWeight: '900', ...tglow(it.color, 8) }}>{it.text}</Text>
+        );
+      })}
+    </View>
+  );
+}
+
 export function MathRush3D({ onExit }) {
   const fx = useFX();
   const [best, submitBest] = useBest('mathrush');
@@ -62,7 +89,7 @@ export function MathRush3D({ onExit }) {
   const [res, setRes] = useState({ isNew: false });
   const g = useRef(null);
   if (!g.current) g.current = initState();
-  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
+  const start = () => { fx.clear(); clear3d(); g.current = initState(); setPhase('play'); hx.tap(); };
 
   const spawn = s => {
     const p = makeProblem(s.level);
@@ -72,31 +99,44 @@ export function MathRush3D({ onExit }) {
     for (let k = 0; k < 8; k++) { if (!s.blocks.some(b => b.z < FAR + 8 && Math.abs(b.x - x) < 1.6)) break; x = rand(-LANE, LANE); }
     s.blocks.push({ id: uid(), ...p, kind, x, z: FAR, vz: 1.6 + s.level * 0.5 + Math.min(3, s.t * 0.02), wob: Math.random() * 6 });
   };
-  const targetOf = s => (s.blocks.length ? s.blocks.reduce((a, b) => (b.z > a.z ? b : a)) : null);
-  const answer = v => {
+
+  const answer = (v, i) => {
     const s = g.current;
     if (phase !== 'play' || !s.blocks.length) return;
     const target = targetOf(s);
     if (v !== target.ans) {
       s.combo = 0; s.bad = 0.25; fx.shake(5, 0.2); fx.flash(C.red, 0.15); hx.bad(); target.z -= 1.4; return;
     }
-    const sp = RIG.toScreen(target.x, 0.8, target.z);
+    const [px, pz] = padPos(i);
+    s.shots.push({ id: uid(), a: [px, 1.2, pz], b: [target.x, 1.2, target.z], c: PAD_C[i], t: 0.18 });
     s.blocks = s.blocks.filter(b => b !== target);
     s.combo += 1; s.maxCombo = Math.max(s.maxCombo, s.combo); s.solved += 1;
     const pts = 10 * s.level + s.combo * 2; s.score += pts;
-    fx.burst(sp.x, sp.y, C.pink, 14, 220); fx.pop(sp.x, sp.y - 12, `+${pts}`, C.text, 17); hx.hit();
+    const at = [target.x, 1.8, target.z];
+    burst3d(at, [KIND_C[target.kind], '#ffffff'], 30, { speed: 7, up: 2.5, size: 0.2, life: 0.8 });
+    ring3d(at, KIND_C[target.kind], 22, { speed: 6, life: 0.6 });
+    const q = project(CAM, [target.x, 2.7, target.z], SCREEN_W, SCREEN_H);
+    if (q) fx.pop(q.x, q.y, `+${pts}`, C.text, 22);
+    hx.hit();
     if (target.kind === 'bomb') {
-      s.blocks.forEach(b => { const q = RIG.toScreen(b.x, 0.8, b.z); fx.burst(q.x, q.y, C.orange, 10, 200); s.score += 5; }); s.blocks = [];
-      fx.ring(sp.x, sp.y, C.orange, 200); fx.flash(C.orange, 0.35); fx.shake(8, 0.3); hx.heavy();
+      s.blocks.forEach(b => { burst3d([b.x, 1.8, b.z], C.orange, 22, { speed: 8, up: 3, size: 0.22, life: 0.9 }); s.score += 5; });
+      s.blocks = []; ring3d([target.x, 0.2, target.z], C.orange, 36, { speed: 9, life: 0.9 });
+      fx.flash(C.orange, 0.35); fx.shake(8, 0.3); hx.heavy();
     }
-    if (target.kind === 'freeze') { s.freeze = 4; fx.flash(C.cyan, 0.25); fx.pop(sp.x, sp.y - 36, '❄ CONGELADO', C.cyan, 16); hx.good(); }
-    if (s.solved % 8 === 0) { s.level = Math.min(3, s.level + 1); if (s.solved === 8 || s.solved === 16) { s.banner = { text: s.level === 2 ? 'NIVEL 2 · ¡MULTIPLICACIONES!' : 'NIVEL 3 · ¡NÚMEROS GRANDES!', t: 1.6 }; hx.good(); } }
+    if (target.kind === 'freeze') { s.freeze = 4; fx.flash(C.cyan, 0.25); fx.pop(SCREEN_W / 2, SCREEN_H * 0.4, '❄ CONGELADO', C.cyan, 20); hx.good(); }
+    if (s.solved % 8 === 0) {
+      s.level = Math.min(3, s.level + 1);
+      if (s.solved === 8 || s.solved === 16) { s.banner = { text: s.level === 2 ? 'NIVEL 2 · ¡MULTIPLICACIONES!' : 'NIVEL 3 · ¡NÚMEROS GRANDES!', t: 1.6 }; hx.good(); }
+    }
   };
+
   useLoop(phase === 'play', dt0 => {
     const s = g.current;
     s.t += dt0;
     if (s.freeze > 0) s.freeze -= dt0;
     if (s.bad > 0) s.bad -= dt0;
+    s.shots.forEach(sh => { sh.t -= dt0; });
+    s.shots = s.shots.filter(sh => sh.t > 0);
     if (s.banner) { s.banner.t -= dt0; if (s.banner.t <= 0) s.banner = null; }
     const dt = dt0 * (s.freeze > 0 ? 0.15 : 1);
     s.spawn -= dt;
@@ -106,70 +146,62 @@ export function MathRush3D({ onExit }) {
       const b = s.blocks[i];
       if (b.z >= DZ) {
         s.blocks.splice(i, 1); s.lives -= 1; s.combo = 0;
-        const q = RIG.toScreen(b.x, 0.5, DZ);
-        fx.burst(q.x, q.y, C.red, 18, 240); fx.shake(8, 0.3); fx.flash(C.red, 0.3); hx.bad();
+        burst3d([b.x, 1.0, DZ], C.red, 26, { speed: 7, up: 2, size: 0.22, life: 0.9 });
+        ring3d([b.x, 0.1, DZ], C.red, 18, { speed: 6, life: 0.7 });
+        fx.shake(8, 0.3); fx.flash(C.red, 0.3); hx.bad();
         if (s.lives <= 0) { hx.die(); setRes({ isNew: submitBest(s.score) }); setPhase('over'); return; }
       }
     }
   });
+
   const pan = usePan(fx, {
     down: (x, y) => {
       const s = g.current; if (phase !== 'play' || !s.blocks.length) return;
-      const [wx, , wz] = RIG.onY(x, y, 0.4);
-      const i = [0, 1, 2].find(k => { const [px, pz] = padPos(k); return Math.abs(wx - px) < 1.0 && Math.abs(wz - pz) < 0.9; });
-      if (i !== undefined) answer(targetOf(s).opts[i]);
+      const hit = rayGround(CAM, x, y, SCREEN_W, SCREEN_H, PAD_Y);
+      if (!hit) return;
+      const i = [0, 1, 2].find(k => { const [px, pz] = padPos(k); return Math.abs(hit[0] - px) < 1.3 && Math.abs(hit[2] - pz) < 1.2; });
+      if (i !== undefined) answer(targetOf(s).opts[i], i);
     },
   });
 
   const s = g.current;
   const target = targetOf(s);
+  const tc = target ? KIND_C[target.kind] : C.pink;
   const objs = [
-    { id: 'suelo', k: 'pla', p: [0, 0, -14], s: [16, 60, 1], c: '#0d0820' },
-    { id: 'linea', k: 'box', p: [0, 0.06, DZ], s: [9, 0.12, 0.25], c: C.red, e: 0.5 },
-    { id: 'nave', k: 'cone', p: [0, 0.9, BASE_Z], s: [0.9, 1.4, 0.9], c: C.cyan, e: 0.25 },
-    ...Array.from({ length: 14 }, (_, i) => ({ id: `carril${i}`, k: 'box', p: [0, 0.01, 4 - i * 3], s: [9, 0.02, 0.06], c: C.pink, e: 0.3 })),
-    ...s.blocks.map(b => {
-      const col = BLOCK_KIND[b.kind];
-      const isT = b === target;
-      const base = { id: `e${b.id}`, c: col, e: isT ? 0.3 : 0.12 };
-      if (b.kind === 'bomb') return { ...base, k: 'sph', p: [b.x, 0.9, b.z], n: 1.5 };
-      if (b.kind === 'freeze') return { ...base, k: 'cyl', p: [b.x, 0.9, b.z], s: [1.2, 1.2, 1.2] };
-      return { ...base, k: 'box', p: [b.x, 0.9 + Math.sin(b.wob) * 0.08, b.z], s: [2.0, 1.2, 1.2] };
+    ...ship('nave', [0, 0.85, BASE_Z], { c: C.cyan, c2: C.pink, thrust: 0.9, t: s.t, n: 0.7 }),
+    { id: 'linea', k: 'box', p: [0, 0.05, DZ], s: [9.5, 0.08, 0.16], c: C.red, e: 1 },
+    ...[0, 1, 2].flatMap(i => {
+      const [px, pz] = padPos(i);
+      return [
+        { id: `pad${i}`, k: 'cyl', p: [px, 0.22, pz], s: [1.25, 0.44, 1.25], c: '#1a1438', e: 0.1, sh: true },
+        { id: `gem${i}`, k: 'oct', p: [px, 0.85, pz], s: [0.66, 0.8, 0.66], r: [0, s.t * 1.4 + i, 0], c: PAD_C[i], e: 0.9, sh: true },
+      ];
     }),
-    ...(target ? [{ id: 'objetivo', k: 'tor', p: [target.x, 0.06, target.z], n: 2.1, r: [-Math.PI / 2, 0, 0], c: '#ffffff', e: 0.5 }] : []),
-    ...(target ? target.opts.map((o, i) => { const [px, pz] = padPos(i); return { id: `cañon${i}`, k: 'box', p: [px, 0.3, pz], s: [1.5, 0.6, 1.3], c: C.cyan, e: 0.2 }; }) : []),
+    ...s.blocks.flatMap(b => foeObjs(b, s.t)),
+    ...(target ? [{ id: 'objetivo', k: 'ring', p: [target.x, 0.06, target.z], s: [2.4, 2.4, 1], c: '#ffffff', e: 1, o: 0.75 }] : []),
+    ...s.shots.map(sh => beamObj(`shot${sh.id}`, sh.a, sh.b, sh.c, Math.max(0.2, sh.t / 0.18))),
   ];
-  const scene = { bg: '#0a0612', fog: { c: '#0a0612', near: 30, far: 80 }, objs, cam: CAM };
+  const lights = [
+    { p: [0, 2.6, BASE_Z - 1.5], c: '#22e6ff', i: 6, d: 12 },
+    { p: target ? [target.x, 3.2, target.z] : [0, 4, -12], c: tc, i: 9, d: 14 },
+  ];
+  const scene = { sky: SKY, fog: { c: SKY.bottom, near: 24, far: 78 }, light: { dir: [-0.35, 0.9, 0.5] }, shadowR: 24, statics: STATIC, objs, lights, cam: CAM };
+
+  const labels = [
+    ...s.blocks.map(b => ({ key: `L${b.id}`, p: [b.x, 3.0, b.z], text: (b.kind === 'bomb' ? '💣 ' : b.kind === 'freeze' ? '❄ ' : '') + b.text, color: KIND_C[b.kind], u: 1.0, min: 19, max: 34, w: 200 })),
+    ...(target ? target.opts.map((o, i) => { const [px, pz] = padPos(i); return { key: `P${i}`, p: [px, 1.85, pz], text: String(o), color: C.text, u: 1.15, min: 22, max: 40, w: 100 }; }) : []),
+  ];
+
   return (
-    <GameScreen title="MATH RUSH" emoji="🧮" accent={C.pink} onExit={onExit} score={s.score} best={best}
-      hud={<><Lives n={s.lives} max={3} /><Text style={{ color: C.dim, fontSize: 12 }}>Nivel <Text style={{ color: C.pink, fontWeight: '800' }}>{s.level}</Text> · Resueltas {s.solved}</Text><View style={{ minWidth: 70, alignItems: 'flex-end' }}>{s.combo > 1 ? <Combo n={s.combo} color={C.pink} /> : <Text style={{ color: C.cyan, fontWeight: '800', fontSize: 12 }}>{s.freeze > 0 ? '❄' : ''}</Text>}</View></>}>
-      <PlayArea fx={fx} bg={s.bad > 0 ? '#1a0610' : '#0a0612'} border={alpha(C.pink, 0.4)} {...pan}>
-        <World3D scene={scene} />
-        {s.blocks.map(b => {
-          const p = RIG.toScreen(b.x, 1.9, b.z);
-          if (p.s < 8) return null;
-          const fs = Math.max(13, Math.min(24, Math.round(p.s * 0.22)));
-          const col = BLOCK_KIND[b.kind];
-          return (
-            <Text key={b.id} pointerEvents="none" style={{ position: 'absolute', left: p.x - 70, top: p.y - fs, width: 140, textAlign: 'center', color: C.text, fontSize: fs, fontWeight: '900', ...tglow(col, 6) }}>
-              {b.kind === 'bomb' ? '💣 ' : b.kind === 'freeze' ? '❄ ' : ''}{b.text}
-            </Text>
-          );
-        })}
-        {target && [0, 1, 2].map(i => {
-          const [px, pz] = padPos(i);
-          const p = RIG.toScreen(px, 0.9, pz);
-          return <Text key={i} pointerEvents="none" style={{ position: 'absolute', left: p.x - 50, top: p.y - 18, width: 100, textAlign: 'center', color: '#fff', fontSize: 26, fontWeight: '900', ...tglow(C.cyan, 8) }}>{target.opts[i]}</Text>;
-        })}
-        {s.banner && <Text pointerEvents="none" style={{ position: 'absolute', top: AREA_H * 0.3, width: AREA_W, textAlign: 'center', color: C.text, fontSize: 18, fontWeight: '900', letterSpacing: 2, opacity: Math.min(1, s.banner.t), ...tglow(C.pink, 12) }}>{s.banner.text}</Text>}
-        <Text pointerEvents="none" style={{ position: 'absolute', top: 10, width: AREA_W, textAlign: 'center', color: alpha(C.dim, 0.8), fontSize: 11, fontWeight: '800', letterSpacing: 1.5 }}>
-          {target ? `RESUELVE: ${target.text} = ?` : 'ESPERANDO ENEMIGOS…'}
-        </Text>
-        <Overlay show={phase !== 'play'} kind={phase} emoji="🧮" title={phase === 'over' ? 'SIN VIDAS' : 'MATH RUSH 3D'}
-          subtitle={phase === 'over' ? `${s.solved} operaciones · mejor racha ${s.maxCombo}` : 'Resuelve antes de que lleguen a la base'}
-          score={s.score} best={best} isNew={res.isNew} accent={C.pink} onStart={start} onExit={onExit}
-          lines={phase === 'ready' ? ['Toca el cañón con la respuesta de la operación marcada', '💣 destruye todo · ❄ congela el tiempo', 'Cada 8 aciertos sube la dificultad'] : null} />
-      </PlayArea>
-    </GameScreen>
+    <Game3D title="MATH RUSH" emoji="🧮" accent={C.pink} onExit={onExit} score={s.score} best={best} fx={fx} pan={pan}
+      phase={phase} onStart={start} scene={scene}
+      hud={<><Lives n={s.lives} max={3} /><HudPill label="NIVEL" value={s.level} color={C.pink} /><HudPill label="OK" value={s.solved} color={C.cyan} />{s.combo > 1 ? <HudPill icon="🔥" value={`x${s.combo}`} color={C.amber} /> : null}</>}
+      subtitle="Resuelve antes de que lleguen a la base"
+      lines={['Toca el cañón con la respuesta de la operación marcada', '💣 destruye todo · ❄ congela el tiempo', 'Cada 8 aciertos sube la dificultad']}
+      result={{ isNew: res.isNew, title: 'SIN VIDAS', emoji: '🧮', subtitle: `${s.solved} operaciones · mejor racha ${s.maxCombo}`, stats: [['NIVEL', s.level], ['RESUELTAS', s.solved], ['RACHA', s.maxCombo]] }}>
+      <Labels3D cam={CAM} items={labels} />
+      {target && <View pointerEvents="none" style={{ position: 'absolute', top: 4, left: 0, right: 0, alignItems: 'center' }}><Text style={{ color: C.text, fontSize: 22, fontWeight: '900', letterSpacing: 1, ...tglow(C.pink, 10) }}>RESUELVE: {target.text} = ?</Text></View>}
+      {s.banner && <View pointerEvents="none" style={{ position: 'absolute', top: '30%', left: 0, right: 0, alignItems: 'center' }}><Text style={{ color: C.text, fontSize: 20, fontWeight: '900', letterSpacing: 2, ...tglow(C.pink, 12) }}>{s.banner.text}</Text></View>}
+    </Game3D>
   );
 }
