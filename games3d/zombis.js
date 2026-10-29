@@ -1,19 +1,41 @@
 import React, { useRef, useState } from 'react';
 import { Text, View } from 'react-native';
-import { AREA_H, AREA_W, C, GameScreen, Lives, Overlay, PlayArea, TouchBtn, TouchStick, alpha, hx, tglow, useBest, useFX, useLoop } from '../utils/kit';
-import { World3D } from '../utils/World3D';
-import { followCam, forward, right, makeHeightmap, near, seeded, stepPlayer, terrainObjs } from '../utils/openworld';
+import { C, Lives, SCREEN_H, SCREEN_W, hx, tglow, useBest, useFX, useLoop } from '../utils/kit';
+import { burst3d, clear3d, ring3d } from '../utils/engine3d';
+import { ActionBtn, Game3D, HudPill, Stick3D } from '../utils/ui3d';
+import { enemy, hash01, house, person, shade, tree } from '../utils/prefabs';
+import { followCam, forward, makeHeightmap, right, seeded, stepPlayer } from '../utils/openworld';
 
 // SUPERVIVENCIA ZOMBI – bosque abierto en tercera persona. Joystick izquierdo: caminar · derecho: girar la cámara.
 // De día: TALAR árboles (madera) y levantar VALLAS. De noche: GOLPE a los zombis. Sobrevive 4 noches.
-// La hoguera del centro (base) cura 1 vida cada 10 s.
+// La hoguera del centro cura 1 vida cada 10 s. Cada noche llegan más zombis, más rápidos y más resistentes.
+//
+// Qué enseña este archivo:
+//  · scene.statics con instancing (inst:'pino' / 'roble'): el bosque se precalcula y solo se reconstruye al talar
+//  · día/noche: terreno recoloreado con terrain.ver, cielo y luces que se mezclan (lerp)
+//  · scene.lights: la hoguera parpadea con luz puntual · enemy('zombi') y person() del superviviente
+//  · cámara suave (lerp) y partículas de astillas, sangre verde y humo
+
 const ZB_DAY = 45, ZB_NIGHT = 40, ZB_NIGHTS = 4, ZB_LIVES = 5, ZB_SIZE = 80, ZB_BOUND = 36, ZB_TREES = 70, ZB_MAX_WALLS = 24, ZB_HEAL_R = 5.5;
 const ZB_CABIN = { x: -4, z: -3 };
+const ZSHIRTS = ['#5a6a8a', '#6a4a7a', '#4f6b4a'];
+const NIGHT_TINT = '#0b1226';
+
 const mixHex = (a, b, t) => {
   const A = [1, 3, 5].map(i => parseInt(a.slice(i, i + 2), 16)), B = [1, 3, 5].map(i => parseInt(b.slice(i, i + 2), 16));
   return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join('');
 };
-const NIGHT_TINT = '#0b1226';
+const groundCol = (y, x, z, nk) => {
+  const base = mixHex(y < 0.3 ? '#8a7a4a' : y < 1.5 ? '#3f7a36' : '#4f7f40', NIGHT_TINT, nk * 0.6);
+  return shade(base, 0.9 + hash01(x.toFixed(1) + ',' + z.toFixed(1)) * 0.2);
+};
+
+// cámara suave: se acerca a la ideal (lerp exponencial)
+const smoothCam = (s, dt, ideal) => {
+  if (!s.cam) { s.cam = ideal; return; }
+  const k = 1 - Math.exp(-dt * 9), mix = (a, b) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+  s.cam = { p: mix(s.cam.p, ideal.p), l: mix(s.cam.l, ideal.l), fov: ideal.fov };
+};
 
 // ¿(x, z) choca con un obstáculo (valla o cabaña, rectángulo girado) o con un árbol en pie?
 const solidAt = (s, x, z) => {
@@ -27,6 +49,11 @@ const solidAt = (s, x, z) => {
   return null;
 };
 
+// Bosque precalculado: solo los árboles en pie (se reconstruye al talar uno)
+const treesStatic = trees => trees.filter(t => t.alive).flatMap(t => tree(t.id, [t.x, t.y, t.z], {
+  kind: t.kind, h: t.h, leaf: hash01(t.id, 9) < 0.5 ? '#2d7a3e' : '#3a8a48', inst: t.kind === 'pine' ? 'pino' : 'roble',
+}));
+
 const initState = () => {
   const seed = Math.floor(Math.random() * 1e9); const r = seeded(seed);
   const hm = makeHeightmap(seed, ZB_SIZE, { amp: 1.6 });
@@ -34,15 +61,59 @@ const initState = () => {
   for (let i = 0; i < ZB_TREES * 3 && trees.length < ZB_TREES; i++) {
     const x = (r() - 0.5) * ZB_BOUND * 2, z = (r() - 0.5) * ZB_BOUND * 2;
     if (Math.hypot(x, z) < 5 || Math.hypot(x - ZB_CABIN.x, z - ZB_CABIN.z) < 4) continue;
-    trees.push({ id: `tr${trees.length}`, x, z, y: hm.h(x, z), h: 2.4 + r() * 1.2, hp: 3, alive: true });
+    trees.push({ id: `tr${trees.length}`, x, z, y: hm.h(x, z), h: 0.95 + r() * 0.35, kind: r() < 0.7 ? 'pine' : 'oak', hp: 3, alive: true });
   }
-  const cabin = { id: 'cabana', x: ZB_CABIN.x, z: ZB_CABIN.z, yaw: 0, L: 2.2, T: 1.6, hp: Infinity, hgt: 2.6, c: '#6b4a2e' };
+  const cabin = { id: 'cabana', x: ZB_CABIN.x, z: ZB_CABIN.z, yaw: 0, L: 2.0, T: 1.8, hp: Infinity, hgt: 2.6, wall: false };
   return {
-    hm, trees, obst: [cabin], zs: [], seq: 0, nk: 0,
-    p: { x: 0, y: hm.h(0, 3), z: 3, vy: 0, face: 0 }, yaw: Math.PI, isNight: false, night: 0, phaseT: ZB_DAY,
+    hm, tid: `bosque${seed}`, trees, statics: treesStatic(trees), obst: [cabin], zs: [], seq: 0, nk: 0, cam: null,
+    p: { x: 0, y: hm.h(0, 3), z: 3, vy: 0, face: 0 }, yaw: Math.PI, isNight: false, night: 0, phaseT: ZB_DAY, walk: 0,
     spawnLeft: 0, spawnT: 0, wood: 0, kills: 0, lives: ZB_LIVES, inv: 0, healT: 0, gcd: 0, t: 0, toast: null, final: null, won: false,
   };
 };
+
+// Escena completa en un instante t (juega y sirve de fondo animado en inicio/fin)
+function buildScene(s, t) {
+  const p = s.p, nk = s.nk;
+  const blink = s.inv > 0 && Math.floor(s.t * 12) % 2 === 0;
+  const tint = c => mixHex(c, NIGHT_TINT, nk * 0.6);
+  const fy = s.hm.h(0, 0), flick = Math.sin(t * 14) * 0.5 + Math.sin(t * 23) * 0.5;
+  const objs = [
+    // hoguera del campamento (parpadea)
+    { id: 'log1', k: 'cyl', p: [0.2, fy + 0.14, 0], s: [0.16, 1.0, 0.16], r: [0, 0.5, Math.PI / 2], c: '#5a3a22', sh: true },
+    { id: 'log2', k: 'cyl', p: [-0.2, fy + 0.14, 0.05], s: [0.16, 1.0, 0.16], r: [0, -0.5, Math.PI / 2], c: '#5a3a22', sh: true },
+    { id: 'fuego', k: 'cone', p: [0, fy + 0.6 + flick * 0.05, 0], s: [0.55 + flick * 0.06, 1.0 + flick * 0.2, 0.55 + flick * 0.06], c: '#ff8a3d', e: 1, o: 0.9, sh: false },
+    { id: 'brasa', k: 'sph', p: [0, fy + 0.25, 0], n: 0.36, c: '#ff5a1f', e: 1, sh: false },
+    { id: 'hogueraH', k: 'sph', p: [0, fy + 0.6, 0], n: 1.7, c: '#ff9a40', o: 0.1 + nk * 0.06, sh: false },
+    // cabaña
+    ...house('cabana', [ZB_CABIN.x, s.hm.h(ZB_CABIN.x, ZB_CABIN.z), ZB_CABIN.z], { kind: 'cottage', c: tint('#8a5a34'), roof: tint('#3a2418'), lit: s.isNight, yaw: 0 }),
+  ];
+  for (const o of s.obst) {
+    if (!o.wall) continue;
+    objs.push({ id: o.id, k: 'box', p: [o.x, s.hm.h(o.x, o.z) + o.hgt / 2, o.z], s: [o.L * 2, o.hgt, o.T * 2], r: [0, o.yaw, 0], c: o.hp > 2 ? '#9c6b3c' : '#6e4a28', sh: true });
+  }
+  // zombis (dentro de 26 m; más allá la niebla los oculta)
+  for (const z of s.zs) {
+    if (Math.hypot(z.x - p.x, z.z - p.z) > 26) continue;
+    const k = Math.floor(hash01(z.id) * 3);
+    objs.push(...enemy(z.id, 'zombi', [z.x, z.y, z.z], {
+      yaw: z.face, t: t + z.ph, flash: z.kt > 0, walk: 1,
+      shirt: tint(ZSHIRTS[k]), pants: tint('#4a4a5a'), skin: tint('#7fae63'),
+    }));
+  }
+  // superviviente (la cabeza mira hacia donde camina)
+  objs.push(...person('yo', [p.x, p.y, p.z], { yaw: p.face, t, walk: s.walk, hat: 'cap', band: '#ff8a3d', shirt: '#c2561e', pants: '#2b2f3e', flash: blink }));
+  const fogNear = 16 + (8 - 16) * nk, fogFar = 40 + (26 - 40) * nk;
+  const skyLow = mixHex('#bfe6ff', '#1a2446', nk);
+  return {
+    sky: { top: mixHex('#2f86e6', '#050a1c', nk), bottom: skyLow, sun: nk < 0.6, sunC: '#fff2c0', clouds: nk < 0.5 ? 7 : 0 },
+    light: { dir: [-0.5, 0.75, 0.45], sun: mixHex('#fff4dc', '#8fa6ff', nk), i: 2.4 - 1.8 * nk, sky: mixHex('#dfeaff', '#2a3566', nk), ground: mixHex('#5b5648', '#15121c', nk), hi: 1.8 - 0.9 * nk },
+    fog: { c: skyLow, near: fogNear, far: fogFar }, shadowR: 22,
+    terrain: { id: s.tid, h: s.hm.h, size: ZB_SIZE, step: 2, color: (y, x, z) => groundCol(y, x, z, nk), ver: Math.round(nk * 8) },
+    statics: s.statics,
+    lights: [{ p: [0, fy + 1.2, 0], c: '#ff9a40', i: 9 + flick * 2, d: 16 }],
+    objs, cam: s.cam || followCam(p, s.yaw, { hm: s.hm, dist: 7.5, height: 4 }),
+  };
+}
 
 export function Zombis3D({ onExit }) {
   const fx = useFX();
@@ -55,7 +126,7 @@ export function Zombis3D({ onExit }) {
   if (!g.current) g.current = initState();
 
   const say = (s, m, t = 1.4) => { s.toast = { m, t }; };
-  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); hx.tap(); };
+  const start = () => { fx.clear(); clear3d(); g.current = initState(); setPhase('play'); hx.tap(); };
   const finish = (s, won) => {
     s.won = won;
     s.final = s.kills * 20 + s.night * 100 + (won ? s.lives * 50 : 0);
@@ -70,8 +141,13 @@ export function Zombis3D({ onExit }) {
     let best = null, bd = 2.8;
     for (const t of s.trees) { if (!t.alive) continue; const d = Math.hypot(t.x - s.p.x, t.z - s.p.z); if (d < bd) { bd = d; best = t; } }
     if (!best) { say(s, 'Acércate a un árbol'); return; }
-    best.hp -= 1; s.wood += 1; hx.tap(); fx.pop(AREA_W / 2, AREA_H * 0.55, '+1 🪵', '#c98a4b', 16);
-    if (best.hp <= 0) { best.alive = false; hx.good(); say(s, '🌲 ¡Árbol talado!', 1); }
+    best.hp -= 1; s.wood += 1; hx.tap(); fx.pop(SCREEN_W / 2, SCREEN_H * 0.55, '+1 🪵', '#c98a4b', 16);
+    burst3d([best.x, best.y + 1.2, best.z], ['#c98a4b', '#8a5a32'], 10, { speed: 3, up: 3, g: 10, size: 0.12, life: 0.6 });
+    if (best.hp <= 0) {
+      best.alive = false; hx.good(); say(s, '🌲 ¡Árbol talado!', 1);
+      ring3d([best.x, best.y + 0.2, best.z], '#c98a4b', 14, { speed: 3, life: 0.5 });
+      s.statics = treesStatic(s.trees);   // el bosque se reconstruye solo al talar
+    }
   };
   const valla = () => {
     const s = g.current; if (!s || phase !== 'play') return;
@@ -83,7 +159,7 @@ export function Zombis3D({ onExit }) {
     if (solidAt(s, x, z)) { say(s, 'No hay sitio aquí'); return; }
     s.wood -= 2; s.seq += 1;
     s.obst.push({ id: `m${s.seq}`, x, z, yaw: s.yaw, L: 1.2, T: 0.15, hp: 4, hgt: 1.3, wall: true });
-    hx.tap();
+    hx.tap(); burst3d([x, s.hm.h(x, z) + 0.5, z], ['#c98a4b', '#8a5a32'], 8, { speed: 2, up: 2, g: 8, size: 0.12, life: 0.5 });
   };
   const golpe = () => {
     const s = g.current; if (!s || phase !== 'play' || s.gcd > 0) return;
@@ -95,7 +171,11 @@ export function Zombis3D({ onExit }) {
       if (d > 2.6 || d < 1e-3 || (dx * f[0] + dz * f[1]) / d < 0.2) continue;
       z.hp -= 1; z.kx = (dx / d) * 2.4; z.kz = (dz / d) * 2.4; z.kt = 0.3;
       hx.hit(); fx.shake(3, 0.12);
-      if (z.hp <= 0) { z.dead = true; s.kills += 1; hx.good(); fx.pop(AREA_W / 2, AREA_H * 0.45, '+20', C.lime, 18); }
+      burst3d([z.x, z.y + 1.4, z.z], ['#8ee06a', '#c7ff9a'], 10, { speed: 4, up: 2, g: 10, size: 0.14, life: 0.5 });
+      if (z.hp <= 0) {
+        z.dead = true; s.kills += 1; hx.good(); fx.pop(SCREEN_W / 2, SCREEN_H * 0.45, '+20', C.lime, 18);
+        burst3d([z.x, z.y + 1, z.z], ['#8ee06a', '#3d8a3a', '#ff3b3b'], 26, { speed: 5, up: 3, g: 12, size: 0.16, life: 0.8 });
+      }
     }
   };
 
@@ -121,24 +201,26 @@ export function Zombis3D({ onExit }) {
     // jugador: cámara con el joystick derecho, caminar relativo a la cámara
     s.yaw -= look.x * 2.4 * dt;
     const ox = p.x, oz = p.z;
-    stepPlayer(p, move, dt, { yaw: s.yaw, hm: s.hm, speed: 5.2, bounds: ZB_BOUND });
+    const moved = stepPlayer(p, move, dt, { yaw: s.yaw, hm: s.hm, speed: 5.2, bounds: ZB_BOUND });
+    s.walk += (Math.min(1, moved / Math.max(dt, 1e-3) / 5.2) - s.walk) * Math.min(1, dt * 10);
     if (solidAt(s, p.x, p.z)) {
       if (!solidAt(s, p.x, oz)) p.z = oz;
       else if (!solidAt(s, ox, p.z)) p.x = ox;
       else { p.x = ox; p.z = oz; }
     }
+    smoothCam(s, dt, followCam(p, s.yaw, { hm: s.hm, dist: 7.5, height: 4 }));
 
     // base: la hoguera cura
     if (Math.hypot(p.x, p.z) < ZB_HEAL_R && s.lives < ZB_LIVES) {
       s.healT += dt;
-      if (s.healT >= 10) { s.healT = 0; s.lives += 1; hx.good(); fx.pop(AREA_W / 2, AREA_H * 0.6, '+1 ❤️', C.lime, 16); }
+      if (s.healT >= 10) { s.healT = 0; s.lives += 1; hx.good(); fx.pop(SCREEN_W / 2, SCREEN_H * 0.6, '+1 ❤️', C.lime, 16); }
     } else s.healT = 0;
 
     // oleadas de zombis desde el bosque
     if (s.isNight && s.spawnLeft > 0) {
       s.spawnT -= dt;
       if (s.spawnT <= 0) {
-        s.spawnT = 1.4; s.spawnLeft -= 1; s.seq += 1;
+        s.spawnT = Math.max(0.6, 1.4 - s.night * 0.15); s.spawnLeft -= 1; s.seq += 1;
         const a = Math.random() * Math.PI * 2, d = 24 + Math.random() * 3;
         const x = Math.max(-ZB_BOUND + 1, Math.min(ZB_BOUND - 1, p.x + Math.cos(a) * d));
         const z = Math.max(-ZB_BOUND + 1, Math.min(ZB_BOUND - 1, p.z + Math.sin(a) * d));
@@ -162,84 +244,29 @@ export function Zombis3D({ onExit }) {
       z.y = s.hm.h(z.x, z.z);
       if (s.inv <= 0 && Math.hypot(z.x - p.x, z.z - p.z) < 1.0) {
         s.lives -= 1; s.inv = 1.2; hx.bad(); fx.shake(9, 0.3); fx.flash(C.red, 0.3); say(s, '🧟 ¡Mordisco!', 1.2);
+        burst3d([p.x, p.y + 1.2, p.z], ['#ff4d4d', '#8ee06a'], 16, { speed: 4, up: 2, size: 0.16, life: 0.6 });
         if (s.lives <= 0) { s.lives = 0; finish(s, false); return; }
       }
     }
   });
 
   const s = g.current; const p = s.p;
-  const nk = s.nk;
-  const sky = mixHex('#9fd8ff', '#060a1a', nk);
-  const tint = c => mixHex(c, NIGHT_TINT, nk * 0.6);
-  const groundCol = y => tint(y < 0.3 ? '#8a7a4a' : y < 1.5 ? '#3f7a36' : '#4f7f40');
-  const objs = [
-    ...terrainObjs(s.hm, p, 15, 3, groundCol),
-    // base: hoguera y cabaña
-    { id: 'hoguera', k: 'sph', p: [0, s.hm.h(0, 0) + 0.35, 0], n: 0.45 + Math.sin(s.t * 14) * 0.04, c: '#ff8a3d', e: 0.5 },
-    { id: 'hogueraH', k: 'sph', p: [0, s.hm.h(0, 0) + 0.4, 0], n: 1.5, c: '#ff9a40', o: 0.12 + nk * 0.08 },
-    { id: 'cabanaT', k: 'box', p: [ZB_CABIN.x, s.hm.h(ZB_CABIN.x, ZB_CABIN.z) + 2.85, ZB_CABIN.z], s: [4.8, 0.3, 3.6], c: tint('#4a2e1a') },
-    ...s.obst.map(o => (o.wall
-      ? { id: o.id, k: 'box', p: [o.x, s.hm.h(o.x, o.z) + o.hgt / 2, o.z], s: [o.L * 2, o.hgt, o.T * 2], r: [0, o.yaw, 0], c: o.hp > 2 ? '#9c6b3c' : '#6e4a28' }
-      : { id: o.id, k: 'box', p: [o.x, s.hm.h(o.x, o.z) + o.hgt / 2, o.z], s: [o.L * 2, o.hgt, o.T * 2], r: [0, o.yaw, 0], c: tint(o.c) }
-    )),
-    ...near(s.trees.filter(t => t.alive), p, 26).flatMap(t => [
-      { id: `${t.id}a`, k: 'cyl', p: [t.x, t.y + t.h / 2, t.z], s: [0.4, t.h, 0.4], c: tint('#6b4a2a') },
-      { id: `${t.id}b`, k: 'cone', p: [t.x, t.y + t.h + 0.7, t.z], s: [2.6, 3.0, 2.6], c: tint('#23602c') },
-    ]),
-    ...near(s.zs, p, 30).flatMap(z => {
-      const f = forward(z.face), rt = right(z.face), bob = Math.sin(z.ph) * 0.06;
-      const sw = Math.sin(z.ph) * 0.25;
-      return [
-        { id: `${z.id}b`, k: 'box', p: [z.x, z.y + 1.0 + bob, z.z], s: [0.6, 0.9, 0.36], r: [0, z.face, 0], c: tint('#3d8a3a') },
-        { id: `${z.id}h`, k: 'sph', p: [z.x, z.y + 1.6 + bob, z.z], n: 0.5, c: tint('#8ee06a') },
-        { id: `${z.id}e1`, k: 'sph', p: [z.x + f[0] * 0.24 + rt[0] * 0.13, z.y + 1.66 + bob, z.z + f[1] * 0.24 + rt[1] * 0.13], n: 0.1, c: '#ff3b3b', e: 0.5 },
-        { id: `${z.id}e2`, k: 'sph', p: [z.x + f[0] * 0.24 - rt[0] * 0.13, z.y + 1.66 + bob, z.z + f[1] * 0.24 - rt[1] * 0.13], n: 0.1, c: '#ff3b3b', e: 0.5 },
-        { id: `${z.id}a1`, k: 'box', p: [z.x + rt[0] * 0.42 + f[0] * (0.15 + sw), z.y + 1.1 + bob, z.z + rt[1] * 0.42 + f[1] * (0.15 + sw)], s: [0.18, 0.7, 0.18], r: [0, z.face, 0], c: tint('#3d8a3a') },
-        { id: `${z.id}a2`, k: 'box', p: [z.x - rt[0] * 0.42 + f[0] * (0.15 - sw), z.y + 1.1 + bob, z.z - rt[1] * 0.42 + f[1] * (0.15 - sw)], s: [0.18, 0.7, 0.18], r: [0, z.face, 0], c: tint('#3d8a3a') },
-      ];
-    }),
-    // jugador
-    { id: 'cuerpo', k: 'box', p: [p.x, p.y + 0.8, p.z], s: [0.7, 1.1, 0.45], r: [0, s.yaw, 0], c: s.inv > 0 && Math.floor(s.t * 12) % 2 === 0 ? '#ffffff' : '#c2561e' },
-    { id: 'cabeza', k: 'sph', p: [p.x, p.y + 1.65, p.z], n: 0.55, c: '#f2c29b' },
-  ];
-  const shake = fx.shakeT > 0 ? fx.shakeMag * (fx.shakeT / fx.shakeDur) * 0.03 : 0;
-  const fogNear = 16 + (8 - 16) * nk, fogFar = 40 + (26 - 40) * nk;
-  const scene = { bg: sky, fog: { c: sky, near: fogNear, far: fogFar }, shake, objs, cam: followCam(p, s.yaw, { hm: s.hm, dist: 7.5, height: 4 }) };
+  const scene = buildScene(s, phase === 'play' ? s.t : 0);
   const sc = s.final != null ? s.final : s.kills * 20 + s.night * 100;
   const dayOk = !s.isNight;
-  const pad = (v, cx) => (
-    <View pointerEvents="none" style={{ position: 'absolute', left: cx - 50, bottom: 14, width: 100, height: 100, borderRadius: 50, borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)', backgroundColor: 'rgba(0,0,0,0.15)' }}>
-      <View style={{ position: 'absolute', left: 34 + v.x * 32, top: 34 + v.y * 32, width: 32, height: 32, borderRadius: 16, backgroundColor: v.on ? alpha(C.lime, 0.7) : 'rgba(255,255,255,0.35)' }} />
-    </View>
-  );
-  const actBtn = (testID, label, pos, size, color, onDown, enabled) => (
-    <TouchBtn testID={testID} onDown={onDown} style={{ position: 'absolute', ...pos, width: size, height: size, borderRadius: size / 2, borderWidth: 2, borderColor: color, backgroundColor: alpha(color, 0.22), alignItems: 'center', justifyContent: 'center', opacity: enabled ? 1 : 0.4 }}>
-      <Text style={{ color: '#fff', fontWeight: '900', fontSize: 11 }}>{label}</Text>
-    </TouchBtn>
-  );
   return (
-    <GameScreen title="SUPERVIVENCIA ZOMBI" emoji="🧟" accent={C.lime} onExit={onExit} score={sc} best={best}
-      hud={<><Lives n={s.lives} max={ZB_LIVES} /><Text style={{ color: s.isNight ? C.violet : C.amber, fontWeight: '900', fontSize: 12 }}>{s.isNight ? '🌙' : '☀️'} {s.night}/{ZB_NIGHTS}</Text><Text style={{ color: C.text, fontWeight: '900', fontSize: 12 }}>🪵 {s.wood}</Text><Text style={{ color: C.dim, fontWeight: '900', fontSize: 12 }}>⏱ {Math.ceil(s.phaseT)}s</Text></>}>
-      <PlayArea fx={fx} bg={sky}>
-        <World3D scene={scene} />
-        {s.toast && <Text pointerEvents="none" style={{ position: 'absolute', top: AREA_H * 0.22, width: AREA_W, textAlign: 'center', color: '#fff', fontSize: 20, fontWeight: '900', ...tglow('#000', 8) }}>{s.toast.m}</Text>}
-        {phase === 'play' && (
-          <>
-            <TouchStick testID="zb-move" v={move} R={44} style={{ position: 'absolute', left: 0, bottom: 0, width: AREA_W * 0.4, height: 170 }} />
-            <TouchStick testID="zb-look" v={look} R={44} style={{ position: 'absolute', right: 0, bottom: 0, width: AREA_W * 0.4, height: 170 }} />
-            {pad(move, 62)}
-            {pad(look, AREA_W - 62)}
-            {actBtn('zb-golpe', 'GOLPE', { right: 18, bottom: 186 }, 76, C.red, golpe, true)}
-            {actBtn('zb-talar', 'TALAR', { right: 106, bottom: 186 }, 64, C.amber, talar, dayOk)}
-            {actBtn('zb-valla', 'VALLA', { right: 18, bottom: 272 }, 64, C.lime, valla, dayOk)}
-          </>
-        )}
-        <Overlay show={phase !== 'play'} kind={phase} emoji={phase === 'over' ? (res.won ? '🏆' : '🧟') : '🧟'}
-          title={phase === 'over' ? (res.won ? '¡SOBREVIVISTE!' : 'TE HAN DEVORADO') : 'SUPERVIVENCIA ZOMBI'}
-          subtitle={phase === 'ready' ? 'Sobrevive 4 noches en el bosque' : (res.won ? `Superaste las ${ZB_NIGHTS} noches` : `Caíste en la noche ${s.night}`)}
-          score={sc} best={best} isNew={res.isNew} accent={C.lime} onStart={start} onExit={onExit}
-          lines={phase === 'ready' ? ['Joystick izquierdo: caminar · derecho: girar la cámara', 'De día: TALA árboles y levanta VALLAS con la madera', 'De noche: GOLPEA a los zombis que llegan', `Sobrevive ${ZB_NIGHTS} noches · la hoguera cura vidas`] : null} />
-      </PlayArea>
-    </GameScreen>
+    <Game3D title="SUPERVIVENCIA ZOMBI" emoji="🧟" accent={C.lime} onExit={onExit} score={sc} best={best} fx={fx}
+      phase={phase} onStart={start} scene={scene} menuScene={t => buildScene(s, t)} orbit={{ r: 12, h: 5, speed: 0.2, ly: 1.3 }}
+      hud={<><Lives n={s.lives} max={ZB_LIVES} /><HudPill icon={s.isNight ? '🌙' : '☀️'} value={`${s.night}/${ZB_NIGHTS}`} color={s.isNight ? C.violet : C.amber} /><HudPill icon="🪵" value={String(s.wood)} color="#c98a4b" /><HudPill icon="⏱" value={`${Math.ceil(s.phaseT)}s`} color={C.dim} /></>}
+      subtitle="Sobrevive 4 noches en el bosque"
+      lines={['Joystick izquierdo: caminar · derecho: girar la cámara', 'De día: TALA árboles y levanta VALLAS con la madera', 'De noche: GOLPEA a los zombis que llegan', `Sobrevive ${ZB_NIGHTS} noches · la hoguera cura vidas`]}
+      result={{ won: res.won, isNew: res.isNew, title: res.won ? '¡SOBREVIVISTE!' : 'TE HAN DEVORADO', emoji: res.won ? '🏆' : '🧟', subtitle: res.won ? `Superaste las ${ZB_NIGHTS} noches` : `Caíste en la noche ${s.night}`, stats: [['NOCHES', `${s.night}/${ZB_NIGHTS}`], ['ZOMBIS', String(s.kills)], ['VIDAS', String(s.lives)]] }}>
+      {s.toast && <Text pointerEvents="none" style={{ position: 'absolute', top: '22%', left: 0, right: 0, textAlign: 'center', color: '#fff', fontSize: 20, fontWeight: '900', ...tglow('#000', 8) }}>{s.toast.m}</Text>}
+      <Stick3D testID="zb-move" v={move} side="left" color={C.lime} />
+      <Stick3D testID="zb-look" v={look} side="right" color={C.amber} />
+      <ActionBtn testID="zb-golpe" label="GOLPE" color={C.red} size={80} onDown={golpe} style={{ right: 18, bottom: 186 }} />
+      <ActionBtn testID="zb-talar" label="TALAR" color={C.amber} onDown={talar} style={{ right: 106, bottom: 186, opacity: dayOk ? 1 : 0.4 }} />
+      <ActionBtn testID="zb-valla" label="VALLA" color={C.lime} onDown={valla} style={{ right: 18, bottom: 272, opacity: dayOk ? 1 : 0.4 }} />
+    </Game3D>
   );
 }

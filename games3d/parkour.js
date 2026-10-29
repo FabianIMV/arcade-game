@@ -1,14 +1,32 @@
 import React, { useRef, useState } from 'react';
 import { Text, View } from 'react-native';
-import { AREA_H, AREA_W, C, GameScreen, Lives, Overlay, PlayArea, TouchBtn, TouchStick, alpha, clamp, hx, tglow, useBest, useFX, useLoop } from '../utils/kit';
-import { World3D } from '../utils/World3D';
-import { compassAngle, followCam, forward, near, right, seeded, stepPlayer } from '../utils/openworld';
+import { C, Lives, clamp, hx, tglow, useBest, useFX, useLoop } from '../utils/kit';
+import { burst3d, clear3d, ring3d } from '../utils/engine3d';
+import { ActionBtn, Game3D, HudPill, Stick3D } from '../utils/ui3d';
+import { coin, person } from '../utils/prefabs';
+import { compassAngle, followCam, forward, right, seeded, stepPlayer } from '../utils/openworld';
 
-// PARKOUR URBANO – ciudad de azoteas en tercera persona. Joystick izquierdo: correr · derecho: girar · SALTAR.
-// Recoge las fichas brillantes de las azoteas en 120 s. Caer a la calle quita una vida y te devuelve a la última azotea.
+// PARKOUR URBANO – ciudad de azoteas al atardecer, tercera persona. Joystick izquierdo: correr · derecho: girar · SALTAR.
+// Recoge las fichas doradas de las azoteas en 120 s. Caer a la calle quita una vida y te devuelve a la última azotea.
+// Dificultad progresiva: tras 60 s las fichas tardan más en reaparecer.
+//
+// Qué enseña este archivo:
+//  · ciudad completa en scene.statics con instancing (edificio, azotea, tanque, neón): una sola malla por tipo
+//  · recv:true en azoteas y calle para que el sol del atardecer proyecte sombras
+//  · person() animado: brazos al cielo en el aire, zancada según la velocidad
+//  · cielo y niebla de atardecer, luz cálida y un punto de luz rosa que sigue al jugador
+
 const PK_G = 11, PK_P = 8.2, PK_MID = 5, PK_TIME = 120, PK_LIVES = 3, PK_GRAV = 22, PK_STREET = -20;
 const PK_LIM = PK_G * PK_P / 2 - 1;
 const PK_COL = ['#8c93a8', '#a9927a', '#6f8fb0', '#b7a3c7', '#9aa88a', '#c08f7a'];
+const PK_NEON = ['#ff3df2', '#22e6ff', '#ffc233', '#7dff6b'];
+
+// smoothing de cámara (lerp exponencial)
+const smoothCam = (s, dt, ideal) => {
+  if (!s.cam) { s.cam = ideal; return; }
+  const k = 1 - Math.exp(-dt * 10), mix = (a, b) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+  s.cam = { p: mix(s.cam.p, ideal.p), l: mix(s.cam.l, ideal.l), fov: ideal.fov };
+};
 
 // Ciudad: árbol aleatorio de azoteas sobre una cuadrícula. Cada azotea nace junto a otra, así que siempre hay camino.
 // Los huecos entre edificios son la calle (-20). La diferencia de altura entre vecinos es ≤ 2.1 (salto ~2.5).
@@ -17,7 +35,10 @@ const buildCity = seed => {
   const cells = new Map();
   const key = (a, b) => `${a},${b}`;
   const add = (gx, gz, top) => {
-    const b = { id: `b${cells.size}`, gx, gz, x: (gx - PK_MID) * PK_P, z: (gz - PK_MID) * PK_P, s: 4.5 + r() * 0.8, top, c: PK_COL[Math.floor(r() * PK_COL.length)], tank: r() < 0.3 };
+    const b = {
+      id: `b${cells.size}`, gx, gz, x: (gx - PK_MID) * PK_P, z: (gz - PK_MID) * PK_P, s: 4.5 + r() * 0.8, top,
+      c: PK_COL[Math.floor(r() * PK_COL.length)], tank: r() < 0.3, neon: r() < 0.45 ? PK_NEON[Math.floor(r() * PK_NEON.length)] : null,
+    };
     cells.set(key(gx, gz), b);
     return b;
   };
@@ -41,6 +62,17 @@ const buildCity = seed => {
   });
   return { cells, roofs, tokens, root };
 };
+
+// Todos los edificios, azoteas, tanques y letreros de neón: una sola vez (scene.statics, instancing)
+const cityStatics = roofs => roofs.flatMap(b => {
+  const out = [
+    { id: b.id, k: 'box', p: [b.x, (b.top + PK_STREET) / 2, b.z], s: [b.s, b.top - PK_STREET, b.s], c: b.c, inst: 'edificio', sh: true },
+    { id: `${b.id}r`, k: 'box', p: [b.x, b.top + 0.07, b.z], s: [b.s * 0.94, 0.14, b.s * 0.94], c: '#d9cbb0', inst: 'azotea', recv: true },
+  ];
+  if (b.tank) out.push({ id: `${b.id}t`, k: 'cyl', p: [b.x + b.s * 0.25, b.top + 0.7, b.z - b.s * 0.2], s: [0.9, 1.4, 0.9], c: '#7a5b3e', inst: 'tanque', sh: true });
+  if (b.neon) out.push({ id: `${b.id}n`, k: 'box', p: [b.x + b.s / 2 + 0.03, b.top - 1.6, b.z], s: [0.06, 0.9, b.s * 0.6], c: b.neon, e: 1, inst: 'neon' });
+  return out;
+});
 
 // Azotea bajo (x, z), o null si es calle.
 const roofAt = (cells, x, z) => {
@@ -76,7 +108,10 @@ const physics = (s, dt, move) => {
     p.vy = ovy - PK_GRAV * dt; p.y = oy + p.vy * dt;
   }
   const gy = floorAt(s.cells, p.x, p.z);
-  if (p.y <= gy) { p.y = gy; p.vy = 0; p.ground = true; } else p.ground = false;
+  if (p.y <= gy) {
+    if (!p.ground && p.vy < -6) burst3d([p.x, p.y + 0.05, p.z], ['#d9cbb0', '#ffffff'], 8, { speed: 2.5, up: 1.2, g: 8, size: 0.14, life: 0.5 });
+    p.y = gy; p.vy = 0; p.ground = true;
+  } else p.ground = false;
   if (p.ground && gy > 0) {
     const roof = roofAt(s.cells, p.x, p.z);
     if (roof) { s.safe = roof; s.seen.add(roof.id); }
@@ -100,10 +135,40 @@ const initState = () => {
   const r0 = city.root;
   return {
     cells: city.cells, roofs: city.roofs, tokens: city.tokens, safe: r0, seen: new Set([r0.id]),
-    p: { x: r0.x, y: r0.top, z: r0.z, vy: 0, face: 0, ground: true }, mv: [0, 0], coy: 0, yaw: 0,
+    statics: cityStatics(city.roofs),
+    p: { x: r0.x, y: r0.top, z: r0.z, vy: 0, face: 0, ground: true }, mv: [0, 0], coy: 0, yaw: 0, cam: null, walk: 0,
     time: PK_TIME, got: 0, lives: PK_LIVES, inv: 0, t: 0, toast: null, final: null,
   };
 };
+
+// Escena (juega y sirve de fondo animado en inicio/fin)
+function buildScene(s, t) {
+  const p = s.p;
+  const blink = s.inv > 0 && Math.floor(s.t * 12) % 2 === 0;
+  const avail = s.tokens.filter(k => k.cd <= 0);
+  const objs = [];
+  for (const k of avail) {
+    if (Math.hypot(k.x - p.x, k.z - p.z) > 40) continue;
+    objs.push(...coin(k.id, [k.x, k.b.top + 1.4, k.z], { t: t + k.x, c: '#ffd23f', n: 1.5, bob: 0.12 }));
+  }
+  // jugador: corre con zancada, brazos al cielo cuando está en el aire
+  objs.push(...person('yo', [p.x, p.y, p.z], {
+    yaw: p.face, t, walk: s.walk, arms: p.ground ? undefined : Math.PI, hat: 'cap', band: '#22e6ff',
+    shirt: '#ff5a36', pants: '#262b40', skin: '#f2c29b', hair: '#2a1d14', flash: blink,
+  }));
+  return {
+    sky: { top: '#2b2f6e', bottom: '#f5a77a', sun: true, sunC: '#ffd29a', clouds: 5 },
+    light: { dir: [-0.6, 0.35, 0.5], sun: '#ffd3a1', i: 2.6, sky: '#c9d2ff', ground: '#3a3050', hi: 1.5 },
+    fog: { c: '#f5a77a', near: 40, far: 110 }, shadowR: 22,
+    statics: s.statics,
+    lights: [{ p: [p.x, p.y + 2.5, p.z], c: '#ff7ad9', i: 5, d: 10 }],
+    objs: [
+      { id: 'calle', k: 'pla', p: [0, PK_STREET, 0], s: [240, 240, 1], c: '#1b1e28', recv: true },
+      ...objs,
+    ],
+    cam: s.cam || camFor(s, p),
+  };
+}
 
 export function Parkour3D({ onExit }) {
   const fx = useFX();
@@ -115,7 +180,7 @@ export function Parkour3D({ onExit }) {
   const g = useRef(null);
   if (!g.current) g.current = initState();
 
-  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); hx.tap(); };
+  const start = () => { fx.clear(); clear3d(); g.current = initState(); setPhase('play'); hx.tap(); };
   const finish = (s, why) => {
     s.final = s.got * 10 + s.seen.size * 5;
     if (why === 'time') hx.win(); else hx.die();
@@ -127,6 +192,7 @@ export function Parkour3D({ onExit }) {
     // salto largo: si corres, el impulso de la carrera se conserva en el aire (≈ 7 m); parado solo sube
     if (s.p.ground || s.coy > 0) {
       s.p.vy = moving ? 9.6 : 10.8; s.p.ground = false; s.coy = 0; hx.tap();
+      burst3d([s.p.x, s.p.y + 0.05, s.p.z], ['#d9cbb0', '#ffffff'], 6, { speed: 2, up: 1, g: 6, size: 0.12, life: 0.4 });
     }
   };
 
@@ -136,19 +202,28 @@ export function Parkour3D({ onExit }) {
     if (s.toast) { s.toast.t -= dt; if (s.toast.t <= 0) s.toast = null; }
     if (s.time <= 0) { s.time = 0; finish(s, 'time'); return; }
     s.yaw -= look.x * 2.4 * dt;
+    const px = p.x, pz = p.z;
     physics(s, dt, move);
+    const moved = Math.hypot(p.x - px, p.z - pz);
+    s.walk += (Math.min(1, moved / Math.max(dt, 1e-3) / 8) * (p.ground ? 1 : 0) - s.walk) * Math.min(1, dt * 10);
+    smoothCam(s, dt, camFor(s, p));
     if (p.y < -3) {   // caída a la calle
       s.lives -= 1; s.inv = 1.5; hx.bad(); fx.shake(8, 0.3); fx.flash(C.red, 0.3);
+      burst3d([p.x, p.y + 1, p.z], ['#ff5a36', '#ffd23f'], 18, { speed: 4, up: 2, size: 0.18, life: 0.7 });
       s.toast = { m: '💥 ¡Caída!', t: 1.2 };
       if (s.lives <= 0) { finish(s, 'lives'); return; }
       const b = s.safe;
       p.x = b.x; p.z = b.z; p.y = b.top + 3; p.vy = 0; p.ground = false; s.mv = [0, 0];
+      ring3d([b.x, b.top + 0.2, b.z], '#22e6ff', 14, { speed: 4, life: 0.5 });
       return;
     }
-    for (const t of s.tokens) {
-      if (t.cd > 0) { t.cd -= dt; continue; }
-      if (Math.hypot(t.x - p.x, t.z - p.z) < 1.8 && Math.abs(p.y - t.b.top) < 2.5) {
-        t.cd = 9; s.got += 1; hx.good(); fx.flash(C.amber, 0.18);
+    // fichas: tardan más en reaparecer tras 60 s (dificultad progresiva)
+    const respawn = s.t > 60 ? 13 : 9;
+    for (const k of s.tokens) {
+      if (k.cd > 0) { k.cd -= dt; continue; }
+      if (Math.hypot(k.x - p.x, k.z - p.z) < 1.8 && Math.abs(p.y - k.b.top) < 2.5) {
+        k.cd = respawn; s.got += 1; hx.good(); fx.flash(C.amber, 0.18);
+        burst3d([k.x, k.b.top + 1.4, k.z], ['#ffd23f', '#fff3b0', '#ffb300'], 22, { speed: 4, up: 3, g: 8, size: 0.16, life: 0.8 });
         s.toast = { m: `⭐ Ficha ${s.got}`, t: 1.2 };
       }
     }
@@ -159,63 +234,27 @@ export function Parkour3D({ onExit }) {
   let target = null, td = 1e9;
   avail.forEach(t => { const d = Math.hypot(t.x - p.x, t.z - p.z); if (d < td) { td = d; target = t; } });
   const ang = target ? compassAngle(p, s.yaw, target) : 0;
-  const blink = s.inv > 0 && Math.floor(s.t * 12) % 2 === 0;
-  const cam = camFor(s, p);
-  const objs = [
-    { id: 'calle', k: 'pla', p: [p.x, PK_STREET, p.z], s: [240, 240, 1], c: '#1b1e28' },
-    ...near(s.roofs, p, 44).flatMap(b => [
-      { id: b.id, k: 'box', p: [b.x, (b.top + PK_STREET) / 2, b.z], s: [b.s, b.top - PK_STREET, b.s], c: b.c },
-      { id: `${b.id}r`, k: 'box', p: [b.x, b.top + 0.07, b.z], s: [b.s * 0.94, 0.14, b.s * 0.94], c: '#d9cbb0' },
-      ...(b.tank ? [{ id: `${b.id}t`, k: 'cyl', p: [b.x + b.s * 0.25, b.top + 0.7, b.z - b.s * 0.2], s: [0.9, 1.4, 0.9], c: '#7a5b3e' }] : []),
-    ]),
-    ...near(avail, p, 40).flatMap(t => [
-      { id: t.id, k: 'sph', p: [t.x, t.b.top + 1.2 + Math.sin(s.t * 3 + t.x) * 0.15, t.z], n: 0.5, c: '#ffe066', e: 0.8 },
-      { id: `${t.id}o`, k: 'tor', p: [t.x, t.b.top + 1.2, t.z], n: 0.8, c: '#ffd23f', e: 0.5, r: [Math.PI / 2, 0, s.t * 2.5] },
-    ]),
-    // jugador
-    { id: 'cuerpo', k: 'box', p: [p.x, p.y + 0.7, p.z], s: [0.7, 1.0, 0.45], r: [0, p.face, 0], c: blink ? '#ffffff' : '#ff5a36' },
-    { id: 'cabeza', k: 'sph', p: [p.x, p.y + 1.45, p.z], n: 0.55, c: '#f2c29b' },
-    { id: 'gorra', k: 'cyl', p: [p.x, p.y + 1.78, p.z], s: [0.8, 0.12, 0.8], c: '#22e6ff', e: 0.2 },
-  ];
-  const shake = fx.shakeT > 0 ? fx.shakeMag * (fx.shakeT / fx.shakeDur) * 0.03 : 0;
-  const scene = { bg: '#1d2140', fog: { c: '#1d2140', near: 30, far: 70 }, shake, objs, cam };
+  const scene = buildScene(s, phase === 'play' ? s.t : 0);
   const sc = s.final != null ? s.final : s.got * 10 + s.seen.size * 5;
-  const pad = (v, cx) => (
-    <View pointerEvents="none" style={{ position: 'absolute', left: cx - 50, bottom: 14, width: 100, height: 100, borderRadius: 50, borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)', backgroundColor: 'rgba(0,0,0,0.15)' }}>
-      <View style={{ position: 'absolute', left: 34 + v.x * 32, top: 34 + v.y * 32, width: 32, height: 32, borderRadius: 16, backgroundColor: v.on ? alpha(C.pink, 0.7) : 'rgba(255,255,255,0.35)' }} />
-    </View>
-  );
   return (
-    <GameScreen title="PARKOUR URBANO" emoji="🏙️" accent={C.pink} onExit={onExit} score={sc} best={best}
-      hud={<><Lives n={s.lives} max={PK_LIVES} /><Text style={{ color: C.text, fontWeight: '900', fontSize: 12 }}>⭐ {s.got}</Text><Text style={{ color: s.time < 15 ? C.red : C.pink, fontWeight: '900', fontSize: 12 }}>⏱ {Math.ceil(s.time)}s</Text></>}>
-      <PlayArea fx={fx} bg="#1d2140">
-        <World3D scene={scene} />
-        {phase === 'play' && target && (
-          <View pointerEvents="none" style={{ position: 'absolute', top: 10, left: 0, right: 0, alignItems: 'center' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 }}>
-              <Text style={{ color: C.pink, fontSize: 18, fontWeight: '900', transform: [{ rotate: `${ang}rad` }] }}>▲</Text>
-              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12, marginLeft: 8 }}>Ficha a {Math.round(td)} m</Text>
-            </View>
+    <Game3D title="PARKOUR URBANO" emoji="🏙️" accent={C.pink} onExit={onExit} score={sc} best={best} fx={fx}
+      phase={phase} onStart={start} scene={scene} menuScene={t => buildScene(s, t)} orbit={{ r: 16, h: 7, speed: 0.14, ly: 2.2 }}
+      hud={<><Lives n={s.lives} max={PK_LIVES} /><HudPill icon="⭐" value={String(s.got)} color={C.amber} /><HudPill icon="⏱" value={`${Math.ceil(s.time)}s`} color={s.time < 15 ? C.red : C.pink} /></>}
+      subtitle="Salta de azotea en azotea"
+      lines={['Joystick izquierdo: correr · derecho: girar la cámara', 'SALTAR mientras corres = salto largo', 'Caer a la calle quita una vida', `Recoge fichas doradas en ${PK_TIME} s`]}
+      result={{ won: res.why === 'time', isNew: res.isNew, title: res.why === 'time' ? '¡SE ACABÓ EL TIEMPO!' : '¡SIN VIDAS!', emoji: res.why === 'time' ? '🏆' : '🏙️', subtitle: res.why === 'time' ? 'Buena carrera por los tejados' : 'La calle te ha tragado', stats: [['FICHAS', String(s.got)], ['AZOTEAS', String(s.seen.size)], ['VIDAS', String(s.lives)]] }}>
+      {target && (
+        <View pointerEvents="none" style={{ position: 'absolute', top: 4, left: 0, right: 0, alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 14, paddingHorizontal: 10, paddingVertical: 4 }}>
+            <Text style={{ color: C.pink, fontSize: 18, fontWeight: '900', transform: [{ rotate: `${ang}rad` }] }}>▲</Text>
+            <Text style={{ color: '#fff', fontWeight: '800', fontSize: 12, marginLeft: 8 }}>Ficha a {Math.round(td)} m</Text>
           </View>
-        )}
-        {s.toast && <Text pointerEvents="none" style={{ position: 'absolute', top: AREA_H * 0.25, width: AREA_W, textAlign: 'center', color: '#fff', fontSize: 22, fontWeight: '900', ...tglow('#000', 8) }}>{s.toast.m}</Text>}
-        {phase === 'play' && (
-          <>
-            <TouchStick testID="pk-move" v={move} R={44} style={{ position: 'absolute', left: 0, bottom: 0, width: AREA_W * 0.4, height: 170 }} />
-            <TouchStick testID="pk-look" v={look} R={44} style={{ position: 'absolute', right: 0, bottom: 0, width: AREA_W * 0.4, height: 170 }} />
-            {pad(move, 62)}
-            {pad(look, AREA_W - 62)}
-            <TouchBtn testID="pk-jump" onDown={doJump} style={{ position: 'absolute', left: AREA_W / 2 - 32, bottom: 26, width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: C.pink, backgroundColor: alpha(C.pink, 0.2), alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ color: '#fff', fontWeight: '900', fontSize: 11 }}>SALTAR</Text>
-            </TouchBtn>
-          </>
-        )}
-        <Overlay show={phase !== 'play'} kind={phase} emoji="🏙️"
-          title={phase === 'over' ? (res.why === 'time' ? '¡SE ACABÓ EL TIEMPO!' : '¡SIN VIDAS!') : 'PARKOUR URBANO'}
-          subtitle={phase === 'ready' ? 'Salta de azotea en azotea' : `⭐ ${s.got} fichas`}
-          score={sc} best={best} isNew={res.isNew} accent={C.pink} onStart={start} onExit={onExit}
-          lines={phase === 'ready' ? ['Joystick izquierdo: correr · derecho: girar la cámara', 'SALTAR mientras corres = salto largo', 'Caer a la calle quita una vida', `Recoge fichas brillantes en ${PK_TIME} s`] : null} />
-      </PlayArea>
-    </GameScreen>
+        </View>
+      )}
+      {s.toast && <Text pointerEvents="none" style={{ position: 'absolute', top: '22%', left: 0, right: 0, textAlign: 'center', color: '#fff', fontSize: 22, fontWeight: '900', ...tglow('#000', 8) }}>{s.toast.m}</Text>}
+      <Stick3D testID="pk-move" v={move} side="left" color={C.pink} />
+      <Stick3D testID="pk-look" v={look} side="right" color={C.cyan} />
+      <ActionBtn testID="pk-jump" label="SALTAR" color={C.pink} onDown={doJump} style={{ left: '50%', marginLeft: -33, bottom: 34 }} />
+    </Game3D>
   );
 }
