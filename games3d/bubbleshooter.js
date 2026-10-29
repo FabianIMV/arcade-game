@@ -1,44 +1,65 @@
 import React, { useRef, useState } from 'react';
-import { Text, View } from 'react-native';
-import { AREA_H, AREA_W, C, Combo, GameScreen, Overlay, PlayArea, alpha, clamp, hx, pick, rand, randInt, uid, useBest, useFX, useLoop, usePan } from '../utils/kit';
-import { World3D } from '../utils/World3D';
+import { Text } from 'react-native';
+import { C, SCREEN_H, SCREEN_W, clamp, hx, pick, rand, randInt, uid, useBest, useFX, useLoop, usePan } from '../utils/kit';
+import { Game3D, HudPill } from '../utils/ui3d';
+import { burst3d, clear3d, ring3d } from '../utils/engine3d';
+import { project, rayGround } from '../utils/openworld';
 
-// Tablero inclinado en 3D: la lógica de juego trabaja en píxeles de la zona de juego y se proyecta
-// a mundo 3D al dibujar (tablero inclinado hacia el fondo). Cámara detrás del cañón.
-const BS_COLS = 10, BS_R = AREA_W / (BS_COLS * 2), BS_D = BS_R * 2, BS_RH = BS_R * 1.7321;
-const BS_SCALE = 1 / BS_D;              // 1 unidad = diámetro de una burbuja
-const BS_TILT = 0.5;                    // inclinación del tablero (rad)
-const BS_CY = Math.cos(BS_TILT), BS_SY_ = Math.sin(BS_TILT);
-const BS_PAL = [C.red, C.cyan, C.lime, C.amber, C.violet, C.pink];
-const BS_SY = AREA_H - 46, BS_SX = AREA_W / 2;
+// BUBBLE SHOOTER 3D: tablero de burbujas brillantes sobre una mesa neón. Arrastra para apuntar,
+// suelta para disparar, toca la burbuja del cañón para cambiarla. Une 3 del mismo color para
+// hacerlas caer. 💣 explota alrededor · 🌈 se une a cualquier color. Si fallas varias veces, el techo baja.
+// La lógica trabaja en coordenadas de tablero (px lógicos, y hacia abajo); se dibuja en 3D y el toque se
+// convierte con el rayo de la cámara al plano de la mesa.
+const BS_COLS = 8, BS_D = 40, BS_R = 20, BS_RH = BS_D * 0.8660254;
+const W = BS_COLS * BS_D, LH = 640, CY = LH - 50;   // tablero W × LH; cañón en (W/2, CY)
+const S = 1 / BS_D;                                  // 1 unidad del mundo = 1 diámetro de burbuja
+const DANGER = CY - BS_D * 1.1;
+const BR = BS_D * S * 0.92;                          // diámetro visible de una burbuja (unidades)
+const CAM = { p: [0, 17.5, 16.5], l: [0, 0, -1.6], fov: 52 };
+const PAL = ['#ff4d6d', '#22d3ee', '#a3e635', '#fbbf24', '#a78bfa', '#f472b6'];
+const SKY = { top: '#07030f', bottom: '#1b0d33' };
 
-// píxeles de la zona → mundo 3D (x lateral, y arriba, z hacia el fondo)
-const to3 = (x, y) => {
-  const u = (x - AREA_W / 2) * BS_SCALE, v = (AREA_H - y) * BS_SCALE;
-  return [u, v * BS_CY, -v * BS_SY_];
-};
-const NORMAL = [0, BS_SY_, BS_CY];    // normal del tablero (hacia la cámara)
+// tablero → mundo (y = altura) y mundo → tablero (el toque)
+const toW = (lx, ly, y = 0.5) => [(lx - W / 2) * S, y, (ly - LH / 2) * S];
+const toL = (X, Z) => [X / S + W / 2, Z / S + LH / 2];
+const px = (lx, ly, y) => project(CAM, toW(lx, ly, y), SCREEN_W, SCREEN_H) || { x: SCREEN_W / 2, y: SCREEN_H / 2 };
+const touchL = (x, y) => { const p = rayGround(CAM, x, y, SCREEN_W, SCREEN_H, 0); return p ? toL(p[0], p[2]) : null; };
 
-const initState = (level, score) => {
-  const s = { level, score, ncol: 0, rows: [], ball: null, cur: null, next: null, aim: null, misses: 0, limit: 6, shiftAnim: 0, falling: [], t: 0, shots: 0, combo: 0, over: false, swapped: false };
-  s.ncol = Math.min(6, 3 + Math.floor(level / 2));
-  const n = Math.min(8, 4 + level);
-  for (let i = 0; i < n; i++) s.rows.push(mkRow(i % 2, s.ncol));
-  s.cur = newBubble(s); s.next = newBubble(s);
-  return s;
-};
+// Decorado estático (mesa, bordes neón, línea de peligro)
+const STATICS = [
+  { id: 'mesa', k: 'box', p: [0, -0.22, 0], s: [8.8, 0.4, 16.8], c: '#1c1033', recv: true },
+  { id: 'bordeI', k: 'box', p: [-4.25, 0.35, 0], s: [0.22, 0.7, 16.9], c: '#ff4d8d', e: 0.6 },
+  { id: 'bordeD', k: 'box', p: [4.25, 0.35, 0], s: [0.22, 0.7, 16.9], c: '#22d3ee', e: 0.6 },
+  { id: 'techo', k: 'box', p: [0, 0.35, -8.35], s: [8.7, 0.7, 0.22], c: '#a78bfa', e: 0.6 },
+  { id: 'peligro', k: 'box', p: [0, 0.03, (DANGER - LH / 2) * S], s: [8.0, 0.04, 0.1], c: '#ff3b5c', e: 0.9 },
+];
+
+const cx = (row, c) => BS_R + c * BS_D + (row.off ? BS_R : 0);
 const mkRow = (off, ncol) => ({ off, cells: Array.from({ length: off ? BS_COLS - 1 : BS_COLS }, () => ({ k: randInt(0, ncol - 1) })) });
-const colsOfBoard = s => { const set = new Set(); s.rows.forEach(r => r.cells.forEach(c => c && set.add(c.k))); return [...set]; };
+const colsOf = s => { const set = new Set(); s.rows.forEach(r => r.cells.forEach(c => c && set.add(c.k))); return [...set]; };
 const newBubble = s => {
-  const cols = colsOfBoard(s);
-  const pool = cols.length ? cols : Array.from({ length: s.ncol }, (_, i) => i);
+  const cols = colsOf(s), pool = cols.length ? cols : Array.from({ length: s.ncol }, (_, i) => i);
   const r = Math.random();
   if (s.level >= 2 && r < 0.05) return { k: 'bomb' };
   if (s.level >= 3 && r < 0.09) return { k: 'rainbow' };
   return { k: pick(pool) };
 };
-const cx = (row, c) => BS_R + c * BS_D + (row.off ? BS_R : 0);
-const colorOf = k => (k === 'bomb' ? '#ff9a3d' : k === 'rainbow' ? '#ffffff' : BS_PAL[k]);
+const initState = (level = 1, score = 0) => {
+  const s = { level, score, ncol: Math.min(6, 3 + Math.floor(level / 2)), rows: [], ball: null, cur: null, next: null, aim: null, misses: 0, limit: 6, shiftAnim: 0, falling: [], t: 0, shots: 0, combo: 0, over: false, swapped: false, toast: null };
+  const n = Math.min(8, 4 + level);
+  for (let i = 0; i < n; i++) s.rows.push(mkRow(i % 2, s.ncol));
+  s.cur = newBubble(s); s.next = newBubble(s);
+  return s;
+};
+const colorOf = k => (k === 'bomb' ? '#ff9a3d' : k === 'rainbow' ? '#ffffff' : PAL[k]);
+
+// Burbujas del tablero: todas con instancing (una malla por tipo); el brillo es otra instancia blanca
+function bubbleObjs(out, x, y, k, t, moving) {
+  const w = toW(x, y);
+  const col = k === 'rainbow' ? `hsl(${(t * 90) % 360},95%,65%)` : colorOf(k);
+  out.push({ k: 'sph', p: w, n: BR, c: col, e: k === 'bomb' ? 0.45 : 0.12, m: { r: 0.22, m: 0.1 }, inst: moving ? 'burb-m' : 'burbuja' });
+  out.push({ k: 'sph', p: [w[0] - 0.13, w[1] + 0.15, w[2] - 0.13], n: 0.17, c: '#ffffff', e: 1, inst: moving ? 'brillo-m' : 'brillo' });
+}
 
 export function BubbleShooter3D({ onExit }) {
   const fx = useFX();
@@ -48,9 +69,9 @@ export function BubbleShooter3D({ onExit }) {
   const g = useRef(null);
   if (!g.current) g.current = initState(1, 0);
 
-  const start = () => { fx.clear(); g.current = initState(1, 0); setPhase('play'); };
+  const start = () => { fx.clear(); clear3d(); g.current = initState(1, 0); setPhase('play'); hx.tap(); };
   const pos = (s, ri, ci) => ({ x: cx(s.rows[ri], ci), y: ri * BS_RH + BS_R - s.shiftAnim });
-
+  const boom = (s, x, y, col, n = 10) => burst3d(toW(x, y), col, n, { speed: 3.2, up: 1, size: 0.12, life: 0.55, g: 8 });
   const neighbors = (s, r, c) => {
     const row = s.rows[r]; const out = [];
     const cand = row.off ? [[r, c - 1], [r, c + 1], [r - 1, c], [r - 1, c + 1], [r + 1, c], [r + 1, c + 1]] : [[r, c - 1], [r, c + 1], [r - 1, c - 1], [r - 1, c], [r + 1, c - 1], [r + 1, c]];
@@ -58,8 +79,8 @@ export function BubbleShooter3D({ onExit }) {
     return out;
   };
   const pop = (s, list, pts) => {
-    list.forEach(([r, c]) => { const b = s.rows[r].cells[c]; if (!b) return; const p = pos(s, r, c); fx.burst(p.x, p.y, colorOf(b.k), 8, 200, 0.5, 4); s.rows[r].cells[c] = null; });
-    if (pts) { const p = pos(s, list[0][0], list[0][1]); s.score += pts; fx.pop(p.x, p.y - 10, `+${pts}`, C.text, 17); }
+    list.forEach(([r, c]) => { const b = s.rows[r].cells[c]; if (!b) return; const p = pos(s, r, c); boom(s, p.x, p.y, colorOf(b.k), 10); s.rows[r].cells[c] = null; });
+    if (pts) { const p = pos(s, list[0][0], list[0][1]); s.score += pts; const q = px(p.x, p.y, 0.5); fx.pop(q.x, q.y - 12, `+${pts}`, C.text, 17); }
   };
   const settle = (s, r, c) => {
     const b = s.rows[r].cells[c];
@@ -67,7 +88,9 @@ export function BubbleShooter3D({ onExit }) {
     if (b.k === 'bomb') {
       matched = [[r, c], ...neighbors(s, r, c).filter(([rr, cc]) => s.rows[rr].cells[cc])];
       neighbors(s, r, c).forEach(([rr, cc]) => { if (s.rows[rr].cells[cc]) neighbors(s, rr, cc).forEach(([r2, c2]) => { if (s.rows[r2].cells[c2] && !matched.some(m => m[0] === r2 && m[1] === c2) && Math.random() < 0.4) matched.push([r2, c2]); }); });
-      const p = pos(s, r, c); fx.ring(p.x, p.y, C.orange, 90); fx.shake(7, 0.3); fx.flash(C.orange, 0.2); hx.heavy();
+      const p = pos(s, r, c), w = toW(p.x, p.y, 0.2);
+      ring3d(w, '#ff9a3d', 34, { speed: 6, life: 0.7 }); burst3d(toW(p.x, p.y), ['#ff9a3d', '#ffe066', '#ff4d6d'], 40, { speed: 5, up: 2, size: 0.16, life: 0.8 });
+      s.toast = { m: '💥 ¡BOOM!', t: 1.1 }; fx.shake(7, 0.3); fx.flash(C.orange, 0.2); hx.heavy();
     } else {
       const seen = new Set([r * 100 + c]); const q = [[r, c]]; const target = b.k;
       while (q.length) {
@@ -92,7 +115,7 @@ export function BubbleShooter3D({ onExit }) {
       s.rows.forEach((row, ri) => row.cells.forEach((cell, ci) => {
         if (cell && !attached.has(ri * 100 + ci)) { const p = pos(s, ri, ci); s.falling.push({ id: uid(), x: p.x, y: p.y, vy: 0, vx: rand(-40, 40), k: cell.k }); row.cells[ci] = null; dropped += 1; }
       }));
-      if (dropped) { const pts = dropped * 20 * Math.max(1, dropped - 1); s.score += pts; fx.pop(AREA_W / 2, AREA_H * 0.4, `¡${dropped} CAEN! +${pts}`, C.amber, 20); hx.good(); }
+      if (dropped) { const pts = dropped * 20 * Math.max(1, dropped - 1); s.score += pts; s.toast = { m: `¡${dropped} CAEN! +${pts}`, t: 1.3 }; hx.good(); }
     } else {
       s.combo = 0; s.misses += 1; hx.tap();
       if (s.misses >= s.limit) { // baja el techo
@@ -102,12 +125,12 @@ export function BubbleShooter3D({ onExit }) {
     }
     while (s.rows.length > 1 && s.rows[s.rows.length - 1].cells.every(x => !x)) s.rows.pop();
     if (!s.rows.some(row => row.cells.some(Boolean))) {
-      s.score += 500; fx.flash('#fff', 0.35); fx.pop(AREA_W / 2, AREA_H / 2, `NIVEL ${s.level} SUPERADO +500`, C.lime, 22); hx.win();
+      s.score += 500; fx.flash('#fff', 0.35); s.toast = { m: `NIVEL ${s.level} SUPERADO +500`, t: 1.6 }; hx.win();
       const ns = initState(s.level + 1, s.score); Object.assign(s, ns);
       return;
     }
     const lowest = s.rows.length - 1;
-    if (lowest * BS_RH + BS_R > (AREA_H - 46) - BS_D * 1.1) { s.over = true; hx.die(); fx.shake(10, 0.4); fx.flash(C.red, 0.3); setRes({ isNew: submitBest(s.score) }); setPhase('over'); }
+    if (lowest * BS_RH + BS_R > DANGER) { s.over = true; hx.die(); fx.shake(10, 0.4); fx.flash(C.red, 0.3); setRes({ isNew: submitBest(s.score) }); setPhase('over'); }
   };
   const snap = (s, x, y) => {
     let bestD = 1e9, bestC = null;
@@ -115,31 +138,47 @@ export function BubbleShooter3D({ onExit }) {
       if (ri < 0) continue;
       while (ri >= s.rows.length) s.rows.push({ off: s.rows[s.rows.length - 1].off ? 0 : 1, cells: Array(s.rows[s.rows.length - 1].off ? BS_COLS : BS_COLS - 1).fill(null) });
       const row = s.rows[ri];
-      row.cells.forEach((cell, ci) => { if (cell) return; const px = cx(row, ci), py = ri * BS_RH + BS_R - s.shiftAnim; const d = Math.hypot(px - x, py - y); if (d < bestD) { bestD = d; bestC = [ri, ci]; } });
+      row.cells.forEach((cell, ci) => { if (cell) return; const qx = cx(row, ci), qy = ri * BS_RH + BS_R - s.shiftAnim; const d = Math.hypot(qx - x, qy - y); if (d < bestD) { bestD = d; bestC = [ri, ci]; } });
     }
     return bestC;
+  };
+  const aimFrom = q => {
+    const dx = q[0] - W / 2, dy = CY - q[1];
+    g.current.aim = clamp(Math.atan2(dy, dx), 0.2, Math.PI - 0.2);
   };
   const fire = () => {
     const s = g.current;
     if (phase !== 'play' || s.ball || s.over || s.aim == null) return;
-    const a = s.aim; const sp = 1000;
-    s.ball = { x: BS_SX, y: BS_SY, vx: Math.cos(a) * sp, vy: -Math.sin(a) * sp, k: s.cur.k };
+    const a = s.aim, sp = 900;
+    s.ball = { x: W / 2, y: CY, vx: Math.cos(a) * sp, vy: -Math.sin(a) * sp, k: s.cur.k };
     s.cur = s.next; s.next = newBubble(s); s.shots += 1; hx.tap();
   };
+  const pan = usePan(fx, {
+    down: (x, y) => {
+      const s = g.current, q = touchL(x, y);
+      if (phase !== 'play' || !q) return;
+      if (Math.hypot(q[0] - W / 2, q[1] - CY) < 48) { const t = s.cur; s.cur = s.next; s.next = t; hx.tick(); s.aim = null; s.swapped = true; return; }
+      s.swapped = false; aimFrom(q);
+    },
+    move: (x, y) => { const s = g.current; if (s.swapped) return; const q = touchL(x, y); if (q) aimFrom(q); },
+    up: () => { const s = g.current; if (!s.swapped) fire(); s.aim = null; },
+  });
 
   useLoop(phase === 'play', dt => {
     const s = g.current;
+    if (s.over) return;
     s.t += dt;
+    if (s.toast) { s.toast.t -= dt; if (s.toast.t <= 0) s.toast = null; }
     if (s.shiftAnim > 0) s.shiftAnim = Math.max(0, s.shiftAnim - dt * 260);
     s.falling.forEach(f => { f.vy += 1400 * dt; f.y += f.vy * dt; f.x += f.vx * dt; });
-    s.falling = s.falling.filter(f => f.y < AREA_H + 40);
+    s.falling = s.falling.filter(f => f.y < LH + 40);
     const b = s.ball;
     if (b) {
       const steps = Math.ceil((Math.hypot(b.vx, b.vy) * dt) / 6);
       for (let i = 0; i < steps && s.ball; i++) {
         b.x += (b.vx * dt) / steps; b.y += (b.vy * dt) / steps;
         if (b.x < BS_R) { b.x = BS_R; b.vx = Math.abs(b.vx); }
-        if (b.x > AREA_W - BS_R) { b.x = AREA_W - BS_R; b.vx = -Math.abs(b.vx); }
+        if (b.x > W - BS_R) { b.x = W - BS_R; b.vx = -Math.abs(b.vx); }
         let hit = b.y <= BS_R - s.shiftAnim + 1;
         if (!hit) for (let ri = 0; ri < s.rows.length && !hit; ri++) { const row = s.rows[ri]; const ry = ri * BS_RH + BS_R - s.shiftAnim; if (Math.abs(ry - b.y) > BS_D) continue; for (let ci = 0; ci < row.cells.length; ci++) { if (row.cells[ci] && Math.hypot(cx(row, ci) - b.x, ry - b.y) < BS_D * 0.88) { hit = true; break; } } }
         if (hit) {
@@ -153,75 +192,55 @@ export function BubbleShooter3D({ onExit }) {
     }
   });
 
-  const aimFrom = (x, y) => {
-    const dx = x - BS_SX, dy = BS_SY - y;
-    g.current.aim = clamp(Math.atan2(dy, dx), 0.2, Math.PI - 0.2);
-  };
-  const pan = usePan(fx, {
-    down: (x, y) => {
-      const s = g.current;
-      if (phase !== 'play') return;
-      if (Math.hypot(x - BS_SX, y - BS_SY) < 34) { const t = s.cur; s.cur = s.next; s.next = t; hx.tick(); s.aim = null; s.swapped = true; return; }
-      s.swapped = false; aimFrom(x, y);
-    },
-    move: (x, y) => { if (!g.current.swapped) aimFrom(x, y); },
-    up: () => { const s = g.current; if (!s.swapped) fire(); s.aim = null; },
-  });
-
   const s = g.current;
-  // trayectoria de apuntado (puntos en el tablero)
+  // trayectoria de apuntado (rebota en las paredes; puntos en el tablero)
   const dots = [];
   if (s.aim != null && !s.ball) {
-    let x = BS_SX, y = BS_SY, vx = Math.cos(s.aim), vy = -Math.sin(s.aim);
-    for (let i = 0; i < 70; i++) {
+    let x = W / 2, y = CY, vx = Math.cos(s.aim), vy = -Math.sin(s.aim);
+    for (let i = 0; i < 90; i++) {
       x += vx * 9; y += vy * 9;
-      if (x < BS_R) { x = BS_R; vx = Math.abs(vx); } if (x > AREA_W - BS_R) { x = AREA_W - BS_R; vx = -Math.abs(vx); }
+      if (x < BS_R) { x = BS_R; vx = Math.abs(vx); } if (x > W - BS_R) { x = W - BS_R; vx = -Math.abs(vx); }
       let stop = y < BS_R;
       if (!stop) for (let ri = 0; ri < s.rows.length && !stop; ri++) { const ry = ri * BS_RH + BS_R; if (Math.abs(ry - y) > BS_D) continue; for (let ci = 0; ci < s.rows[ri].cells.length; ci++) if (s.rows[ri].cells[ci] && Math.hypot(cx(s.rows[ri], ci) - x, ry - y) < BS_D * 0.88) { stop = true; break; } }
       if (stop) break;
       if (i % 2 === 0) dots.push([x, y]);
     }
   }
-
-  // ----- escena 3D -----
   const objs = [];
-  const boardC = to3(AREA_W / 2, AREA_H / 2);
-  objs.push({ id: 'tablero', k: 'box', p: [boardC[0], boardC[1] - NORMAL[1] * 0.2, boardC[2] - NORMAL[2] * 0.2], s: [AREA_W * BS_SCALE + 0.6, AREA_H * BS_SCALE + 0.6, 0.3], r: [-BS_TILT, 0, 0], c: '#1a0c18', e: 0.02 });
-  const dz = to3(AREA_W / 2, BS_SY - BS_D * 1.1 - 0);
-  objs.push({ id: 'linea', k: 'box', p: [0, dz[1] + 0.0, dz[2] + 0.02], s: [AREA_W * BS_SCALE, 0.06, 0.06], r: [-BS_TILT, 0, 0], c: C.red, e: 0.5 });
-  const bub = (x, y, k, id) => ({ id, k: 'sph', p: to3(x, y), n: BS_D * BS_SCALE * 0.92, c: k === 'rainbow' ? `hsl(${(s.t * 90) % 360},95%,65%)` : colorOf(k), e: k === 'rainbow' ? 0.3 : 0.08 });
-  s.rows.forEach((row, ri) => row.cells.forEach((cell, ci) => { if (cell) objs.push(bub(cx(row, ci), ri * BS_RH + BS_R - s.shiftAnim, cell.k, `c${ri}-${ci}`)); }));
-  s.falling.forEach(f => objs.push(bub(f.x, f.y, f.k, `f${f.id}`)));
-  dots.forEach(([x, y], i) => objs.push({ id: `p${i}`, k: 'sph', p: to3(x, y), n: 0.16, c: '#ffffff', e: 0.4, o: 0.7 - i * 0.008 }));
-  if (s.ball) objs.push(bub(s.ball.x, s.ball.y, s.ball.k, 'bola'));
-  // cañón: base y cañón que apunta hacia donde se dispara
-  const base = to3(BS_SX, BS_SY);
-  const aim = s.aim != null ? s.aim : Math.PI / 2;
-  const dir3 = [Math.cos(aim) * 0.9, Math.sin(aim) * BS_CY * 0.9, -Math.sin(aim) * BS_SY_ * 0.9];
-  objs.push({ id: 'base', k: 'sph', p: [base[0], base[1] + 0.1, base[2]], n: 1.2, c: C.red, e: 0.12 });
-  objs.push({ id: 'cañon', k: 'box', p: [base[0] + dir3[0] * 0.6, base[1] + dir3[1] * 0.6, base[2] + dir3[2] * 0.6], s: [0.34, 1.6, 0.34], r: [-BS_TILT, 0, aim - Math.PI / 2], c: '#ffb3c7', e: 0.1 });
-  if (!s.ball) objs.push(bub(BS_SX, BS_SY, s.cur.k, 'cur'));
-  const nx = to3(BS_SX + 52, BS_SY);
-  objs.push({ id: 'nxt', k: 'sph', p: nx, n: BS_D * BS_SCALE * 0.7, c: s.next.k === 'rainbow' ? '#ffffff' : colorOf(s.next.k), e: 0.12 });
+  const bubbles = [];
+  s.rows.forEach((row, ri) => row.cells.forEach((cell, ci) => { if (cell) bubbleObjs(bubbles, cx(row, ci), ri * BS_RH + BS_R - s.shiftAnim, cell.k, s.t, false); }));
+  s.falling.forEach(f => bubbleObjs(bubbles, f.x, f.y, f.k, s.t, true));
+  objs.push(...bubbles);
+  dots.forEach(([x, y], i) => objs.push({ id: `p${i}`, k: 'sph', p: toW(x, y, 0.22), n: 0.13 - i * 0.001, c: '#ffffff', e: 0.8, o: Math.max(0.15, 0.85 - i * 0.02) }));
+  if (s.ball) objs.push({ id: 'bola', k: 'sph', p: toW(s.ball.x, s.ball.y), n: BR, c: s.ball.k === 'rainbow' ? '#ffffff' : colorOf(s.ball.k), e: 0.25, sh: true });
+  // cañón: base y barril que apunta hacia el disparo
+  const base = toW(W / 2, CY, 0.25), aim = s.aim != null ? s.aim : Math.PI / 2;
+  const dX = Math.cos(aim), dZ = -Math.sin(aim);
+  objs.push({ id: 'base', k: 'cyl', p: base, s: [1.3, 0.5, 1.3], c: '#2a1f4a', e: 0.1, sh: true });
+  objs.push({ id: 'base2', k: 'tor', p: [base[0], 0.5, base[2]], n: 0.7, r: [Math.PI / 2, 0, 0], c: '#ff4d8d', e: 0.8 });
+  objs.push({ id: 'barril', k: 'box', p: [base[0] + dX * 0.8, 0.55, base[2] + dZ * 0.8], s: [0.34, 0.34, 1.5], r: [0, Math.atan2(dX, dZ), 0], c: '#ffb3c7', e: 0.15, sh: true });
+  if (!s.ball) objs.push({ id: 'cur', k: 'sph', p: [base[0], 1.0, base[2]], n: BR, c: s.cur.k === 'rainbow' ? '#ffffff' : colorOf(s.cur.k), e: 0.25, sh: true });
+  const nxW = toW(W / 2 + 70, CY, 0.4);
+  objs.push({ id: 'nxt', k: 'sph', p: nxW, n: BR * 0.66, c: s.next.k === 'rainbow' ? '#ffffff' : colorOf(s.next.k), e: 0.3, sh: true });
 
-  const shake = fx.shakeT > 0 ? fx.shakeMag * (fx.shakeT / fx.shakeDur) * 0.04 : 0;
-  const scene = {
-    bg: '#0a0510', fog: { c: '#0a0510', near: 16, far: 34 }, objs,
-    cam: { p: [(Math.random() - 0.5) * shake, 8.6, 10.4], l: [0, 6.4, -7], fov: 62 },
-  };
+  const scene = { sky: SKY, fog: { c: SKY.bottom, near: 24, far: 44 }, light: { dir: [-0.3, 0.9, 0.35] }, shadowR: 12, statics: STATICS, objs, cam: CAM };
+  const nxPx = px(W / 2 + 70, CY, 0.4), basePx = px(W / 2, CY, 0.4);
 
   return (
-    <GameScreen title="BUBBLE SHOOTER" emoji="🫧" accent={C.red} onExit={onExit} score={s.score} best={best}
-      hud={<><Text style={{ color: C.dim, fontSize: 12 }}>Nivel <Text style={{ color: C.red, fontWeight: '800' }}>{s.level}</Text></Text><View style={{ flexDirection: 'row', alignItems: 'center' }}><Text style={{ color: C.dim, fontSize: 11, marginRight: 6 }}>Techo en</Text>{Array.from({ length: s.limit }, (_, i) => <View key={i} style={{ width: 8, height: 8, borderRadius: 4, marginHorizontal: 1.5, backgroundColor: i < s.limit - s.misses ? C.red : alpha(C.red, 0.2) }} />)}</View><View style={{ minWidth: 60, alignItems: 'flex-end' }}>{s.combo > 1 ? <Combo n={s.combo} color={C.red} /> : null}</View></>}>
-      <PlayArea fx={fx} bg="#0a0510" border={alpha(C.red, 0.4)} {...pan}>
-        <World3D scene={scene} />
-        <Text pointerEvents="none" style={{ position: 'absolute', left: BS_SX + 42, top: BS_SY + 18, color: C.dim, fontSize: 9, fontWeight: '800', letterSpacing: 1 }}>SIGUIENTE</Text>
-        <Text pointerEvents="none" style={{ position: 'absolute', left: BS_SX - 100, top: BS_SY + 20, width: 76, color: alpha(C.dim, 0.7), fontSize: 9, fontWeight: '800', textAlign: 'right' }}>TOCA PARA CAMBIAR</Text>
-        <Overlay show={phase !== 'play'} kind={phase} emoji="🫧" title={phase === 'over' ? 'LAS BURBUJAS LLEGARON' : 'BUBBLE SHOOTER'}
-          subtitle={phase === 'over' ? `Nivel ${s.level} · ${s.shots} disparos` : 'Une 3 burbujas del mismo color'}
-          score={s.score} best={best} isNew={res.isNew} accent={C.red} onStart={start} onExit={onExit}
-          lines={phase === 'ready' ? ['Arrastra para apuntar y suelta para disparar', 'Toca la burbuja del cañón para cambiarla', '💣 explota alrededor · 🌈 se une a cualquier color', 'Si fallas varias veces, el techo baja'] : null} />
-      </PlayArea>
-    </GameScreen>
+    <Game3D title="BUBBLE SHOOTER" emoji="🫧" accent={C.red} onExit={onExit} score={s.score} best={best} fx={fx}
+      phase={phase} onStart={start} scene={scene} orbit={{ r: 21, h: 12, speed: 0.12, ly: 0.5, drop: 1.6 }}
+      pan={pan}
+      hud={<>
+        <HudPill icon="🏁" label="NIVEL" value={s.level} color={C.red} />
+        <HudPill icon="⬇" label="TECHO" value={s.limit - s.misses} color={s.limit - s.misses <= 2 ? C.red : C.dim} />
+        <HudPill icon="🔥" value={s.combo} color={C.amber} />
+      </>}
+      subtitle="Une 3 burbujas del mismo color"
+      lines={['Arrastra para apuntar y suelta para disparar', 'Toca la burbuja del cañón para cambiarla', '💣 explota alrededor · 🌈 se une a cualquier color', 'Si fallas varias veces, el techo baja']}
+      result={{ isNew: res.isNew, title: 'LAS BURBUJAS LLEGARON', emoji: '🫧', subtitle: `Nivel ${s.level} · ${s.shots} disparos`, stats: [['NIVEL', s.level], ['DISPAROS', s.shots]] }}>
+      <Text pointerEvents="none" style={{ position: 'absolute', left: nxPx.x - 44, top: nxPx.y - 46, width: 88, textAlign: 'center', color: C.dim, fontSize: 9, fontWeight: '800', letterSpacing: 1 }}>SIGUIENTE</Text>
+      <Text pointerEvents="none" style={{ position: 'absolute', left: basePx.x - 70, top: basePx.y + 22, width: 140, textAlign: 'center', color: C.dim, fontSize: 10, fontWeight: '800' }}>TOCA EL CAÑÓN PARA CAMBIAR</Text>
+      {s.toast && <Text pointerEvents="none" style={{ position: 'absolute', top: SCREEN_H * 0.3, left: 0, right: 0, textAlign: 'center', color: '#fff', fontSize: 22, fontWeight: '900', textShadowColor: '#000', textShadowRadius: 8 }}>{s.toast.m}</Text>}
+    </Game3D>
   );
 }
