@@ -1,33 +1,63 @@
 import React, { useRef, useState } from 'react';
-import { Text, View } from 'react-native';
-import { AREA_H, AREA_W, C, GameScreen, Lives, Combo, Overlay, PlayArea, clamp, hx, rand, useBest, useFX, useLoop, usePan, alpha } from '../utils/kit';
-import { World3D } from '../utils/World3D';
+import { C, SCREEN_H, SCREEN_W, clamp, hx, rand, useBest, useFX, useLoop, usePan } from '../utils/kit';
+import { burst3d, clear3d, ring3d } from '../utils/engine3d';
+import { Game3D, HudPill } from '../utils/ui3d';
+import { gem } from '../utils/prefabs';
+import { project } from '../utils/openworld';
 
-// PONG SOLO 3D: tu paleta abajo, una pared 3D al fondo y dos laterales. Cámara detrás de la paleta.
-const TW = 7.2, HB = 6.6, PZ = 5.2;   // ancho de la pista (x), z del fondo (pared), z de tu paleta
+// PONG SOLO 3D · pista de neón con paredes de cristal y un muro al fondo. Tu paleta está abajo; la cámara va detrás.
+// Arrastra para mover la paleta. Los bumpers rosados dan combos y los orbes violetas suman +5.
+const TW = 7.2, HB = 6.6, PZ = 5.2;   // ancho de la pista, z del fondo, z de tu paleta
 const BR = 0.2, PD = 0.36, PW0 = 1.5, PW_MIN = 1.0;
 const SPMAX = 11.5;
-const CAM = { p: [0, 3.4, PZ + 8], l: [0, 0, -3], fov: 66 };
+const FOLLOW = 0.2;                    // la cámara sigue un 20 % de la paleta (el mapeo del dedo lo compensa)
+const CAM_D = 9;
+const REF = { p: [0, 3.0, PZ + CAM_D], l: [0, 0, -3], fov: 70 };
+const PPU = project(REF, [1, 0.2, PZ], SCREEN_W, SCREEN_H).x - project(REF, [0, 0.2, PZ], SCREEN_W, SCREEN_H).x;
+const xFromTouch = sx => (sx - SCREEN_W / 2) / (PPU * (1 - FOLLOW));
+const lerpV = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
-// Proyecta un punto 3D a píxeles del PlayArea con la misma cámara del motor (para efectos 2D).
-const sproj = (c, x, y, z) => {
-  const [cx, cy, cz] = c.p;
-  let fx0 = c.l[0] - cx, fy0 = c.l[1] - cy, fz0 = c.l[2] - cz;
-  const fl = Math.hypot(fx0, fy0, fz0); fx0 /= fl; fy0 /= fl; fz0 /= fl;
-  let rx = -fz0, rz = fx0; const rl = Math.hypot(rx, rz) || 1; rx /= rl; rz /= rl;
-  const ux = -rz * fy0, uy = rz * fx0 - rx * fz0, uz = rx * fy0;
-  const dx = x - cx, dy = y - cy, dz = z - cz;
-  const zc = dx * fx0 + dy * fy0 + dz * fz0;
-  const xc = dx * rx + dz * rz, yc = dx * ux + dy * uy + dz * uz;
-  const t = Math.tan(c.fov * Math.PI / 360);
-  return [(xc / (zc * t * (AREA_W / AREA_H)) + 1) / 2 * AREA_W, (1 - yc / (zc * t)) / 2 * AREA_H];
-};
-const pxPerUnit = z => sproj(CAM, 1, 0.2, z)[0] - AREA_W / 2;
+// Decorado fijo (una vez): suelo con rejilla neón, paredes de cristal y muro del fondo.
+const COURT = [
+  { id: 'suelo', k: 'pla', p: [0, 0, 0], s: [TW + 8, 44, 1], c: '#0b2b38', recv: true, m: { r: 0.8, m: 0.1 } },
+  { id: 'pared-i', k: 'box', p: [-TW / 2 - 0.12, 0.8, 0], s: [0.24, 1.6, 2 * HB + 0.4], c: '#22e6ff', o: 0.5, e: 0.5 },
+  { id: 'pared-d', k: 'box', p: [TW / 2 + 0.12, 0.8, 0], s: [0.24, 1.6, 2 * HB + 0.4], c: '#22e6ff', o: 0.5, e: 0.5 },
+  { id: 'pared-f', k: 'box', p: [0, 1.2, -HB - 0.12], s: [TW + 0.6, 2.4, 0.24], c: '#06202a', m: { r: 0.4, m: 0.2 } },
+  { id: 'pared-f-luz', k: 'box', p: [0, 2.42, -HB - 0.12], s: [TW + 0.6, 0.06, 0.26], c: '#22e6ff', e: 1 },
+  { id: 'pared-f-luz2', k: 'box', p: [0, 0.05, -HB - 0.12], s: [TW + 0.6, 0.06, 0.26], c: '#ff3df2', e: 1 },
+  ...[-3, -2, -1, 0, 1, 2, 3].map(x => ({ id: `lx${x}`, k: 'box', p: [x * 1.0 + 0.5, 0.01, 0], s: [0.03, 0.02, 2 * HB], c: '#16566b', e: 0.5 })),
+  ...[-5, -3, -1, 1, 3, 5].map(z => ({ id: `lz${z}`, k: 'box', p: [0, 0.01, z - 0.5], s: [TW, 0.02, 0.03], c: '#16566b', e: 0.5 })),
+];
 
 const initState = () => ({
   px: 0, pw: PW0, ball: { x: 0, z: PZ - 0.5, vx: 0, vz: 0 }, speed: 5.6, lives: 3, score: 0, hits: 0,
-  bumpers: [], orb: null, orbT: 6, trail: [], t: 0, wait: 0.8, combo: 0,
+  bumpers: [], orb: null, orbT: 6, trail: [], t: 0, wait: 0.8, combo: 0, cp: null, cl: null, dead: false,
 });
+
+// Escena: paleta con brillo, bola con su rastro, bumpers, orbe y luces de neón.
+function buildScene(s) {
+  const b = s.ball;
+  const objs = [{ id: 'yo', k: 'cap', p: [s.px, 0.25, PZ], r: [0, 0, Math.PI / 2], s: [0.3, s.pw, 0.3], c: C.cyan, e: 0.7, sh: true, m: { r: 0.3, m: 0.3 } }];
+  s.bumpers.forEach(bm => {
+    objs.push({ id: bm.id, k: 'cyl', p: [bm.x, 0.4, bm.z], s: [bm.r * 2, 0.8, bm.r * 2], c: '#ff3df2', e: 0.45, sh: true, m: { r: 0.3, m: 0.2 } });
+    objs.push({ id: `${bm.id}-aro`, k: 'tor', p: [bm.x, 0.82, bm.z], n: bm.r * 1.9, r: [Math.PI / 2, 0, 0], c: '#ffd0f7', e: 1 });
+  });
+  if (s.orb) {
+    const blink = s.orb.life < 2 && Math.floor(s.t * 8) % 2 ? 0.3 : 1;
+    objs.push(...gem('orbe', [s.orb.x, 0.35, s.orb.z], { c: '#9b6bff', t: s.t, spin: s.t * 1.5, o: blink }));
+  }
+  s.trail.forEach((p, i) => objs.push({ id: `tr${i}`, k: 'sph', p: [p.x, BR, p.z], n: BR * 1.4, c: '#22e6ff', e: 0.9, o: Math.max(0, p.a * 0.5) }));
+  objs.push({ id: 'bola', k: 'sph', p: [b.x, BR, b.z], n: BR * 2, c: '#ffffff', e: 0.9, sh: true });
+  const cam = s.cp ? { p: s.cp, l: s.cl, fov: REF.fov } : REF;
+  return {
+    sky: { top: '#02080f', bottom: '#0b2a38', sun: false, clouds: 0 },
+    fog: { c: '#0b2a38', near: 14, far: 34 },
+    light: { dir: [-0.3, 1, 0.4], sun: '#e6fbff', i: 1.8, sky: '#9fe6ff', ground: '#0b2030', hi: 1.1 },
+    shadowR: 12, statics: COURT, objs,
+    lights: [{ p: [b.x, 1.4, b.z], c: '#22e6ff', i: 5, d: 6 }, { p: [0, 2.8, -HB + 1], c: '#ff3df2', i: 5, d: 8 }],
+    cam,
+  };
+}
 
 export function PongSolo3D({ onExit }) {
   const fx = useFX();
@@ -37,16 +67,20 @@ export function PongSolo3D({ onExit }) {
   const g = useRef(null);
   if (!g.current) g.current = initState();
 
-  const start = () => { fx.clear(); g.current = initState(); setPhase('play'); };
+  const start = () => { fx.clear(); clear3d(); g.current = initState(); setPhase('play'); hx.tap(); };
   const launch = s => {
     const a = -Math.PI / 2 + rand(-0.4, 0.4);
     s.ball = { x: s.px, z: PZ - 0.5, vx: Math.cos(a) * s.speed, vz: Math.sin(a) * s.speed };
     s.wait = 0; s.combo = 0;
   };
+  const die = s => { s.dead = true; hx.die(); setRes({ isNew: submitBest(s.score) }); setPhase('over'); };
 
   useLoop(phase === 'play', dt => {
     const s = g.current;
+    if (s.dead) return;
     s.t += dt;
+    const tp = [FOLLOW * s.px, 3.0, PZ + CAM_D], tl = [FOLLOW * s.px, 0, -3], cf = Math.min(1, dt * 5);
+    s.cp = s.cp ? lerpV(s.cp, tp, cf) : tp; s.cl = s.cl ? lerpV(s.cl, tl, cf) : tl;
     s.bumpers.forEach(bm => { if (bm.mv) { bm.x += bm.vx * dt; if (bm.x < -2.9 || bm.x > 2.9) bm.vx *= -1; } });
     s.orbT -= dt; if (s.orbT <= 0 && !s.orb) { s.orb = { x: rand(-3, 3), z: rand(-5.8, -1.5), life: 7 }; s.orbT = rand(6, 11); }
     if (s.orb) { s.orb.life -= dt; if (s.orb.life <= 0) s.orb = null; }
@@ -56,9 +90,9 @@ export function PongSolo3D({ onExit }) {
     b.x += b.vx * dt; b.z += b.vz * dt;
     s.trail.push({ x: b.x, z: b.z, a: 0.5 }); s.trail.forEach(p => { p.a -= dt * 2.5; }); s.trail = s.trail.filter(p => p.a > 0);
     // paredes laterales y pared del fondo
-    if (b.x < -TW / 2 + BR) { b.x = -TW / 2 + BR; b.vx = Math.abs(b.vx); hx.tick(); }
-    if (b.x > TW / 2 - BR) { b.x = TW / 2 - BR; b.vx = -Math.abs(b.vx); hx.tick(); }
-    if (b.z < -HB + BR) { b.z = -HB + BR; b.vz = Math.abs(b.vz); hx.tick(); }
+    if (b.x < -TW / 2 + BR) { b.x = -TW / 2 + BR; b.vx = Math.abs(b.vx); hx.tick(); burst3d([b.x, BR, b.z], '#22e6ff', 4, { speed: 2, life: 0.3, size: 0.07, g: 0 }); }
+    if (b.x > TW / 2 - BR) { b.x = TW / 2 - BR; b.vx = -Math.abs(b.vx); hx.tick(); burst3d([b.x, BR, b.z], '#22e6ff', 4, { speed: 2, life: 0.3, size: 0.07, g: 0 }); }
+    if (b.z < -HB + BR) { b.z = -HB + BR; b.vz = Math.abs(b.vz); hx.tick(); burst3d([b.x, BR, b.z], '#22e6ff', 6, { speed: 2.5, life: 0.35, size: 0.08, g: 0 }); }
     // tu paleta (la bola viene hacia la cámara: vz > 0)
     if (b.vz > 0 && b.z + BR >= PZ - PD / 2 && b.z - BR <= PZ + 0.5 && Math.abs(b.x - s.px) < s.pw / 2 + BR) {
       const rel = clamp((b.x - s.px) / (s.pw / 2), -1, 1);
@@ -67,7 +101,9 @@ export function PongSolo3D({ onExit }) {
       s.pw = Math.max(PW_MIN, PW0 - Math.floor(s.hits / 6) * 0.08);
       const a = -Math.PI / 2 + rel * 1.05;
       b.vx = Math.cos(a) * s.speed; b.vz = Math.sin(a) * s.speed; b.z = PZ - PD / 2 - BR;
-      const [sx, sy] = sproj(CAM, b.x, BR, PZ); fx.burst(sx, sy, C.cyan, 6, 120, 0.3, 3); hx.hit();
+      burst3d([b.x, BR, PZ], ['#22e6ff', '#ffffff'], 14, { speed: 3.5, life: 0.45, size: 0.09, g: 6, up: 0.6 });
+      ring3d([b.x, 0.05, PZ], '#22e6ff', 14, { speed: 3, life: 0.35, size: 0.08 });
+      hx.hit();
       if (s.hits === 8) s.bumpers.push({ id: 'b1', x: 0, z: -2.6, r: 0.5, mv: false, vx: 0 });
       if (s.hits === 20) s.bumpers = [{ id: 'b2', x: -1.9, z: -1.6, r: 0.5, mv: true, vx: 1.2 }, { id: 'b3', x: 1.9, z: -3.0, r: 0.5, mv: true, vx: -1.2 }];
       if (s.hits === 36) s.bumpers.push({ id: 'b4', x: 0, z: -4.2, r: 0.55, mv: true, vx: 1.8 });
@@ -81,53 +117,40 @@ export function PongSolo3D({ onExit }) {
         b.vx -= 2 * dot * nx; b.vz -= 2 * dot * nz;
         b.x = bm.x + nx * (bm.r + BR + 0.02); b.z = bm.z + nz * (bm.r + BR + 0.02);
         s.combo += 1; const pts = 3 * s.combo; s.score += pts;
-        const [sx, sy] = sproj(CAM, bm.x + nx * bm.r, 0.5, bm.z + nz * bm.r);
-        fx.burst(sx, sy, C.pink, 10, 170); fx.pop(sx, sy - 26, `+${pts}`, C.pink, 15); fx.ring(sx, sy, C.pink, 34); hx.heavy();
+        const ix = bm.x + nx * bm.r, iz = bm.z + nz * bm.r;
+        burst3d([ix, 0.6, iz], ['#ff3df2', '#ffd0f7'], 22, { speed: 5, up: 2, g: 8, size: 0.12, life: 0.7 });
+        ring3d([bm.x, 0.85, bm.z], '#ff3df2', 22, { speed: 5, life: 0.5, size: 0.1 });
+        fx.pop(SCREEN_W / 2, SCREEN_H * 0.4, `+${pts}`, C.pink, 18); hx.heavy();
       }
     }
     if (s.orb && Math.hypot(b.x - s.orb.x, b.z - s.orb.z) < BR + 0.45) {
-      s.score += 5; const [sx, sy] = sproj(CAM, s.orb.x, 0.6, s.orb.z);
-      fx.burst(sx, sy, C.amber, 14, 190); fx.pop(sx, sy - 20, '+5', C.amber, 17); hx.good(); s.orb = null;
+      s.score += 5;
+      burst3d([s.orb.x, 0.6, s.orb.z], ['#9b6bff', '#ffc233', '#ffffff'], 30, { speed: 6, up: 3, g: 8, size: 0.14, life: 0.8 });
+      fx.pop(SCREEN_W / 2, SCREEN_H * 0.46, '+5', C.amber, 18); hx.good(); s.orb = null;
     }
     if (b.z > PZ + 1.2) {
       s.lives -= 1; fx.shake(8, 0.3); fx.flash(C.red, 0.25); hx.bad();
-      if (s.lives <= 0) { hx.die(); setRes({ isNew: submitBest(s.score) }); setPhase('over'); } else { s.wait = 0.9; s.combo = 0; s.trail = []; }
+      burst3d([b.x, 0.3, PZ], ['#ff4d6d', '#ffd0d8'], 26, { speed: 5, up: 2.5, g: 9, size: 0.12, life: 0.8 });
+      if (s.lives <= 0) die(s); else { s.wait = 0.9; s.combo = 0; s.trail = []; }
     }
   });
 
-  const setPx = x => { const s = g.current; s.px = clamp((x - AREA_W / 2) / pxPerUnit(PZ), -TW / 2 + s.pw / 2, TW / 2 - s.pw / 2); };
+  const setPx = x => { const s = g.current; s.px = clamp(xFromTouch(x), -TW / 2 + s.pw / 2, TW / 2 - s.pw / 2); };
   const pan = usePan(fx, { down: setPx, move: setPx });
 
   const s = g.current;
-  const b = s.ball;
-  const shake = fx.shakeT > 0 ? fx.shakeMag * (fx.shakeT / fx.shakeDur) * 0.03 : 0;
-  const objs = [
-    { id: 'suelo', k: 'pla', p: [0, 0, 0], s: [TW + 2.4, 2 * HB + 8, 1], c: '#0b2b38' },
-    { id: 'pared-i', k: 'box', p: [-TW / 2 - 0.12, 0.6, 0], s: [0.24, 1.2, 2 * HB + 0.4], c: C.cyan, e: 0.6 },
-    { id: 'pared-d', k: 'box', p: [TW / 2 + 0.12, 0.6, 0], s: [0.24, 1.2, 2 * HB + 0.4], c: C.cyan, e: 0.6 },
-    { id: 'pared-f', k: 'box', p: [0, 0.6, -HB - 0.12], s: [TW + 0.6, 1.2, 0.24], c: C.cyan, e: 0.7 },
-    { id: 'pared-fondo', k: 'box', p: [0, 0.6, -HB - 0.5], s: [TW, 1.2, 0.1], c: '#06202a' },
-    ...s.bumpers.map(bm => ({ id: bm.id, k: 'cyl', p: [bm.x, 0.5, bm.z], s: [bm.r * 2, 1, bm.r * 2], c: C.pink, e: 0.5 })),
-    ...(s.orb ? [{ id: 'orbe', k: 'sph', p: [s.orb.x, 0.6, s.orb.z], n: 0.5, c: C.violet, e: 0.8, o: s.orb.life < 2 && Math.floor(s.t * 8) % 2 ? 0.3 : 1 }] : []),
-    ...s.trail.map((p, i) => ({ id: `tr${i}`, k: 'sph', p: [p.x, BR, p.z], n: BR * 1.5, c: C.cyan, e: 0.4, o: Math.max(0, p.a * 0.6) })),
-    { id: 'sombra', k: 'pla', p: [b.x, 0.01, b.z], s: [0.5, 0.5, 1], c: '#000000', o: 0.35 },
-    { id: 'yo', k: 'box', p: [s.px, 0.2, PZ], s: [s.pw, 0.4, PD], c: C.cyan, e: 0.6 },
-    { id: 'bola', k: 'sph', p: [b.x, BR, b.z], n: BR * 2, c: '#ffffff', e: 0.9 },
-  ];
-  const scene = {
-    bg: '#02080c', fog: { c: '#02080c', near: 14, far: 32 }, objs,
-    cam: { p: [(Math.random() - 0.5) * shake, CAM.p[1], CAM.p[2]], l: CAM.l, fov: CAM.fov },
-  };
+  const scene = buildScene(s);
   return (
-    <GameScreen title="PONG SOLO" emoji="🎾" accent={C.cyan} onExit={onExit} score={s.score} best={best}
-      hud={<><Lives n={s.lives} max={3} /><Text style={{ color: C.dim, fontSize: 12 }}>Rebotes <Text style={{ color: C.cyan, fontWeight: '800' }}>{s.hits}</Text></Text>{s.combo > 1 ? <Combo n={s.combo} color={C.pink} /> : <View style={{ width: 60 }} />}</>}>
-      <PlayArea fx={fx} bg="#02080c" border={alpha(C.cyan, 0.4)} {...pan}>
-        <World3D scene={scene} />
-        <Overlay show={phase !== 'play'} kind={phase} emoji="🎾" title={phase === 'over' ? 'GAME OVER' : 'PONG SOLO 3D'}
-          subtitle={phase === 'over' ? `${s.hits} rebotes` : 'Mantén la bola en juego'}
-          score={s.score} best={best} isNew={res.isNew} accent={C.cyan} onStart={start} onExit={onExit}
-          lines={phase === 'ready' ? ['Arrastra para mover la paleta', 'La bola acelera y la paleta se encoge', 'Los bumpers rosados dan combos · 🔮 +5'] : null} />
-      </PlayArea>
-    </GameScreen>
+    <Game3D title="PONG SOLO" emoji="🎾" accent={C.cyan} onExit={onExit} score={s.score} best={best} fx={fx} pan={pan}
+      phase={phase} onStart={start} scene={scene} orbit={{ r: 13, h: 4.5, speed: 0.18, ly: 0.4, drop: 1.8 }}
+      hud={<>
+        <HudPill icon="❤️" label="VIDAS" value={s.lives} color={C.red} />
+        <HudPill icon="🎾" label="REBOTES" value={s.hits} color={C.cyan} />
+        {s.combo > 1 && <HudPill icon="⚡" value={`×${s.combo}`} color={C.pink} />}
+      </>}
+      subtitle="Mantén la bola en juego"
+      lines={['Arrastra para mover la paleta', 'La bola acelera y la paleta se encoge', 'Los bumpers rosados dan combos · 🔮 +5']}
+      result={{ title: 'GAME OVER', emoji: '🎾', subtitle: `${s.hits} rebotes`, isNew: res.isNew, stats: [['REBOTES', s.hits], ['PUNTOS', s.score]] }}>
+    </Game3D>
   );
 }
