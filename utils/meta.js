@@ -11,7 +11,7 @@ let Audio = null;
 try { Audio = require('expo-audio'); } catch (_) {}
 
 // ─── Ajustes ──────────────────────────────────────────────────────
-const settings = { sound: true, haptics: true };
+const settings = { sound: true, haptics: true, quality: 'high' };   // quality: 'high' (sombras) | 'fast' (sin sombras)
 const setListeners = new Set();
 const notifySettings = () => setListeners.forEach(f => f());
 AsyncStorage.getItem('@settings').then(v => {
