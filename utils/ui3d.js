@@ -155,6 +155,24 @@ export function orbitCam(scene, t, o = {}) {
  *   controlsAlways            monta los hijos también fuera de 'play'
  *   startLabel, retryLabel    textos de los botones
  */
+// Capa en coordenadas de PANTALLA (las de project()/rayGround con SCREEN_W×SCREEN_H).
+// Los hijos de Game3D empiezan bajo la cabecera; envuelve aquí los Text colocados sobre objetos 3D
+// para que no queden corridos hacia abajo. Se mide a sí misma y compensa su desplazamiento.
+export function ScreenLayer({ children }) {
+  const ref = useRef(null);
+  const [off, setOff] = useState({ x: 0, y: 0 });
+  const measure = () => {
+    if (ref.current && ref.current.measureInWindow) ref.current.measureInWindow((x, y) => {
+      if (Math.abs(x - off.x) > 0.5 || Math.abs(y - off.y) > 0.5) setOff({ x: x || 0, y: y || 0 });
+    });
+  };
+  return (
+    <View ref={ref} onLayout={measure} pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { transform: [{ translateX: -off.x }, { translateY: -off.y }] }]}>{children}</View>
+    </View>
+  );
+}
+
 export function Game3D({ title, emoji, accent = C.cyan, onExit, score, best, scoreLabel = 'PUNTOS', hud, phase = 'ready', onStart, scene, menuScene, orbit, subtitle, lines, result, fx: fxIn, pan, controlsAlways, startLabel, retryLabel, children }) {
   const fxOwn = useFX(); const fx = fxIn || fxOwn;
   const gid = useContext(GameCtx);

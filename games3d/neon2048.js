@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { C, SCREEN_H, SCREEN_W, alpha, hx, pick, tglow, uid, useBest, useFX, useLoop, usePan } from '../utils/kit';
-import { Btn3D, Game3D, HudPill } from '../utils/ui3d';
+import { Btn3D, Game3D, HudPill, ScreenLayer } from '../utils/ui3d';
 import { burst3d, clear3d } from '../utils/engine3d';
 import { project } from '../utils/openworld';
 
@@ -153,14 +153,14 @@ export function NeonGame2048_3D({ onExit }) {
       subtitle="Fusiona fichas iguales hasta llegar al 2048"
       lines={['Desliza en cualquier dirección para mover las fichas', 'Las fichas iguales se fusionan y crecen en altura', 'Tienes 3 deshacer por partida']}
       result={{ won: res.won, isNew: res.isNew, title: res.won ? '¡LLEGASTE AL 2048!' : 'SIN MOVIMIENTOS', emoji: res.won ? '🏆' : '🟦', subtitle: `Ficha máxima: ${res.max}`, stats: [['FICHA MAX', String(res.max)]] }}>
-      {phase === 'play' && s.tiles.map(t => {
+      {phase === 'play' && <ScreenLayer>{s.tiles.map(t => {
         const h = hgtOf(t.v);
         const p = project(CAM, [t.x, 0.1 + h + 0.03, t.z], SCREEN_W, SCREEN_H);
         if (!p) return null;
         const digits = String(t.v).length;
         const fs = Math.max(10, Math.min(40, Math.round(ppuAt(p.z) * CS * (digits <= 2 ? 0.45 : digits === 3 ? 0.36 : 0.28))));
         return <Text key={t.id} pointerEvents="none" style={{ position: 'absolute', left: p.x - 50, top: p.y - fs * 0.6, width: 100, textAlign: 'center', color: '#ffffff', fontSize: fs, fontWeight: '900', opacity: t.die ? 0.6 : 1, ...tglow('#000000', 3) }}>{t.v}</Text>;
-      })}
+      })}</ScreenLayer>}
       {phase === 'play' ? (
         <View style={{ position: 'absolute', left: 0, right: 0, bottom: 64, flexDirection: 'row', justifyContent: 'center', gap: 12 }}>
           <Btn3D label={`↩ DESHACER (${s.undos})`} size="sm" ghost color={C.cyan} disabled={!s.undo || s.undos <= 0} onPress={doUndo} />

@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { C, SCREEN_H, SCREEN_W, alpha, hx, pick, rand, tglow, useBest, useFX, useLoop, usePan } from '../utils/kit';
-import { Btn3D, Game3D, HudPill } from '../utils/ui3d';
+import { Btn3D, Game3D, HudPill, ScreenLayer } from '../utils/ui3d';
 import { burst3d, clear3d } from '../utils/engine3d';
 import { project, rayGround } from '../utils/openworld';
 
@@ -152,14 +152,14 @@ export function NumberPuzzle3D({ onExit }) {
           ))}
         </View>
       )}
-      {phase === 'play' && s.grid.map((v, i) => {
+      {phase === 'play' && <ScreenLayer>{s.grid.map((v, i) => {
         if (!v) return null;
         const a = s.anim[v] || { x: wx(i % n, n), z: wz(Math.floor(i / n), n) };
         const p = project(CAM, [a.x, TOPY + 0.03, a.z], SCREEN_W, SCREEN_H);
         if (!p) return null;
         const fs = Math.max(12, Math.min(40, Math.round((pxPerU / p.z) * cs * 0.42)));
         return <Text key={v} pointerEvents="none" style={{ position: 'absolute', left: p.x - 40, top: p.y - fs * 0.6, width: 80, textAlign: 'center', color: '#ffffff', fontSize: fs, fontWeight: '900', ...tglow('#000000', 3) }}>{v}</Text>;
-      })}
+      })}</ScreenLayer>}
       {phase === 'play' ? <Text pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, bottom: 58, textAlign: 'center', color: alpha(C.dim, 0.85), fontSize: 12, fontWeight: '700' }}>Toca una ficha de la fila o columna del hueco</Text> : null}
     </Game3D>
   );

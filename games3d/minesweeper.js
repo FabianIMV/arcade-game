@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import { C, SCREEN_H, SCREEN_W, hx, pick, rand, randInt, tglow, useBest, useFX, useLoop, usePan, useTimeouts } from '../utils/kit';
-import { Btn3D, Game3D, HudPill } from '../utils/ui3d';
+import { Btn3D, Game3D, HudPill, ScreenLayer } from '../utils/ui3d';
 import { burst3d, clear3d } from '../utils/engine3d';
 import { project, rayGround } from '../utils/openworld';
 
@@ -185,7 +185,7 @@ export function Buscaminas3D({ onExit }) {
           ))}
         </View>
       )}
-      {phase === 'play' && Array.from({ length: s.cells.length }, (_, i) => i).map(i => {
+      {phase === 'play' && <ScreenLayer>{Array.from({ length: s.cells.length }, (_, i) => i).map(i => {
         const cl = s.cells[i];
         if (!cl.open || cl.mine || cl.n === 0) return null;
         const x = cx(L, cs, i), z = cz(L, cs, i);
@@ -193,7 +193,7 @@ export function Buscaminas3D({ onExit }) {
         if (!p) return null;
         const fs = Math.max(10, Math.min(30, Math.round((pxPerU / p.z) * cs * 0.6)));
         return <Text key={i} pointerEvents="none" style={{ position: 'absolute', left: p.x - 20, top: p.y - fs * 0.6, width: 40, textAlign: 'center', color: MS_COLORS[cl.n], fontSize: fs, fontWeight: '900', ...tglow(MS_COLORS[cl.n], 6) }}>{cl.n}</Text>;
-      })}
+      })}</ScreenLayer>}
     </Game3D>
   );
 }

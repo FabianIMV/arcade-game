@@ -1,7 +1,7 @@
 import React, { useReducer, useRef, useState } from 'react';
 import { Text } from 'react-native';
 import { C, SCREEN_H, SCREEN_W, alpha, hx, shuffle, tglow, useBest, useFX, useLoop, usePan, useTimeouts } from '../utils/kit';
-import { Game3D, HudPill } from '../utils/ui3d';
+import { Game3D, HudPill, ScreenLayer } from '../utils/ui3d';
 import { burst3d, clear3d, ring3d } from '../utils/engine3d';
 import { project } from '../utils/openworld';
 
@@ -145,7 +145,7 @@ export function MemoryMatch3D({ onExit }) {
       subtitle="Encuentra todos los pares antes de que se acabe el tiempo"
       lines={['Al empezar verás las cartas un instante', 'Cada nivel tiene más pares y menos tiempo', 'Los pares seguidos multiplican los puntos']}
       result={{ isNew: res.isNew, title: '¡SE ACABÓ EL TIEMPO!', emoji: '⏰', subtitle: `Llegaste al nivel ${res.lv} · mejor racha ${res.maxCombo}`, stats: [['NIVEL', String(res.lv)], ['PARES', String(res.matches)], ['RACHA', String(res.maxCombo)]] }}>
-      {phase === 'play' && s.cards.map((c, i) => {
+      {phase === 'play' && <ScreenLayer>{s.cards.map((c, i) => {
         const [cx, cy] = cardPos(i, s.cfg.cols, s.rows);
         const p = project(cam, [cx, cy, 0.12], SCREEN_W, SCREEN_H);
         if (!p) return null;
@@ -154,7 +154,7 @@ export function MemoryMatch3D({ onExit }) {
         return (
           <Text key={c.id} pointerEvents="none" style={{ position: 'absolute', left: p.x - 40, top: p.y - fs * 0.6, width: 80, textAlign: 'center', fontSize: face ? fs : Math.round(fs * 0.7), fontWeight: '900', color: face ? C.text : alpha(C.violet, 0.6), opacity: face ? Math.min(1, 0.4 + Math.abs(c.f - 0.5) * 2) : 0.7 }}>{face ? c.e : '?'}</Text>
         );
-      })}
+      })}</ScreenLayer>}
       {phase === 'play' && s.peek ? <Text pointerEvents="none" style={{ position: 'absolute', bottom: 22, width: SCREEN_W, textAlign: 'center', color: C.amber, fontWeight: '900', letterSpacing: 2, ...tglow(C.amber, 8) }}>¡MEMORIZA!</Text> : null}
     </Game3D>
   );
